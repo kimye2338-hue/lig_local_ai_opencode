@@ -1,0 +1,12 @@
+# Copy-paste prompt for Claude Code
+
+Read `REVIEW_AND_WORK_INSTRUCTIONS/00_START_HERE_CLAUDE_CODE_LOW_TOKEN_OPUS_MANAGER.md` and follow it exactly.
+
+Important:
+- I am on Claude Pro with limited tokens.
+- Use Opus only as manager/final reviewer.
+- Delegate simple implementation steps to Sonnet/lower model where possible.
+- Do not reread the full tree repeatedly.
+- Edit only `PROJECT_FULL_SOURCE_TO_EDIT/`.
+- Implement P0 first, validate, then continue.
+- Do not use heredoc/cat/long echo/python -c to create files.

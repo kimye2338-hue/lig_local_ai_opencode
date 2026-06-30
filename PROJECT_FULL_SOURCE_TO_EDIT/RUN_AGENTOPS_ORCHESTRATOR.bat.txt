@@ -1,0 +1,7 @@
+@echo off
+setlocal EnableExtensions
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
+echo AgentOps external orchestrator. Stop with agent_ops\control\STOP or /agentstop.
+python agent_ops\agentops.py orchestrator --interval 60
+pause
