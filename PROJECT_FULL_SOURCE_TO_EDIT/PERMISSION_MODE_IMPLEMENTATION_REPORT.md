@@ -1,119 +1,185 @@
 # Permission Mode Implementation Report
 
-`TRUE_PERMISSION_MODE_TOGGLE_NOT_IMPLEMENTED_BECAUSE_OPENCODE_SOURCE_WAS_NOT_AVAILABLE`
+`TRUE_PERMISSION_MODE_TOGGLE_NOT_IMPLEMENTED_INSIDE_AGENTOPS_LAYER`
+
+`TRUE_PERMISSION_MODE_TOGGLE_PATCH_DELIVERED_FOR_UPSTREAM_OPENCODE_SOURCE`
 
 ## Outcome
 
-**Outcome B — source patch spec only.** OpenCode source was not present
-anywhere on this machine (searched `PROJECT_FULL_SOURCE_TO_EDIT/`, the rest of
-the cloned repo, the workspace root, and the global npm module path — no
-OpenCode core/TUI source tree found, only this AgentOps package). A true
-session-level PLAN/NORMAL/AUTO toggle independent of the active agent cannot
-be implemented from the AgentOps layer alone:
-- A plugin's `tool.execute.before` hook (the only execution-path extension
-  point available here) can **block** a tool call but cannot **relax** an
-  `ask`/`deny` decision into `allow` — confirmed by this package's own
-  `command-guard.ts`, which only ever throws.
-- This package's `.opencode/commands/*.md` files pin their `agent:` statically
-  in frontmatter — a command cannot reassign the live session's active primary
-  agent, so it cannot act as a real mode switch either.
-- There is no keybind/action-registry surface reachable without OpenCode core.
+OpenCode core/TUI source is still not vendored inside this AgentOps repository, so the true Claude-Code-like permission mode cannot be activated by AgentOps files alone.
 
-No fake implementation was written. Deliverables:
-- `OPENCODE_PERMISSION_MODE_PATCH_SPEC.md` — full source-patch design (state
-  model, keybind/action plan, resolver algorithm, tests, limitations).
-- `.opencode/commands/permission.md` — fallback command; explains the gap and
-  reports the C1 persona mapping, does not pretend to switch state.
-- `.opencode/agents/agentops-plan.md` — new read-only primary agent,
-  completing the C1 fallback trio (`agentops-plan` / `agentops-supervisor` /
-  `agentops-autopilot`); this was previously deferred as review item P2-4.
+However, this branch now includes a concrete upstream OpenCode source patch under:
 
-## Whether true core implementation was possible
+```text
+PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/
+```
 
-No. OpenCode source unavailable (see above).
+That patch is intended to be applied to upstream OpenCode source commit:
 
-## Files changed
+```text
+afff74eb2c9fc3808a9795f365707f32853099e9
+```
 
-- `PROJECT_FULL_SOURCE_TO_EDIT/OPENCODE_PERMISSION_MODE_PATCH_SPEC.md` (new)
-- `PROJECT_FULL_SOURCE_TO_EDIT/.opencode/commands/permission.md` (new)
-- `PROJECT_FULL_SOURCE_TO_EDIT/.opencode/agents/agentops-plan.md` (new)
-- `PROJECT_FULL_SOURCE_TO_EDIT/PERMISSION_MODE_IMPLEMENTATION_REPORT.md` (this file, new)
-- `PROJECT_FULL_SOURCE_TO_EDIT/REMAINING_RISKS.md` (updated: P2-4 marked
-  resolved, Phase 3/C2 entry pointed at the new spec)
-- `PROJECT_FULL_SOURCE_TO_EDIT/REQUIRES_OPENCODE_SOURCE_PATCH.md` (updated:
-  pointer added to the fuller spec, original kept intact for history)
+## What is now delivered
+
+```text
+PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/README.md
+PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/opencode-permission-mode-toggle.patch
+PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/APPLY_AND_BUILD_PATCHED_OPENCODE.bat.txt
+PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/OPENCODE_CORE_PERMISSION_MODE_PATCH_DELIVERY.md
+PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/MANIFEST.json
+```
+
+## What the upstream patch implements
+
+```text
+- NORMAL -> AUTO -> PLAN -> NORMAL permission mode cycle
+- Shift+Tab cycles permission mode
+- Previous-agent cycling moves from Shift+Tab to Shift+F3
+- Active agent/persona is preserved while permission mode changes
+- Prompt footer displays [NORMAL shift+tab] / [AUTO shift+tab] / [PLAN shift+tab]
+- AUTO is bounded auto-approval, not blind dangerous skip-permissions
+- PLAN rejects write/risky permission requests
+```
+
+## Files changed by the upstream OpenCode patch
+
+```text
+packages/tui/src/config/keybind.ts
+packages/tui/src/context/permission.tsx
+packages/tui/src/context/sync.tsx
+packages/tui/src/app.tsx
+packages/tui/src/routes/session/index.tsx
+```
 
 ## Keybind chosen
 
-None — not implemented (no core to register a keybind in). Proposed in the
-spec (§6): `shift+tab` if free, else `ctrl+m`/`alt+m`/`ctrl+shift+m` in that
-order, to be confirmed against the actual OpenCode keymap during the source
-spike.
+```text
+Shift+Tab = cycle permission mode
+Shift+F3 = previous agent
+Tab = next agent
+```
 
-## Mode state location
+This resolves the upstream conflict where `shift+tab` originally meant previous-agent cycling.
 
-None — not implemented. Proposed in the spec (§5):
-`session.permissionMode: "plan"|"normal"|"auto"`, default `"normal"`, on the
-same per-session store that already tracks the active agent, gated behind
-`experimental_permission_mode`.
+## Permission mode behavior
 
-## Permission resolver changes
+### NORMAL
 
-None to OpenCode core (no source to patch). The AgentOps-layer permission
-*configs* (`agentops-plan.md` / `agentops-supervisor.md` / `agentops-autopilot.md`
-frontmatter `permission:` blocks) already implement the per-mode behavior
-tables from spec §1 as three separate agent personas — that is the C1
-fallback, not a resolver patch.
+Existing OpenCode behavior. Permission requests are shown normally.
 
-## Status indicator changes
+### AUTO
 
-None to the OpenCode TUI (no source). The existing TUI already shows the
-active agent name, which under C1 doubles as the mode indicator (e.g.
-`agentops-autopilot` visible = AUTO mode active). No new chip/segment was
-added since that requires the status-bar renderer (spec §7), which is core.
+Bounded auto-approval.
 
-## Command guard integration result
+Approves only safe/read-like or clearly local verification requests, including:
 
-No change needed. `.opencode/plugins/command-guard.ts` hooks
-`tool.execute.before` globally — it has no per-agent or per-mode awareness and
-runs identically regardless of which of the three personas (or any future real
-`permissionMode`) is active. Verified by reading the plugin: it inspects only
-`input.tool === "bash"` and the literal command string, with zero references
-to agent/session/mode. This satisfies the "guard must stay active in all
-modes" requirement without any modification.
+```text
+read / glob / grep / list / todowrite
+edit requests with filepath metadata
+safe bash verification/read-only commands such as git status, git diff, py_compile, test/check/build
+```
+
+Still prompts or rejects risky requests such as:
+
+```text
+external_directory
+webfetch / websearch
+task
+doom_loop
+question
+plan_enter / plan_exit
+dangerous or corrupted bash
+credential/token/cookie/password-like commands
+```
+
+### PLAN
+
+Rejects write/risky requests:
+
+```text
+edit
+bash
+task
+webfetch / websearch
+external_directory
+doom_loop
+question
+plan_exit
+dangerous/corrupted command shapes
+```
+
+Read-like requests are not auto-rejected.
+
+## AgentOps fallback still retained
+
+The existing fallback persona mapping remains useful when running unpatched OpenCode:
+
+```text
+PLAN fallback   = agentops-plan
+NORMAL fallback = agentops-supervisor
+AUTO fallback   = agentops-autopilot
+```
+
+This fallback is not the real Claude-Code-like mode toggle. The real mode toggle requires applying and running the upstream OpenCode patch.
+
+## Apply/build
+
+From this folder:
+
+```cmd
+PROJECT_FULL_SOURCE_TO_EDIT\opencode_core_patch
+```
+
+Run on a trusted Windows development PC with Git and Bun installed:
+
+```cmd
+copy APPLY_AND_BUILD_PATCHED_OPENCODE.bat.txt APPLY_AND_BUILD_PATCHED_OPENCODE.bat
+APPLY_AND_BUILD_PATCHED_OPENCODE.bat
+```
+
+The script clones `https://github.com/anomalyco/opencode`, checks out the target commit, applies the patch, runs Bun install/check/build, and leaves a patched OpenCode source tree at:
+
+```text
+PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/opencode-source/
+```
 
 ## Tests run
 
-None of T1–T8 (`OPENCODE_PERMISSION_MODE_PATCH_SPEC.md` §10) — all require a
-live OpenCode session and (for T2–T8 in their literal "permission mode" sense)
-the unimplemented core patch. Not run, not claimed.
+No live OpenCode runtime tests were run in this environment.
 
-What *was* checked statically on this machine:
-- `agentops-plan.md` frontmatter follows the same schema as the existing
-  `agentops-supervisor.md`/`agentops-autopilot.md`/`agentops-explorer.md`
-  files (15 valid permission keys only, no `write`/`apply_patch`/`patch` key
-  — consistent with Opus review fact F4).
-- `command-guard.ts` read in full; confirmed mode-agnostic (see above).
+What was completed:
 
-## Tests not run
+```text
+- Upstream OpenCode source was inspected through GitHub connector.
+- Keybind chokepoint located: packages/tui/src/config/keybind.ts.
+- Permission local state located: packages/tui/src/context/permission.tsx.
+- Runtime permission request handling located: packages/tui/src/context/sync.tsx.
+- App command registry located: packages/tui/src/app.tsx.
+- Session prompt footer/status insertion point located: packages/tui/src/routes/session/index.tsx.
+- Concrete patch file generated and added to this PR branch.
+```
 
-T1, T2, T3, T4, T5, T6, T7, T8 — all pending; require OpenCode source patched
-per this spec **and** a live OpenCode session. Once C2 is implemented, run
-them following the procedure style already used in `WINDOWS_TEST_PLAN.md`.
+## Tests still required on target PC
+
+```text
+T1: patched OpenCode starts normally, default mode NORMAL
+T2: Shift+Tab cycles NORMAL -> AUTO -> PLAN -> NORMAL
+T3: active agent/persona does not change while cycling modes
+T4: prompt footer displays current mode badge
+T5: /permission command or palette command cycles mode
+T6: PLAN blocks edit/bash/risky requests
+T7: AUTO allows safe project-local edit/verification requests
+T8: AUTO blocks corrupted heredoc/prose bash
+T9: explicit deny still wins over AUTO
+T10: dangerous submit/delete/send/upload/download/credential-like actions are not silently allowed
+```
 
 ## Remaining risks
 
-- **HIGH** — maintaining an OpenCode source fork on an offline (망분리)
-  machine, if C2 is ever implemented (rebase cost on every OpenCode upgrade).
-  Per the spec, proceed only after a source spike confirms the permission
-  resolver is a single chokepoint, and only with explicit user sign-off to
-  maintain the fork.
-- **Unverified assumption** — `OPENCODE_PERMISSION_MODE_PATCH_SPEC.md` §2.2's
-  "single chokepoint" assumption is inherited from the Opus review's reading
-  of OpenCode's public docs/behavior, not from reading OpenCode's own source
-  (which was unavailable here too). The spike is still required before any
-  code is written.
-- **C1 fallback gap** — `agentops-plan` is a new persona, not yet exercised
-  against a live OpenCode session; verify its `permission:` block resolves as
-  intended (read-only, no edits) the same way `WINDOWS_TEST_PLAN.md`/`VALIDATION_TODO_ON_WINDOWS.md`
-  already plan to verify `agentops-autopilot`.
+```text
+- The patch targets a specific upstream OpenCode commit and may need rebasing on future OpenCode versions.
+- The patch has not been built in this ChatGPT environment.
+- The patch has not been live-tested in the Windows/OpenCode TUI.
+- Maintaining a forked OpenCode binary has upgrade/rebase cost.
+```
