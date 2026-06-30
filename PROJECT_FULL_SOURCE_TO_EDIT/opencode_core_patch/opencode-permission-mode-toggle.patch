@@ -1,0 +1,297 @@
+diff --git a/packages/tui/src/config/keybind.ts b/packages/tui/src/config/keybind.ts
+index c5818955..00000000 100644
+--- a/packages/tui/src/config/keybind.ts
++++ b/packages/tui/src/config/keybind.ts
+@@ -128,8 +128,9 @@ export const Definitions = {
+   console_org_switch: keybind("none", "Switch console organization"),
+   agent_list: keybind("<leader>a", "List agents"),
+   agent_cycle: keybind("tab", "Next agent"),
+-  agent_cycle_reverse: keybind("shift+tab", "Previous agent"),
++  agent_cycle_reverse: keybind("shift+f3", "Previous agent"),
+   variant_cycle: keybind("ctrl+t", "Cycle model variants"),
++  permission_mode_cycle: keybind("shift+tab", "Cycle permission mode"),
+   variant_list: keybind("none", "List model variants"),
+ 
+   messages_page_up: keybind("pageup,ctrl+alt+b", "Scroll messages up by one page"),
+@@ -338,6 +339,7 @@ export const CommandMap = {
+   agent_list: "agent.list",
+   agent_cycle: "agent.cycle",
+   agent_cycle_reverse: "agent.cycle.reverse",
++  permission_mode_cycle: "permission.mode",
+   variant_cycle: "variant.cycle",
+   variant_list: "variant.list",
+   messages_page_up: "session.page.up",
+diff --git a/packages/tui/src/context/permission.tsx b/packages/tui/src/context/permission.tsx
+index 13a6ba82..00000000 100644
+--- a/packages/tui/src/context/permission.tsx
++++ b/packages/tui/src/context/permission.tsx
+@@ -1,28 +1,139 @@
+ import { createStore } from "solid-js/store"
++import type { PermissionRequest } from "@opencode-ai/sdk/v2"
+ import { useArgs } from "./args"
+ import { createSimpleContext } from "./helper"
+ 
+-export type PermissionMode = "auto" | "normal"
++export type PermissionMode = "plan" | "normal" | "auto"
++export type PermissionDecision = "prompt" | "approve" | "reject"
++
++const PermissionModeOrder: PermissionMode[] = ["normal", "auto", "plan"]
++
++const ReadLikePermissions = new Set(["read", "glob", "grep", "list", "todowrite"])
++const PlanRejectPermissions = new Set([
++  "edit",
++  "bash",
++  "task",
++  "webfetch",
++  "websearch",
++  "external_directory",
++  "doom_loop",
++  "question",
++  "plan_exit",
++])
++
++const AutoPromptPermissions = new Set([
++  "external_directory",
++  "webfetch",
++  "websearch",
++  "task",
++  "doom_loop",
++  "question",
++  "plan_enter",
++  "plan_exit",
++])
++
++const DangerousCommandPatterns = [
++  /\bcat\s*>\s*/i,
++  /<<\s*['"]?\w+['"]?/i,
++  /\bpython(?:\d+(?:\.\d+)?)?\s+-c\b/i,
++  /\bpy\s+-3(?:\.\d+)?\s+-c\b/i,
++  /\bpowershell\b.*\bencodedcommand\b/i,
++  /\brm\s+-rf\b/i,
++  /\bdel\s+\/s\b/i,
++  /\brmdir\s+\/s\b/i,
++  /\bformat\s+[a-z]:/i,
++  /\bcurl\b.*\|\s*bash\b/i,
++  /\biwr\b.*\|\s*iex\b/i,
++  /<tool_call>/i,
++  /\bfunctions\.bash\s*\(/i,
++  /\bOTP\b|\bcookie\b|\btoken\b|\bpassword\b|\bcredential\b/i,
++]
++
++const SafeCommandPatterns = [
++  /^\s*(git\s+(status|diff|log|show|rev-parse|branch)(\s+[-\w./:=]+)*)\s*$/i,
++  /^\s*(dir|ls)(\s+[-\w./:=]+)?\s*$/i,
++  /^\s*(type|cat)\s+[-\w./:=]+\s*$/i,
++  /^\s*(findstr|grep)\s+[-\w\s"'./:=]+\s*$/i,
++  /^\s*(py\s+-3\.11|python)\s+-m\s+py_compile\s+[-\w./:=]+\s*$/i,
++  /^\s*(bun|npm|pnpm|yarn)\s+(test|run\s+(test|typecheck|check|build))\s*$/i,
++]
++
++function requestText(request: PermissionRequest) {
++  const pieces: string[] = []
++  pieces.push(request.permission)
++  for (const pattern of request.patterns ?? []) pieces.push(pattern)
++  const meta = request.metadata
++  if (meta && typeof meta === "object") {
++    for (const value of Object.values(meta)) {
++      if (typeof value === "string") pieces.push(value)
++    }
++  }
++  return pieces.join("\n")
++}
++
++function hasDangerousCommandShape(request: PermissionRequest) {
++  const text = requestText(request)
++  return DangerousCommandPatterns.some((pattern) => pattern.test(text))
++}
++
++function isSafeBashRequest(request: PermissionRequest) {
++  const text = requestText(request)
++  return SafeCommandPatterns.some((pattern) => pattern.test(text))
++}
++
++function hasFilePath(request: PermissionRequest) {
++  const filepath = request.metadata?.filepath
++  return typeof filepath === "string" && filepath.trim() !== ""
++}
++
++function isSafeAutoApprove(request: PermissionRequest) {
++  if (hasDangerousCommandShape(request)) return false
++  if (AutoPromptPermissions.has(request.permission)) return false
++  if (ReadLikePermissions.has(request.permission)) return true
++  if (request.permission === "edit") return hasFilePath(request)
++  if (request.permission === "bash") return isSafeBashRequest(request)
++  return false
++}
++
++function isPlanReject(request: PermissionRequest) {
++  if (hasDangerousCommandShape(request)) return true
++  if (PlanRejectPermissions.has(request.permission)) return true
++  return false
++}
+ 
+ export const { use: usePermission, provider: PermissionProvider } = createSimpleContext({
+   name: "Permission",
+   init: () => {
+     const args = useArgs()
+     const [store, setStore] = createStore<{ mode: PermissionMode }>({
+       mode: args.auto ? "auto" : "normal",
+     })
++
++    function set(mode: PermissionMode) {
++      setStore("mode", mode)
++    }
++
++    function cycle() {
++      setStore("mode", (mode) => {
++        const idx = PermissionModeOrder.indexOf(mode)
++        return PermissionModeOrder[(idx + 1) % PermissionModeOrder.length] ?? "normal"
++      })
++    }
++
++    function decision(request: PermissionRequest): PermissionDecision {
++      if (store.mode === "normal") return "prompt"
++
++      if (store.mode === "plan") {
++        if (isPlanReject(request)) return "reject"
++        return "prompt"
++      }
++
++      if (store.mode === "auto") {
++        if (hasDangerousCommandShape(request)) return "reject"
++        if (isSafeAutoApprove(request)) return "approve"
++        return "prompt"
++      }
++
++      return "prompt"
++    }
++
+     return {
+       get mode() {
+         return store.mode
+       },
+-      set(mode: PermissionMode) {
+-        setStore("mode", mode)
+-      },
++      set,
++      cycle,
+       toggle() {
+-        setStore("mode", (mode) => (mode === "auto" ? "normal" : "auto"))
++        cycle()
+       },
++      decision,
+     }
+   },
+ })
+diff --git a/packages/tui/src/context/sync.tsx b/packages/tui/src/context/sync.tsx
+index d0511c51..00000000 100644
+--- a/packages/tui/src/context/sync.tsx
++++ b/packages/tui/src/context/sync.tsx
+@@ -189,16 +189,28 @@ export const {
+         }
+ 
+         case "permission.asked": {
+           const request = event.properties
+-          if (permission.mode === "auto") {
++          const decision = permission.decision(request)
++          if (decision === "approve") {
+             void sdk.client.permission.reply({
+               requestID: request.id,
+               reply: "once",
+               directory,
+               workspace,
+             })
+             break
+           }
++
++          if (decision === "reject") {
++            void sdk.client.permission.reply({
++              requestID: request.id,
++              reply: "reject",
++              message: `Permission ${request.permission} was rejected by ${permission.mode.toUpperCase()} permission mode.`,
++              directory,
++              workspace,
++            })
++            break
++          }
++
+           const requests = store.permission[request.sessionID]
+           if (!requests) {
+             setStore("permission", request.sessionID, [request])
+             break
+diff --git a/packages/tui/src/app.tsx b/packages/tui/src/app.tsx
+index 979d35e1..00000000 100644
+--- a/packages/tui/src/app.tsx
++++ b/packages/tui/src/app.tsx
+@@ -112,6 +112,7 @@ const appBindingCommands = [
+   "agent.list",
+   "mcp.list",
+   "agent.cycle",
++  "permission.mode",
+   "agent.cycle.reverse",
+   "variant.cycle",
+   "variant.list",
+@@ -373,11 +374,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugin
+       },
+       {
+         name: "permission.mode",
+-        title:
+-          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
++        title: `Permission mode: ${local.permission.mode.toUpperCase()} — cycle mode`,
+         category: "System",
++        slashName: "permission",
++        slashAliases: ["perm", "mode"],
+         run: () => {
+-          local.permission.toggle()
++          local.permission.cycle()
+           dialog.clear()
+         },
+       },
+diff --git a/packages/tui/src/routes/session/index.tsx b/packages/tui/src/routes/session/index.tsx
+index f832174a..00000000 100644
+--- a/packages/tui/src/routes/session/index.tsx
++++ b/packages/tui/src/routes/session/index.tsx
+@@ -136,6 +136,7 @@ const sessionBindingCommands = [
+   "session.copy",
+   "session.export",
+   "session.child.first",
++  "permission.mode",
+   "session.parent",
+   "session.child.next",
+   "session.child.previous",
+@@ -1136,7 +1137,14 @@ export function Session() {
+                         toBottom()
+                       }}
+                       sessionID={route.sessionID}
+-                      right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
++                      right={
++                        <box flexDirection="row" gap={1} alignItems="center">
++                          <PermissionModeBadge />
++                          <pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />
++                        </box>
++                      }
+                     />
+                   </pluginRuntime.Slot>
+                 </Show>
+@@ -1176,6 +1184,20 @@ export function Session() {
+   )
+ }
+ 
++function PermissionModeBadge() {
++  const local = useLocal()
++  const { theme } = useTheme()
++  const shortcut = useCommandShortcut("permission.mode")
++  const label = createMemo(() => local.permission.mode.toUpperCase())
++  const color = createMemo(() => {
++    if (local.permission.mode === "auto") return theme.warning
++    if (local.permission.mode === "plan") return theme.info
++    return theme.textMuted
++  })
++  return (
++    <text fg={color()}>{`[${label()} ${shortcut()}]`}</text>
++  )
++}
++
+ function UserMessage(props: {
+   message: UserMessage
+   parts: Part[]
