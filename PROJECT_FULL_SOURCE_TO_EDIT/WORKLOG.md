@@ -49,8 +49,17 @@ read-only and the interruption signal survives for resume/init. Verified.
 ## Phase 2 — UX (pending)
 Front-door commands, Korean status, dashboard, runners.
 
-## Phase 2 — UX (pending)
-Front-door commands, Korean status, dashboard, runners.
+## Phase 2 — UX (COMPLETE, validated)
 
-## Phase 3 — design doc only (pending)
-`REQUIRES_OPENCODE_SOURCE_PATCH.md`.
+| Item | Files added/changed | Validation | Result |
+|------|---------------------|------------|--------|
+| Front-door commands | `.opencode/commands/start.md`, `work.md`, `fix.md` (+ existing `status.md`, `remember.md`) | frontmatter mirrors existing commands | created ✓ |
+| Korean plain-text status | `agent_ops/render_ko.py`, `agentops.py` `status --ko` | `status --ko` | counts/active/stop/last-fail/next-action in Korean ✓ |
+| `fix` subcommand | `agentops.py` `cmd_fix` (selfheal + verify) | `fix --ko` | Korean self-heal summary ✓ |
+| HTML dashboard | `agent_ops/dashboard.py`, `agentops.py` `dashboard` | `dashboard`; XSS escaping | offline HTML, no external refs, html.escape verified ✓ |
+| One-click runners | `RUN_AGENTOPS_START.bat.txt`, `RUN_AGENTOPS_FIX.bat.txt` | ASCII check | ASCII OK ✓ |
+| (P2-1) guard: orchestrator not auto-allowed | `command_guard.py` | guard check | `orchestrator …` → `ask`, `status` → `allow` ✓ |
+
+## Phase 3 — design doc only (COMPLETE)
+`REQUIRES_OPENCODE_SOURCE_PATCH.md` written (permission-mode toggle design, C2).
+No OpenCode source present, so only the design doc is produced per instructions.

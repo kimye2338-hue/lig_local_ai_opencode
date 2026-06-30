@@ -20,6 +20,7 @@ from agent_ops.failures import log_failure, make_selfheal_plan
 from agent_ops.memory_manager import memorycheck, ensure_memory, add_user_memory, recall, extract_keywords, format_recall_for_prompt
 from agent_ops.safety import classify_action
 from agent_ops.orchestrator import run_once, run_loop, run_loop_parallel
+from agent_ops.render_ko import write_status_ko
 
 def cmd_init(args):
     interruption = init_state()
@@ -35,6 +36,9 @@ def cmd_status(args):
     # Note: we intentionally do NOT heartbeat here — a one-shot status read must
     # not refresh liveness (that would mask a real stale-heartbeat interruption
     # from a later resume/init, since "status" is not a watched run status).
+    if getattr(args, "ko", False):
+        print(write_status_ko())
+        return 0
     interruption = detect_interruption()
     data = {
         "timestamp": now(),
@@ -82,6 +86,32 @@ def cmd_report(args):
 def cmd_selfheal(args):
     result = make_selfheal_plan()
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+def cmd_fix(args):
+    # Front-door self-service recovery: self-heal plan + verify.
+    plan = make_selfheal_plan()
+    result = verify()
+    summary_obj = {"selfheal": plan, "verify": result}
+    if getattr(args, "ko", False):
+        ftype = plan.get("failure_type", "UNKNOWN")
+        ok = "정상" if result.get("ok") else "문제 있음"
+        lines = [
+            "AgentOps 자가 복구 결과",
+            f"- 최근 실패 유형: {ftype}",
+            f"- 권장 조치: {plan.get('actions', ['없음'])[0] if plan.get('actions') else '없음'}",
+            f"- 검증 결과: {ok}",
+            f"- 사용자 확인 필요: {'예' if plan.get('requires_user') else '아니오'}",
+        ]
+        print("\n".join(lines))
+    else:
+        print(json.dumps(summary_obj, ensure_ascii=False, indent=2))
+    return 0 if result.get("ok") else 1
+
+def cmd_dashboard(args):
+    from agent_ops.dashboard import write_dashboard
+    path = write_dashboard()
+    print(f"Dashboard written: {path}")
     return 0
 
 def cmd_log_failure(args):
@@ -179,7 +209,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="OpenCode AgentOps v3.1 Co-Growth Runtime")
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("init").set_defaults(func=cmd_init)
-    sub.add_parser("status").set_defaults(func=cmd_status)
+    p = sub.add_parser("status"); p.add_argument("--ko", action="store_true"); p.set_defaults(func=cmd_status)
+    p = sub.add_parser("fix"); p.add_argument("--ko", action="store_true"); p.set_defaults(func=cmd_fix)
+    sub.add_parser("dashboard").set_defaults(func=cmd_dashboard)
     sub.add_parser("resume").set_defaults(func=cmd_resume)
     p = sub.add_parser("checkpoint"); p.add_argument("--note", default=""); p.set_defaults(func=cmd_checkpoint)
     sub.add_parser("doctor").set_defaults(func=cmd_doctor)
