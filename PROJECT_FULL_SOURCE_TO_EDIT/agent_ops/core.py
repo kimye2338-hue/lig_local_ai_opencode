@@ -107,6 +107,34 @@ def tail_jsonl(path: Path, n: int) -> List[Any]:
 def _pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
+    if os.name == "nt":
+        # Windows: query the process list. Unknown -> assume alive (safe).
+        try:
+            import ctypes
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            STILL_ACTIVE = 259
+            kernel32 = ctypes.windll.kernel32
+            handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if not handle:
+                # Could be access-denied (alive) or gone. Fall back to tasklist.
+                try:
+                    out = subprocess.run(
+                        ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                        capture_output=True, text=True, timeout=5,
+                    )
+                    return str(pid) in (out.stdout or "")
+                except Exception:
+                    return True  # unknown -> assume alive (do not delete a maybe-live lock)
+            try:
+                exit_code = ctypes.c_ulong()
+                if kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                    return exit_code.value == STILL_ACTIVE
+                return True
+            finally:
+                kernel32.CloseHandle(handle)
+        except Exception:
+            return True  # unknown -> assume alive
+    # POSIX
     try:
         os.kill(pid, 0)
         return True
@@ -121,19 +149,25 @@ def _lock_is_stale(lock_path: Path, max_age_seconds: int = 900) -> bool:
     try:
         text = read_text(lock_path).strip()
         parts = text.split()
-        pid = int(parts[0]) if parts else -1
+        pid = int(parts[0]) if parts and parts[0].lstrip("-").isdigit() else -1
         timestamp = parts[1] if len(parts) > 1 else ""
+        # Provably-dead PID -> stale immediately.
         if pid > 0 and not _pid_alive(pid):
             return True
+        # Otherwise decide by age only.
         if timestamp:
             t = datetime.fromisoformat(timestamp)
             age = (datetime.now(t.tzinfo) - t).total_seconds()
-            if age > max_age_seconds:
-                return True
+            return age > max_age_seconds
+        # No timestamp and PID alive/unknown -> not stale yet.
+        return False
     except Exception:
-        # If lock is unreadable or malformed, treat as stale after timeout path.
-        return True
-    return False
+        # Unreadable/malformed lock: only treat as stale if it is also old on disk.
+        try:
+            age = time.time() - lock_path.stat().st_mtime
+            return age > max_age_seconds
+        except Exception:
+            return False
 
 @contextmanager
 def file_lock(name: str, timeout: float = 10.0, stale_after_seconds: int = 900):
