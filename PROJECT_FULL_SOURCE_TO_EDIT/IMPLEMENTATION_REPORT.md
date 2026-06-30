@@ -6,7 +6,7 @@ the AgentOps v3.1 architecture was preserved (no rewrite). All validation ran on
 Linux **Python 3.11.15** (the home PC uses Windows `py -3.11`; Windows-only checks
 are listed in `VALIDATION_TODO_ON_WINDOWS.md`).
 
-## Files changed (21 files, +700 / −58 vs imported baseline)
+## Files changed (27 files, +1232 / −67 vs imported baseline; incl. P0.5 installer + docs)
 
 ### Python (`agent_ops/`)
 - `core.py` — P0-1 Windows-safe `_pid_alive`/`_lock_is_stale`; P1-4 `.bat.txt`/`.cmd.txt` ASCII validation.
@@ -27,6 +27,12 @@ are listed in `VALIDATION_TODO_ON_WINDOWS.md`).
 - `plugins/compaction-handoff.ts` — P1-5 additive `output.context.push` + robust base path.
 - `commands/start.md`, `work.md`, `fix.md` *(new)* — front-door commands.
 
+### Installer (P0.5)
+- `installers_light/INSTALL_OPENCODE_AGENTOPS_V3_1_COGROWTH.py.txt` — probes
+  `agentops_v3_1_payload/`, `current_source/`, and the installer's parent source
+  tree; validates required files (incl. the P0-2 guard plugin) before and after
+  copy; adds `--dry-run`; skips `installers_light/`/`.agentops_backup/`/`.git/`/`__pycache__/`.
+
 ### Runners / meta
 - `RUN_AGENTOPS_START.bat.txt`, `RUN_AGENTOPS_FIX.bat.txt` *(new, ASCII)*.
 - `.gitignore` *(new)* — excludes runtime state + `__pycache__`.
@@ -40,6 +46,14 @@ are listed in `VALIDATION_TODO_ON_WINDOWS.md`).
 - **P0-2** Real command-guard plugin in the exec path.
 - **P0-3** Atomic parallel claim + no shared single-file writes from workers.
 - **P0-4** Keyless internal LLM gateway + defensive parsing.
+
+### Phase 0.5 — installer hardening (review §H)
+- Installer now finds the payload under the **current package layout**
+  (`current_source/` or the source tree itself), not only the legacy
+  `agentops_v3_1_payload/`.
+- The **command-guard plugin is guaranteed to ship**: it is in `REQUIRED_PAYLOAD_FILES`,
+  checked before copy (fails loudly if absent) and asserted present after copy.
+- `--dry-run` lets the user verify what would be installed without writing anything.
 
 ### Phase 1 — reliability (P1-1..P1-5, P1-7, §D)
 - **P1-1/P1-2** order-independent retry + exponential backoff honored by selection.
@@ -81,6 +95,8 @@ are listed in `VALIDATION_TODO_ON_WINDOWS.md`).
 | P1-7 status read-only | run status twice on stale `running` | active stays `active`; resume can still recover |
 | P2 Korean / fix / dashboard | `status --ko`, `fix --ko`, `dashboard` | Korean output; offline HTML, XSS-escaped |
 | P2-1 guard | `… orchestrator --parallel` | `ask` (not `allow`) |
+| P0.5 installer dry-run | `INSTALL_…py.txt --dry-run` from empty target | `DRY_RUN_OK`; 73 files; `command-guard.ts … will be copied: True` |
+| P0.5 installer real | full install into throwaway dir | `INSTALL_OK`; `Command guard plugin installed: True`; guard byte-identical; `installers_light/` skipped |
 | Final suite | `init` → `verify` | `verify ok: true` |
 
 ## Failures or skipped tests

@@ -31,15 +31,21 @@ The items below are known, **non-blocking**, and recorded for follow-up.
 - **Phase 3 / C2 permission-mode toggle** — design only in
   `REQUIRES_OPENCODE_SOURCE_PATCH.md`; needs an OpenCode source fork.
 
-## Installer note (review §H) — flagged, not modified here
-The reference installer (`installers_light/INSTALL_*.py.txt`) copies from a
-`agentops_v3_1_payload/` directory and, as written, does **not** ship the new
-`.opencode/plugins/command-guard.ts`. Before packaging an installable bundle:
-1. Make the installer probe the actual source dir (e.g. also try `current_source/`).
-2. Add `.opencode/plugins/command-guard.ts` to the payload file list so the P0-2
-   guard actually ships.
-The installer was left unmodified because the real install layout lives on the
-home PC and is outside the verified edit scope of this pass.
+## Installer note (review §H) — RESOLVED (P0.5)
+`installers_light/INSTALL_OPENCODE_AGENTOPS_V3_1_COGROWTH.py.txt` was updated:
+1. It now probes `agentops_v3_1_payload/`, `current_source/`, **and** the
+   installer's parent source tree (the current package layout), selecting the first
+   candidate that contains `agent_ops/agentops.py`.
+2. `.opencode/plugins/command-guard.ts` is in `REQUIRED_PAYLOAD_FILES`, validated
+   before copy (install aborts loudly if missing) and asserted present after copy,
+   so the P0-2 guard can never be silently dropped.
+3. A `--dry-run` mode reports the payload, file count, and whether the guard would
+   be copied, without writing anything.
+
+Verified end-to-end on Linux: dry-run → `DRY_RUN_OK` (73 files, guard will copy);
+real install into a scratch dir → `INSTALL_OK`, `Command guard plugin installed:
+True`, guard byte-identical, `installers_light/` not copied. Remaining
+machine-specific check: run I1–I3 in `WINDOWS_TEST_PLAN.md` on the home PC.
 
 ## Residual edge cases (covered, noted for awareness)
 - A worker killed **between** `claim_task` (status `active`) and `mark_task_done`
