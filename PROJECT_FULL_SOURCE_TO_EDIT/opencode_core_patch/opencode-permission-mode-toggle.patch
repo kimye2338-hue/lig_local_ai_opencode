@@ -25,7 +25,7 @@ diff --git a/packages/tui/src/context/permission.tsx b/packages/tui/src/context/
 index 13a6ba82..00000000 100644
 --- a/packages/tui/src/context/permission.tsx
 +++ b/packages/tui/src/context/permission.tsx
-@@ -1,28 +1,139 @@
+@@ -1,28 +1,65 @@
  import { createStore } from "solid-js/store"
 +import type { PermissionRequest } from "@opencode-ai/sdk/v2"
  import { useArgs } from "./args"
@@ -37,7 +37,6 @@ index 13a6ba82..00000000 100644
 +
 +const PermissionModeOrder: PermissionMode[] = ["normal", "auto", "plan"]
 +
-+const ReadLikePermissions = new Set(["read", "glob", "grep", "list", "todowrite"])
 +const PlanRejectPermissions = new Set([
 +  "edit",
 +  "bash",
@@ -50,82 +49,7 @@ index 13a6ba82..00000000 100644
 +  "plan_exit",
 +])
 +
-+const AutoPromptPermissions = new Set([
-+  "external_directory",
-+  "webfetch",
-+  "websearch",
-+  "task",
-+  "doom_loop",
-+  "question",
-+  "plan_enter",
-+  "plan_exit",
-+])
-+
-+const DangerousCommandPatterns = [
-+  /\bcat\s*>\s*/i,
-+  /<<\s*['"]?\w+['"]?/i,
-+  /\bpython(?:\d+(?:\.\d+)?)?\s+-c\b/i,
-+  /\bpy\s+-3(?:\.\d+)?\s+-c\b/i,
-+  /\bpowershell\b.*\bencodedcommand\b/i,
-+  /\brm\s+-rf\b/i,
-+  /\bdel\s+\/s\b/i,
-+  /\brmdir\s+\/s\b/i,
-+  /\bformat\s+[a-z]:/i,
-+  /\bcurl\b.*\|\s*bash\b/i,
-+  /\biwr\b.*\|\s*iex\b/i,
-+  /<tool_call>/i,
-+  /\bfunctions\.bash\s*\(/i,
-+  /\bOTP\b|\bcookie\b|\btoken\b|\bpassword\b|\bcredential\b/i,
-+]
-+
-+const SafeCommandPatterns = [
-+  /^\s*(git\s+(status|diff|log|show|rev-parse|branch)(\s+[-\w./:=]+)*)\s*$/i,
-+  /^\s*(dir|ls)(\s+[-\w./:=]+)?\s*$/i,
-+  /^\s*(type|cat)\s+[-\w./:=]+\s*$/i,
-+  /^\s*(findstr|grep)\s+[-\w\s"'./:=]+\s*$/i,
-+  /^\s*(py\s+-3\.11|python)\s+-m\s+py_compile\s+[-\w./:=]+\s*$/i,
-+  /^\s*(bun|npm|pnpm|yarn)\s+(test|run\s+(test|typecheck|check|build))\s*$/i,
-+]
-+
-+function requestText(request: PermissionRequest) {
-+  const pieces: string[] = []
-+  pieces.push(request.permission)
-+  for (const pattern of request.patterns ?? []) pieces.push(pattern)
-+  const meta = request.metadata
-+  if (meta && typeof meta === "object") {
-+    for (const value of Object.values(meta)) {
-+      if (typeof value === "string") pieces.push(value)
-+    }
-+  }
-+  return pieces.join("\n")
-+}
-+
-+function hasDangerousCommandShape(request: PermissionRequest) {
-+  const text = requestText(request)
-+  return DangerousCommandPatterns.some((pattern) => pattern.test(text))
-+}
-+
-+function isSafeBashRequest(request: PermissionRequest) {
-+  const text = requestText(request)
-+  return SafeCommandPatterns.some((pattern) => pattern.test(text))
-+}
-+
-+function hasFilePath(request: PermissionRequest) {
-+  const filepath = request.metadata?.filepath
-+  return typeof filepath === "string" && filepath.trim() !== ""
-+}
-+
-+function isSafeAutoApprove(request: PermissionRequest) {
-+  if (hasDangerousCommandShape(request)) return false
-+  if (AutoPromptPermissions.has(request.permission)) return false
-+  if (ReadLikePermissions.has(request.permission)) return true
-+  if (request.permission === "edit") return hasFilePath(request)
-+  if (request.permission === "bash") return isSafeBashRequest(request)
-+  return false
-+}
-+
-+function isPlanReject(request: PermissionRequest) {
-+  if (hasDangerousCommandShape(request)) return true
++function isPlanRejected(request: PermissionRequest) {
 +  if (PlanRejectPermissions.has(request.permission)) return true
 +  return false
 +}
@@ -153,15 +77,11 @@ index 13a6ba82..00000000 100644
 +      if (store.mode === "normal") return "prompt"
 +
 +      if (store.mode === "plan") {
-+        if (isPlanReject(request)) return "reject"
++        if (isPlanRejected(request)) return "reject"
 +        return "prompt"
 +      }
 +
-+      if (store.mode === "auto") {
-+        if (hasDangerousCommandShape(request)) return "reject"
-+        if (isSafeAutoApprove(request)) return "approve"
-+        return "prompt"
-+      }
++      if (store.mode === "auto") return "approve"
 +
 +      return "prompt"
 +    }
@@ -247,6 +167,50 @@ index 979d35e1..00000000 100644
            dialog.clear()
          },
        },
+diff --git a/packages/tui/src/component/prompt/index.tsx b/packages/tui/src/component/prompt/index.tsx
+index 0fb04c5c..00000000 100644
+--- a/packages/tui/src/component/prompt/index.tsx
++++ b/packages/tui/src/component/prompt/index.tsx
+@@ -1049,6 +1049,42 @@ export function Prompt(props: PromptProps) {
+         : []
+ 
++    const permissionCommand = inputText.trim().match(/^\/permission(?:\s+(\S+))?\s*$/i)
++    if (permissionCommand) {
++      const action = (permissionCommand[1] ?? "status").toLowerCase()
++      const validModes = ["plan", "normal", "auto"] as const
++
++      if (action === "cycle") {
++        local.permission.cycle()
++        toast.show({ message: `Permission mode: ${local.permission.mode.toUpperCase()}`, variant: "info" })
++      } else if (action === "status") {
++        toast.show({ message: `Permission mode: ${local.permission.mode.toUpperCase()}`, variant: "info" })
++      } else if (validModes.includes(action as (typeof validModes)[number])) {
++        local.permission.set(action as (typeof validModes)[number])
++        toast.show({ message: `Permission mode: ${local.permission.mode.toUpperCase()}`, variant: "info" })
++      } else {
++        toast.show({
++          title: "Unknown permission mode",
++          message: "Use /permission status, cycle, plan, normal, or auto.",
++          variant: "warning",
++        })
++      }
++
++      history.append({
++        ...store.prompt,
++        mode: currentMode,
++      })
++      input.extmarks.clear()
++      setStore("prompt", { input: "", parts: [] })
++      setStore("extmarkToPartIndex", new Map())
++      props.onSubmit?.()
++      input.clear()
++      if (finishMoveProgress) move.finishSubmit()
++      return true
++    }
++
+     if (store.mode === "shell") {
+       move.startSubmit()
+       void sdk.client.session.shell({
 diff --git a/packages/tui/src/routes/session/index.tsx b/packages/tui/src/routes/session/index.tsx
 index f832174a..00000000 100644
 --- a/packages/tui/src/routes/session/index.tsx
