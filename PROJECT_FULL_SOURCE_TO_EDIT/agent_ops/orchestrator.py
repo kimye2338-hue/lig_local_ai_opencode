@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import concurrent.futures as cf
 import json
+import threading
 import time
 from typing import Any, Dict
 
 from .core import RESULTS, LOGS, now, atomic_write_text, append_jsonl, is_stop_requested
 from .queue_manager import get_next_task, get_next_batch, mark_task_running, mark_task_done, mark_task_failed, summary
+
+_CKPT_LOCK = threading.Lock()
 from .state_manager import heartbeat, set_active_task, update_checkpoint, append_done, append_blocker
 from .failures import log_failure, make_selfheal_plan
 from .doctor import run_doctor
@@ -88,6 +91,31 @@ def run_task(task: Dict[str, Any]) -> Dict[str, Any]:
         update_checkpoint(f"task exception {task.get('task_id')}")
         return {"ok": False, "status": "exception", "task": task, "failure": failure}
 
+def run_task_parallel(task: Dict[str, Any]) -> Dict[str, Any]:
+    """Parallel-safe worker: claim atomically first, never write shared single-file state."""
+    from .queue_manager import claim_task
+    claimed = claim_task(task["task_id"])
+    if not claimed:
+        return {"ok": True, "status": "skipped_not_claimed", "task_id": task.get("task_id")}
+    task = claimed
+    try:
+        result = execute_task(task)
+        if result.get("ok"):
+            mark_task_done(task, result)
+            append_done(f"Task done: {task.get('task_id')} {task.get('title')}")
+            try:
+                record_success_lesson(task, result.get("result", {}))
+            except Exception as exc:
+                append_jsonl(LOGS / "memory_errors.jsonl", {"timestamp": now(), "error": repr(exc)})
+            return {"ok": True, "status": "done", "task": task, "result": result}
+        failure = log_failure(str(result.get("error", result)), source="orchestrator", task_id=task.get("task_id", ""))
+        mark_task_failed(task, str(result.get("error", result)), failure.get("type", "UNKNOWN"))
+        return {"ok": False, "status": "failed", "task": task, "failure": failure}
+    except Exception as exc:
+        failure = log_failure(repr(exc), source="orchestrator_exception", task_id=task.get("task_id", ""))
+        mark_task_failed(task, repr(exc), failure.get("type", "UNKNOWN"))
+        return {"ok": False, "status": "exception", "task": task, "failure": failure}
+
 def run_once() -> Dict[str, Any]:
     heartbeat("orchestrator_once")
     if is_stop_requested():
@@ -117,7 +145,7 @@ def run_loop_parallel(interval_seconds: int = 60, max_workers: int = 3) -> int:
             time.sleep(max(10, interval_seconds))
             continue
         with cf.ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {pool.submit(run_task, task): task for task in batch}
+            futures = {pool.submit(run_task_parallel, task): task for task in batch}
             for fut in cf.as_completed(futures):
                 task = futures[fut]
                 try:
@@ -125,6 +153,10 @@ def run_loop_parallel(interval_seconds: int = 60, max_workers: int = 3) -> int:
                 except Exception as exc:
                     result = {"ok": False, "status": "parallel_exception", "task": task, "error": repr(exc)}
                 append_jsonl(LOGS / "orchestrator_parallel.jsonl", {"timestamp": now(), "result": result})
+        # Workers never touch the single shared active-task/checkpoint files.
+        # The main loop updates the checkpoint exactly once per batch, under a lock.
+        with _CKPT_LOCK:
+            update_checkpoint("orchestrator parallel batch complete")
         time.sleep(max(5, interval_seconds))
     heartbeat("stopped")
     update_checkpoint("orchestrator parallel stopped by STOP")

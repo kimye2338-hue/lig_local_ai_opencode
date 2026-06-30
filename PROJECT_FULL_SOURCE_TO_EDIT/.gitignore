@@ -1,0 +1,19 @@
+# AgentOps runtime state and generated artifacts (not source)
+agent_ops/state/
+agent_ops/logs/
+agent_ops/results/
+agent_ops/control/
+agent_ops/archive/
+agent_ops/locks/
+agent_ops/reports/
+.agent-memory/
+portal_research/
+
+# Real LLM config may contain secrets; keep only the example
+agent_ops/config/llm_config.json
+
+# Python caches / backups
+__pycache__/
+*.pyc
+*.pyo
+*.bak

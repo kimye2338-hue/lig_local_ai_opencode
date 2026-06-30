@@ -127,6 +127,24 @@ def mark_task_running(task: Dict[str, Any]) -> Dict[str, Any]:
     attempts = int(task.get("attempt_count") or 0) + 1
     return update_task(task["task_id"], status="active", attempt_count=attempts) or task
 
+def claim_task(task_id: str) -> Optional[Dict[str, Any]]:
+    """Atomically move a task pending->active. Returns the task if WE claimed it, else None."""
+    with file_lock("task_queue"):
+        tasks = load_tasks()
+        for idx, task in enumerate(tasks):
+            if task.get("task_id") == task_id:
+                if task.get("status") != "pending":
+                    return None  # someone else took it / not runnable
+                attempts = int(task.get("attempt_count") or 0) + 1
+                task["status"] = "active"
+                task["attempt_count"] = attempts
+                task["claimed_at"] = now()
+                task["updated_at"] = now()
+                tasks[idx] = normalize_task(task)
+                save_tasks(tasks)
+                return tasks[idx]
+        return None
+
 def mark_task_done(task: Dict[str, Any], result: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return update_task(task["task_id"], status="done", result=result or {}, blocked_reason=None) or task
 
