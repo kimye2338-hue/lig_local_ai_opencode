@@ -2,6 +2,11 @@
 
 **Status: DESIGN ONLY. NOT IMPLEMENTED in this pass.**
 
+> A fuller, more detailed version of this design (exact behavior tables, full
+> resolver pseudocode, search terms, T1–T8 tests, and the shipped C1 fallback)
+> lives in `OPENCODE_PERMISSION_MODE_PATCH_SPEC.md`. This file is kept for
+> history; treat the other as authoritative.
+
 Per `00_START_HERE_…_OPUS_MANAGER.md` Phase 3 and the Opus review §C, a true
 Claude-Code-style permission-mode hotkey (plan | normal | auto) is **not**
 implemented here because the OpenCode source repository is **not present** in this
