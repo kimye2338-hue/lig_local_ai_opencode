@@ -67,7 +67,7 @@ def detect_interruption(max_age_seconds: int = 600) -> Dict[str, Any]:
         return result
     status = state.get("status")
     last = state.get("last_heartbeat")
-    if status in {"continuous", "continuous_external", "continuous_parallel", "running", "active", "orchestrator_once"} and last:
+    if status in {"continuous", "continuous_external", "continuous_parallel", "running", "active", "orchestrator_once", "checkpoint"} and last:
         try:
             t = _dt.datetime.fromisoformat(str(last))
             age = (_dt.datetime.now(t.tzinfo) - t).total_seconds()

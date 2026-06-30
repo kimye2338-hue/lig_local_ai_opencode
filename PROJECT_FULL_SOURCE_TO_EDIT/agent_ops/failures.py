@@ -47,15 +47,19 @@ def log_failure(text: str, source: str = "manual", task_id: str = "") -> Dict[st
     ftype = classify_failure_with_history(text, recent)
     data = {"timestamp": now(), "source": source, "task_id": task_id, "type": ftype, "text_tail": (text or "")[-4000:]}
     append_jsonl(LOGS / "failure_log.jsonl", data)
-    add_memory_event(
-        kind="error_pattern",
-        title=f"Failure pattern {ftype}",
-        body=f"Observed failure type `{ftype}`. Source: {source}. Tail: {(text or '')[-800:]}",
-        status="active",
-        priority="high" if ftype in {"REPEATED_FAILURE", "RISKY_ACTION_BLOCKED", "UNAPPROVED_RESUME_ACTION"} else "normal",
-        source="failure_log",
-        tags=[ftype.lower()],
-    )
+    # Dedupe error-pattern memory: only record if this type isn't already in the
+    # recent failure window (prevents co-growth memory from becoming co-bloat).
+    recent_types = [r.get("type") for r in tail_jsonl(LOGS / "failure_log.jsonl", 10) if isinstance(r, dict)]
+    if recent_types.count(ftype) <= 1:
+        add_memory_event(
+            kind="error_pattern",
+            title=f"Failure pattern {ftype}",
+            body=f"Observed failure type `{ftype}`. Source: {source}. Tail: {(text or '')[-800:]}",
+            status="active",
+            priority="high" if ftype in {"REPEATED_FAILURE", "RISKY_ACTION_BLOCKED", "UNAPPROVED_RESUME_ACTION"} else "normal",
+            source="failure_log",
+            tags=[ftype.lower()],
+        )
     return data
 
 RECOVERY_MAP = {

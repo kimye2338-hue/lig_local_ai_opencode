@@ -68,7 +68,8 @@ def validate(path: Path) -> Dict[str, Any]:
             result["ok"] = False
             result["errors"].append("py_compile_failed")
             result["stderr"] = cp.stderr[-2000:]
-    if suffix in {".bat", ".cmd"}:
+    name_lower = path.name.lower()
+    if suffix in {".bat", ".cmd"} or name_lower.endswith(".bat.txt") or name_lower.endswith(".cmd.txt"):
         try:
             path.read_text(encoding="ascii")
         except Exception:

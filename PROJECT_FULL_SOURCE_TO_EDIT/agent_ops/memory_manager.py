@@ -37,6 +37,16 @@ def add_memory_event(kind: str, title: str, body: str, status: str = "active", p
             "review_after_days": 14,
         }
         rows.append(item)
+        # Hard cap on active memory: auto-archive the oldest overflow as deprecated.
+        MAX_ACTIVE = 500
+        active_rows = [r for r in rows if r.get("status") == "active"]
+        if len(active_rows) > MAX_ACTIVE:
+            overflow = sorted(active_rows, key=lambda r: str(r.get("created_at", "")))[:len(active_rows) - MAX_ACTIVE]
+            ids = {r.get("id") for r in overflow if r.get("id")}
+            for r in rows:
+                if r.get("id") in ids:
+                    r["status"] = "deprecated"
+                    r["deprecated_reason"] = "memory cap exceeded; auto-archived"
         write_jsonl(MEMORY_JSONL, rows)
     render_memory_views()
     return item
@@ -107,8 +117,15 @@ def format_recall_for_prompt(items: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 def record_success_lesson(task: Dict[str, Any], result: Dict[str, Any]) -> None:
-    title = f"Successful task pattern: {task.get('kind', 'task')}"
-    body = f"Task `{task.get('task_id')}` succeeded. Title: {task.get('title')}. Owner: {task.get('owner_agent')}. Result keys: {', '.join(result.keys()) if isinstance(result, dict) else 'n/a'}."
+    kind = task.get("kind", "task")
+    if kind in {"memorycheck", "report", "verify", "doctor", "reflect"}:
+        return  # routine maintenance success is not a lesson
+    title = f"Successful task pattern: {kind}"
+    today = now()[:10]
+    for r in load_memory(status="active"):
+        if r.get("title") == title and str(r.get("created_at", ""))[:10] == today:
+            return  # already captured today
+    body = f"Task `{task.get('task_id')}` ({kind}) succeeded: {task.get('title')}."
     add_memory_event("lesson", title, body, status="active", priority="normal", source="task_success", tags=extract_keywords(task.get("title", "")))
 
 def propose_memory_update(reason: str = "") -> Dict[str, Any]:
