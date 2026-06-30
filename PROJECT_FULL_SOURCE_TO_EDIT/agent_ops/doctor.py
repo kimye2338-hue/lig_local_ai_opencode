@@ -1,0 +1,46 @@
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+from .core import RESULTS, REPORTS, ROOT, platform_info, run_cmd, atomic_write_text, atomic_write_json, read_json, CONFIG, now
+from .state_manager import heartbeat, update_checkpoint
+
+def chromedriver_candidates() -> list[str]:
+    cfg = read_json(CONFIG / "agentops_config.json", {})
+    extra = cfg.get("chromedriver_candidates", []) if isinstance(cfg, dict) else []
+    candidates = [os.environ.get("CHROMEDRIVER_PATH") or "", str(ROOT / "drivers" / "chromedriver.exe"), str(ROOT / "chromedriver.exe"), str(Path.home() / "Desktop" / "local_LLM" / "drivers" / "chromedriver.exe"), str(Path.home() / "Desktop" / "local_LLM" / "chromedriver.exe")]
+    for item in extra:
+        if item not in candidates:
+            candidates.append(str(item))
+    return candidates
+
+def run_doctor() -> dict:
+    heartbeat("doctor")
+    checks = {"timestamp": now(), "platform": platform_info(), "env": {"PYTHONUTF8": os.environ.get("PYTHONUTF8"), "PYTHONIOENCODING": os.environ.get("PYTHONIOENCODING"), "CHROMEDRIVER_PATH": os.environ.get("CHROMEDRIVER_PATH")}, "chromedriver": {}, "chrome_9222": {}, "encoding": {}}
+    found = ""
+    for cand in chromedriver_candidates():
+        if cand and Path(cand).exists():
+            found = cand; break
+    checks["chromedriver"]["candidates"] = chromedriver_candidates()
+    checks["chromedriver"]["found"] = found
+    if found:
+        checks["chromedriver"]["version"] = run_cmd([found, "--version"], timeout=10)
+    try:
+        import urllib.request
+        with urllib.request.urlopen("http://127.0.0.1:9222/json/version", timeout=2) as r:
+            body = r.read(2000).decode("utf-8", errors="replace")
+            checks["chrome_9222"] = {"ok": True, "body": body}
+    except Exception as exc:
+        checks["chrome_9222"] = {"ok": False, "error": repr(exc)}
+    sample = "encoding-test: 한글 OK / utf-8"
+    test_path = RESULTS / "encoding_test_utf8.txt"
+    atomic_write_text(test_path, sample)
+    checks["encoding"]["roundtrip_ok"] = test_path.read_text(encoding="utf-8", errors="replace") == sample
+    atomic_write_json(RESULTS / "environment_check.json", checks)
+    lines = ["# AgentOps Doctor Report", "", f"- Generated: {checks['timestamp']}", f"- ChromeDriver found: `{found or 'NOT FOUND'}`", f"- Chrome 9222 OK: `{checks['chrome_9222'].get('ok')}`", f"- UTF-8 roundtrip OK: `{checks['encoding']['roundtrip_ok']}`", "", "## Raw", "```json", json.dumps(checks, ensure_ascii=False, indent=2), "```"]
+    atomic_write_text(REPORTS / "DOCTOR_REPORT.md", "\n".join(lines))
+    update_checkpoint("doctor completed")
+    return checks
