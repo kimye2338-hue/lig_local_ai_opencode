@@ -1,1 +1,1 @@
-# Lig_local_ai_opencode
+# lig_local_ai_opencode
