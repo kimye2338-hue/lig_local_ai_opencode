@@ -21,15 +21,20 @@ The items below are known, **non-blocking**, and recorded for follow-up.
   raises immediately. Add 1 retry + a distinct `LLM_TIMEOUT` failure type later.
 - **P2-3** — `doctor.py` chromedriver candidates include a hardcoded
   `Desktop/local_LLM/...` path. Move to config/env only with one generic fallback.
-- **P2-4** — No dedicated read-only `agentops-plan` agent yet; Option C1 currently
-  reuses `agentops-explorer`/supervisor as the "plan/normal" personas.
+- **P2-4** — RESOLVED. `.opencode/agents/agentops-plan.md` (new, primary,
+  read-only: `edit: deny`) completes the C1 fallback trio so plan/normal/auto
+  each map to a dedicated primary agent. Not yet exercised against a live
+  OpenCode session — see `PERMISSION_MODE_IMPLEMENTATION_REPORT.md`.
 - **P4 reflection task** — repeated-failure consolidation (≥3 of one `ftype` → one
   generalized lesson) is designed in the review but not wired into the orchestrator.
 - **P4 portal CDP runner** — attach-only snapshotter with action quarantine is
   **design-first** and requires explicit user sign-off; the `safety.py` classifier
   is ready, the runner is not built (and must never extract cookies/tokens).
-- **Phase 3 / C2 permission-mode toggle** — design only in
-  `REQUIRES_OPENCODE_SOURCE_PATCH.md`; needs an OpenCode source fork.
+- **Phase 3 / C2 permission-mode toggle** — design only; full spec now in
+  `OPENCODE_PERMISSION_MODE_PATCH_SPEC.md` (supersedes the shorter
+  `REQUIRES_OPENCODE_SOURCE_PATCH.md`); needs an OpenCode source fork. The C1
+  fallback (`agentops-plan`/`agentops-supervisor`/`agentops-autopilot` +
+  `/permission`) is implemented; see `PERMISSION_MODE_IMPLEMENTATION_REPORT.md`.
 
 ## Installer note (review §H) — RESOLVED (P0.5)
 `installers_light/INSTALL_OPENCODE_AGENTOPS_V3_1_COGROWTH.py.txt` was updated:
