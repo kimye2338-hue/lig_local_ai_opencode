@@ -156,6 +156,10 @@ def analyze(text: str) -> Dict[str, Any]:
 
     normalized = command.strip().replace("\\", "/")
     safe_prefix = any(normalized.startswith(p) for p in SAFE_PREFIXES)
+    # P2-1: the orchestrator starts a long-running loop inside OpenCode bash.
+    # Long loops must be launched by the external BAT only, so never auto-allow it.
+    if "agentops.py orchestrator" in normalized:
+        safe_prefix = False
 
     if reasons:
         decision = BLOCK
