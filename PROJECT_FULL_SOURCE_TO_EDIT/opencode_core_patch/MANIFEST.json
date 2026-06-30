@@ -1,0 +1,10 @@
+{
+  "target_repo": "https://github.com/anomalyco/opencode",
+  "target_commit": "afff74eb2c9fc3808a9795f365707f32853099e9",
+  "files": {
+    "opencode-permission-mode-toggle.patch": "d6d8446c56e3635212a1b986d2384e9f74c7e216ccd443b3e318093306c60378",
+    "README.md": "c840f3e883df1139f8cdce1ae5a9a24343dbe9111f171c6751233a1f66e174e5",
+    "APPLY_AND_BUILD_PATCHED_OPENCODE.bat.txt": "2e839dff8a217dae4ed4308f2dce888ca062948121abc7c6bb3e8f42351d2d52",
+    "OPENCODE_CORE_PERMISSION_MODE_PATCH_DELIVERY.md": "9f33838e170a56782280a170a84835fa6b88b8b317eb308bc0910e6dedc9dad9"
+  }
+}
