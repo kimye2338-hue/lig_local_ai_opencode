@@ -70,9 +70,19 @@ def dependencies_done(task: Dict[str, Any], tasks: List[Dict[str, Any]]) -> bool
             return False
     return True
 
+def _retry_ready(t: Dict[str, Any]) -> bool:
+    nra = t.get("next_retry_at")
+    if not nra:
+        return True
+    try:
+        import datetime as _dt
+        return _dt.datetime.fromisoformat(str(nra)) <= _dt.datetime.now(_dt.datetime.fromisoformat(str(nra)).tzinfo)
+    except Exception:
+        return True
+
 def get_next_task() -> Optional[Dict[str, Any]]:
     tasks = load_tasks()
-    candidates = [t for t in tasks if t.get("status") == "pending" and dependencies_done(t, tasks)]
+    candidates = [t for t in tasks if t.get("status") == "pending" and _retry_ready(t) and dependencies_done(t, tasks)]
     if not candidates:
         return None
     candidates.sort(key=lambda t: (int(t.get("priority", 5)), str(t.get("created_at", ""))))
@@ -94,7 +104,7 @@ def _is_parallel_safe(task: Dict[str, Any]) -> bool:
 
 def get_next_batch(max_workers: int = 3) -> List[Dict[str, Any]]:
     tasks = load_tasks()
-    candidates = [t for t in tasks if t.get("status") == "pending" and dependencies_done(t, tasks)]
+    candidates = [t for t in tasks if t.get("status") == "pending" and _retry_ready(t) and dependencies_done(t, tasks)]
     candidates.sort(key=lambda t: (int(t.get("priority", 5)), str(t.get("created_at", ""))))
     batch: List[Dict[str, Any]] = []
     touched: Set[str] = set()
@@ -149,11 +159,17 @@ def mark_task_done(task: Dict[str, Any], result: Optional[Dict[str, Any]] = None
     return update_task(task["task_id"], status="done", result=result or {}, blocked_reason=None) or task
 
 def mark_task_failed(task: Dict[str, Any], reason: str, failure_type: str = "UNKNOWN") -> Dict[str, Any]:
+    # attempt_count is incremented ONLY by mark_task_running / claim_task.
     attempts = int(task.get("attempt_count") or 0)
-    status = "failed" if attempts >= int(task.get("max_retries") or DEFAULT_MAX_RETRIES) else "pending"
-    if status == "failed":
-        append_blocker(f"Task failed permanently: {task.get('task_id')} {task.get('title')} / {failure_type}: {reason}")
-    return update_task(task["task_id"], status=status, last_failure_type=failure_type, blocked_reason=reason) or task
+    max_retries = int(task.get("max_retries") or DEFAULT_MAX_RETRIES)
+    if attempts >= max_retries:
+        append_blocker(f"Task failed permanently after {attempts}/{max_retries}: {task.get('task_id')} {task.get('title')} / {failure_type}: {reason}")
+        return update_task(task["task_id"], status="failed", last_failure_type=failure_type, blocked_reason=reason) or task
+    # schedule a backoff retry (see P1-2 _retry_ready)
+    import datetime as _dt
+    delay = min(600, 15 * (2 ** max(0, attempts - 1)))
+    next_at = (_dt.datetime.now().astimezone() + _dt.timedelta(seconds=delay)).isoformat(timespec="seconds")
+    return update_task(task["task_id"], status="pending", last_failure_type=failure_type, blocked_reason=reason, next_retry_at=next_at) or task
 
 def recover_interrupted_active_tasks(reason: str = "interrupted run") -> int:
     with file_lock("task_queue"):

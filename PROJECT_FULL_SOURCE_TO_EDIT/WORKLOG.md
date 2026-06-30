@@ -24,10 +24,30 @@ Phase 0 validation all green → proceeding to Phase 1.
 - Added `.gitignore` so AgentOps runtime state (`state/`, `logs/`, `.agent-memory/`,
   etc.) and `__pycache__` are not committed.
 
-## Phase 1 — reliability (pending)
-Targets: `queue_manager.py` (retry backoff), `memory_manager.py` + `failures.py`
-(anti-bloat), `core.py` + `safe_file_writer.py` (.bat.txt ASCII),
-`compaction-handoff.ts` (additive), `agentops.py` (`/status` read-only).
+## Phase 1 — reliability (COMPLETE, validated)
+
+| Item | Files changed | Validation | Result |
+|------|---------------|------------|--------|
+| P1-1 order-independent retry | `queue_manager.py` `mark_task_failed` | enqueue→fail at 1/3 and 3/3 | 1/3 → `pending` + `next_retry_at`; 3/3 → `failed` ✓ |
+| P1-2 backoff honored by selection | `queue_manager.py` `_retry_ready` + both selectors | `get_next_task` skips backed-off task | skipped ✓ |
+| P1-3 memory anti-bloat | `memory_manager.py` (`record_success_lesson`, `MAX_ACTIVE` cap), `failures.py` (recent-type dedupe) | 5 identical successes; memorycheck success | at most +1 lesson; routine kinds skipped ✓ |
+| P1-4 `.bat.txt`/`.cmd.txt` ASCII | `core.py` `validate_written_file`, `safe_file_writer.py` `validate` | ascii vs non-ascii `.bat.txt` | ascii ok, non-ascii → `bat_cmd_must_be_ascii` ✓ |
+| P1-5 additive compaction + robust path | `.opencode/plugins/compaction-handoff.ts` | `bun build` | transpiles ✓ (live: T8/VERIFY-ON-MACHINE) |
+| P1-7 `/status` read-only | `agentops.py` `cmd_status` | run status twice on a stale `running` heartbeat | active task stays `active`; resume can still recover ✓ |
+| (§D) interruption catches post-checkpoint crash | `state_manager.py` `detect_interruption` watched set | n/a (set membership) | `"checkpoint"` added ✓ |
+
+Final suite: `init`→`verify` ok:true; guard allow/ask correct.
+
+### Deliberate deviation from review §3 P1-7 (documented)
+The review's verbatim `cmd_status` kept `heartbeat("status")`. That would set
+`RUN_STATE.status="status"` (not a watched run status) and refresh
+`last_heartbeat`, masking a real stale-heartbeat interruption so a later
+`resume`/`init` could never recover it. Since status now no longer recovers
+inline, I removed the heartbeat (and `update_resume_plan`) so status is *truly*
+read-only and the interruption signal survives for resume/init. Verified.
+
+## Phase 2 — UX (pending)
+Front-door commands, Korean status, dashboard, runners.
 
 ## Phase 2 — UX (pending)
 Front-door commands, Korean status, dashboard, runners.

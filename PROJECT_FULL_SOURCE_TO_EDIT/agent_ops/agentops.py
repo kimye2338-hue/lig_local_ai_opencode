@@ -30,11 +30,12 @@ def cmd_init(args):
     return 0
 
 def cmd_status(args):
+    # Read-only (P1-7): report interruption but do NOT consume/recover or mutate
+    # task state here. Recovery happens only in init/resume/orchestrator tick.
+    # Note: we intentionally do NOT heartbeat here — a one-shot status read must
+    # not refresh liveness (that would mask a real stale-heartbeat interruption
+    # from a later resume/init, since "status" is not a watched run status).
     interruption = detect_interruption()
-    if interruption.get("interrupted"):
-        consume_interruption(interruption)
-        recover_interrupted_active_tasks(interruption.get("reason") or "interrupted run")
-    heartbeat("status")
     data = {
         "timestamp": now(),
         "stop_requested": is_stop_requested(),
@@ -44,7 +45,6 @@ def cmd_status(args):
         "active_task": read_json(STATE / "ACTIVE_TASK.json", {}),
     }
     atomic_write_text(REPORTS / "STATUS.md", "# AgentOps Status\n\n```json\n" + json.dumps(data, ensure_ascii=False, indent=2) + "\n```\n")
-    update_resume_plan("status generated")
     print(json.dumps(data, ensure_ascii=False, indent=2))
     return 0
 

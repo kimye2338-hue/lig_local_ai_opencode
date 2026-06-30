@@ -1,24 +1,26 @@
 import { readFileSync } from "fs"
+import { join } from "path"
 
-export const CompactionHandoff = async () => ({
+export const CompactionHandoff = async (ctx: any) => ({
   "experimental.session.compacting": async (_input: any, output: any) => {
+    const base = ctx?.directory || ctx?.worktree?.path || process.cwd()
     let handoff = ""
+    let missing = false
     try {
-      handoff = readFileSync("agent_ops/state/COMPACT_HANDOFF.md", "utf-8")
-    } catch {}
-    output.prompt = [
-      "Summarize the session. Preserve all durable state references below.",
-      "After compaction, your FIRST action MUST be to read these files:",
-      "agent_ops/state/COMPACT_HANDOFF.md",
-      "agent_ops/state/RESUME_PLAN.md",
-      "agent_ops/state/ACTIVE_TASK.json",
-      "agent_ops/state/CHECKPOINT.json",
-      "",
-      "CRITICAL: items under next_step, planned action, or queue are PLANNED, not approved.",
-      "Do not perform any risk:review_required action without explicit user approval in this current session.",
-      "",
-      "=== DURABLE HANDOFF ===",
-      handoff,
+      handoff = readFileSync(join(base, "agent_ops/state/COMPACT_HANDOFF.md"), "utf-8")
+    } catch {
+      missing = true
+    }
+    const block = [
+      "## AgentOps durable handoff (preserve across compaction)",
+      "After compaction, FIRST read: agent_ops/state/COMPACT_HANDOFF.md, RESUME_PLAN.md, ACTIVE_TASK.json, CHECKPOINT.json.",
+      "Items under next_step/queue are PLANNED, not approved. No risk:review_required action without explicit current-session user approval.",
+      missing ? "(COMPACT_HANDOFF.md not found at session start — run `python agent_ops/agentops.py checkpoint` early.)" : handoff,
     ].join("\n")
+    if (Array.isArray(output?.context)) {
+      output.context.push(block)   // additive: preferred (F2)
+    } else {
+      output.prompt = (output.prompt ? output.prompt + "\n\n" : "") + block
+    }
   },
 })

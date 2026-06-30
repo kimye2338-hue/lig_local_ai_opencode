@@ -265,6 +265,13 @@ def validate_written_file(path: Path) -> Dict[str, Any]:
             info["ok"] = False
             info["errors"].append("py_compile_failed")
             info["py_compile"] = r
+    name_lower = path.name.lower()
+    if path.suffix.lower() in {".bat", ".cmd"} or name_lower.endswith(".bat.txt") or name_lower.endswith(".cmd.txt"):
+        try:
+            path.read_text(encoding="ascii")
+        except Exception:
+            info["ok"] = False
+            info["errors"].append("bat_cmd_must_be_ascii")
     return info
 
 def is_stop_requested() -> bool:
