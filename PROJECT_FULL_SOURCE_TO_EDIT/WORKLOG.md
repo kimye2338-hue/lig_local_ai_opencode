@@ -63,3 +63,16 @@ Front-door commands, Korean status, dashboard, runners.
 ## Phase 3 — design doc only (COMPLETE)
 `REQUIRES_OPENCODE_SOURCE_PATCH.md` written (permission-mode toggle design, C2).
 No OpenCode source present, so only the design doc is produced per instructions.
+
+## Final status — ALL PHASES COMPLETE
+- Phase 0 (P0-1..P0-4): done, validated. Install blockers cleared.
+- Phase 1 (P1-1..P1-5, P1-7, §D): done, validated.
+- Phase 2 (front-door commands, Korean status, dashboard, runners, P2-1): done, validated.
+- Phase 3: design doc only (no OpenCode source).
+- Reports: IMPLEMENTATION_REPORT.md, WINDOWS_TEST_PLAN.md, REMAINING_RISKS.md,
+  VALIDATION_TODO_ON_WINDOWS.md written.
+- Final sweep: every touched module compiles; `init`→`verify` ok; guard matrix
+  (block/block/allow/ask/ask) correct; both plugins transpile.
+- One deliberate, documented deviation (read-only status drops heartbeat).
+- Not applied (documented in REMAINING_RISKS.md): P1-6, P2-2/3/4, P4 reflection,
+  P4 portal runner, C2 fork; installer §H payload fix flagged not modified.
