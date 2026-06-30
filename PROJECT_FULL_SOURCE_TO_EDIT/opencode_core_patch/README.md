@@ -54,6 +54,20 @@ The prompt footer shows a visible mode badge:
 [PLAN shift+tab]
 ```
 
+## Direct command control
+
+The patch also adds local prompt handling for:
+
+```text
+/permission status
+/permission cycle
+/permission plan
+/permission normal
+/permission auto
+```
+
+These commands change the live TUI permission mode without changing the active agent/persona.
+
 ## Behavior by mode
 
 ### NORMAL
@@ -62,15 +76,27 @@ Existing behavior. Permission requests are shown normally.
 
 ### AUTO
 
-Bounded auto-approval. This is intentionally not equivalent to `--dangerously-skip-permissions`.
+Claude-Code-like auto mode. Permission requests are automatically replied to with allow-once by the TUI permission controller.
 
-Auto-approves read/glob/grep/list/todowrite, edit requests with filepath metadata, and obviously safe bash verification/read-only commands.
+This is intentionally different from the previous conservative patch that only auto-approved a small safe subset. The user requirement is that Shift+Tab controls permission behavior, and AUTO should feel like an actual automatic approval mode.
 
-Keeps prompting or rejects external_directory, webfetch, websearch, task, doom_loop, question, plan_enter, plan_exit, dangerous/corrupted bash, and credential/token/cookie/password-like commands.
+Important: bash safety remains layered. The AgentOps `command-guard.ts` plugin still runs in the OpenCode tool execution path and can block malformed or dangerous bash before execution. Permission mode controls approval prompts; the guard controls execution safety.
 
 ### PLAN
 
-Rejects write/risky permission requests: edit, bash, task, webfetch, websearch, external_directory, doom_loop, question, plan_exit, and dangerous/corrupted command shapes.
+Planning/read-first mode. Write-like or execution-like permission requests are rejected by the permission controller:
+
+```text
+edit
+bash
+task
+webfetch
+websearch
+external_directory
+doom_loop
+question
+plan_exit
+```
 
 Read-like requests are not auto-rejected.
 
@@ -81,6 +107,7 @@ packages/tui/src/config/keybind.ts
 packages/tui/src/context/permission.tsx
 packages/tui/src/context/sync.tsx
 packages/tui/src/app.tsx
+packages/tui/src/component/prompt/index.tsx
 packages/tui/src/routes/session/index.tsx
 ```
 
