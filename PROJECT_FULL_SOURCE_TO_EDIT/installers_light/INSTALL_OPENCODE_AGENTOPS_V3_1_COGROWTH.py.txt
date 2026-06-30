@@ -8,6 +8,18 @@ MARKER = '<!-- OPENCODE_AGENTOPS_V3_1_COGROWTH -->'
 END_MARKER = '<!-- /OPENCODE_AGENTOPS_V3_1_COGROWTH -->'
 PATCH_VERSION = "opencode-agentops-v3.1-cogrowth"
 
+# Files that MUST be present in the payload and after install. The command-guard
+# plugin is a P0 safety control, so the installer fails loudly if it is missing
+# instead of silently shipping a build without the corrupted-command guard.
+REQUIRED_PAYLOAD_FILES = [
+    "agent_ops/agentops.py",
+    "agent_ops/command_guard.py",
+    ".opencode/plugins/command-guard.ts",
+    ".opencode/plugins/compaction-handoff.ts",
+]
+# Top-level payload entries that must never be copied into the target project.
+PAYLOAD_SKIP_TOP = {"installers_light", ".agentops_backup", ".git"}
+
 def read_text(path: Path) -> str:
     if path.exists():
         return path.read_text(encoding="utf-8", errors="replace")
@@ -108,35 +120,119 @@ Safety:
         existing = existing.rstrip() + "\n\n" + block + "\n"
     write_text(p, existing)
 
+def find_payload(here: Path, root: Path):
+    # Probe the historical name AND the current package layout. In this package the
+    # editable source IS the installer's parent (installers_light/ lives inside the
+    # source tree), and the Opus-review reference zips ship it as current_source/.
+    candidates = [
+        here / "agentops_v3_1_payload",
+        root / "agentops_v3_1_payload",
+        here / "current_source",
+        root / "current_source",
+        here.parent / "agentops_v3_1_payload",
+        here.parent / "current_source",
+        here.parent,  # PROJECT_FULL_SOURCE_TO_EDIT / current_source itself
+    ]
+    seen = set()
+    for cand in candidates:
+        try:
+            key = str(cand.resolve())
+        except Exception:
+            key = str(cand)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            if cand.exists() and (cand / "agent_ops" / "agentops.py").is_file():
+                return cand
+        except Exception:
+            continue
+    return None
+
+def iter_payload_files(payload: Path):
+    for src in sorted(payload.rglob("*")):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(payload)
+        if rel.parts and rel.parts[0] in PAYLOAD_SKIP_TOP:
+            continue
+        if any(part == "__pycache__" for part in rel.parts):
+            continue
+        yield src, rel
+
 def main():
+    argv = sys.argv[1:]
+    dry_run = "--dry-run" in argv
     root = Path.cwd()
     here = Path(__file__).resolve().parent
-    payload = here / "agentops_v3_1_payload"
-    if not payload.exists():
-        payload = root / "agentops_v3_1_payload"
-    if not payload.exists():
-        print("[ERROR] agentops_v3_1_payload not found")
+    payload = find_payload(here, root)
+    if payload is None:
+        print("[ERROR] AgentOps payload not found.")
+        print("        Looked for agentops_v3_1_payload/ or current_source/ (or the")
+        print("        installer's parent source tree) containing agent_ops/agentops.py.")
         return 1
+    print("[INFO] Using payload:", payload)
+
+    # Validate required files exist in the payload BEFORE touching the project.
+    missing_payload = [f for f in REQUIRED_PAYLOAD_FILES if not (payload / f).is_file()]
+    if missing_payload:
+        print("[ERROR] payload is missing required files:")
+        for f in missing_payload:
+            print("        -", f)
+        return 1
+
+    files = list(iter_payload_files(payload))
+    guard_rel = ".opencode/plugins/command-guard.ts"
+    will_copy_guard = any(rel.as_posix() == guard_rel for _, rel in files)
+
+    if dry_run:
+        print("[DRY-RUN] No files will be written.")
+        print("[DRY-RUN] Payload files to copy:", len(files))
+        print("[DRY-RUN] command-guard.ts present in payload and will be copied:", will_copy_guard)
+        print("[DRY-RUN] Required-files check: OK")
+        for f in REQUIRED_PAYLOAD_FILES:
+            print("          -", f)
+        if not will_copy_guard:
+            print("[ERROR] command-guard.ts would NOT be copied")
+            return 1
+        print("DRY_RUN_OK")
+        return 0
+
     backup_root = root / ".agentops_backup" / datetime.now().strftime("%Y%m%d_%H%M%S")
     backup(root, root / "opencode.json", backup_root)
     backup(root, root / "AGENTS.md", backup_root)
     merge_opencode(root, backup_root)
-    for src in payload.rglob("*"):
-        if not src.is_file():
-            continue
-        rel = src.relative_to(payload)
+    copied = 0
+    for src, rel in files:
         dst = root / rel
         if str(rel).startswith(".agent-memory") and dst.exists():
             continue
+        try:
+            if src.resolve() == dst.resolve():
+                continue  # payload already in place (installing in-tree)
+        except Exception:
+            pass
         backup(root, dst, backup_root)
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
+        copied += 1
     update_agents_md(root)
+
+    # Hard guarantee: required files (incl. the command-guard plugin) exist now.
+    missing_after = [f for f in REQUIRED_PAYLOAD_FILES if not (root / f).is_file()]
+    if missing_after:
+        print("[ERROR] required files missing after install:")
+        for f in missing_after:
+            print("        -", f)
+        return 1
+
     subprocess.run([sys.executable, str(root / "agent_ops" / "agentops.py"), "init"], cwd=str(root), check=False)
     result = subprocess.run([sys.executable, str(root / "agent_ops" / "agentops.py"), "verify"], cwd=str(root), check=False)
     print("INSTALL_OK")
     print("Patch:", PATCH_VERSION)
     print("Project root:", root)
+    print("Files copied:", copied)
+    print("Command guard plugin installed:", (root / guard_rel).is_file())
     print("Next: ocode -> /doctor -> /resume -> /continue")
     if result.returncode != 0:
         print("[WARN] verify returned non-zero. Check agent_ops/reports/VERIFICATION_REPORT.md")

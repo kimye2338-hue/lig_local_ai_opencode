@@ -64,6 +64,16 @@ Front-door commands, Korean status, dashboard, runners.
 `REQUIRES_OPENCODE_SOURCE_PATCH.md` written (permission-mode toggle design, C2).
 No OpenCode source present, so only the design doc is produced per instructions.
 
+## Phase 0.5 — installer hardening (review §H) (COMPLETE, validated)
+
+| Item | Files changed | Validation | Result |
+|------|---------------|------------|--------|
+| Probe current_source/parent for payload | `installers_light/INSTALL_…COGROWTH.py.txt` | `--dry-run` from empty target | finds `PROJECT_FULL_SOURCE_TO_EDIT`, `DRY_RUN_OK` ✓ |
+| Guarantee command-guard.ts ships | same | required-files pre/post assertions | `command-guard.ts … will be copied: True`; real install → `installed: True`, byte-identical ✓ |
+| Dry-run mode | same | `--dry-run` writes nothing | 73 files reported, no writes ✓ |
+| Skip installer/backup/git/pycache | same | real install into scratch dir | `installers_light/` not copied ✓ |
+| Concrete T8/T9/I1-I3 procedures | `WINDOWS_TEST_PLAN.md` | doc | step-by-step added ✓ |
+
 ## Final status — ALL PHASES COMPLETE
 - Phase 0 (P0-1..P0-4): done, validated. Install blockers cleared.
 - Phase 1 (P1-1..P1-5, P1-7, §D): done, validated.
@@ -74,5 +84,7 @@ No OpenCode source present, so only the design doc is produced per instructions.
 - Final sweep: every touched module compiles; `init`→`verify` ok; guard matrix
   (block/block/allow/ask/ask) correct; both plugins transpile.
 - One deliberate, documented deviation (read-only status drops heartbeat).
+- Phase 0.5: installer §H fixed (probes current_source/parent, guarantees the
+  command-guard plugin ships, `--dry-run`); verified end-to-end on Linux.
 - Not applied (documented in REMAINING_RISKS.md): P1-6, P2-2/3/4, P4 reflection,
-  P4 portal runner, C2 fork; installer §H payload fix flagged not modified.
+  P4 portal runner, C2 fork.
