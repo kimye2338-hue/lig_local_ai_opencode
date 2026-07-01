@@ -1,0 +1,420 @@
+--- a/packages/core/src/permission.ts	2026-07-01 01:44:56.000000000 +0000
++++ b/packages/core/src/permission.ts	2026-06-30 19:54:40.559549524 +0000
+@@ -10,8 +10,10 @@
+ import { SessionStore } from "./session/store"
+ import { Wildcard } from "./util/wildcard"
+ import { PermissionSaved } from "./permission/saved"
++import { PermissionMode } from "./permission/mode"
+ 
+ export { Effect, Rule, Ruleset } from "@opencode-ai/schema/permission"
++export { PermissionMode } from "./permission/mode"
+ const missingAgentPermissions: Permission.Ruleset = [{ action: "*", resource: "*", effect: "deny" }]
+ 
+ export const ID = Permission.ID
+@@ -96,6 +98,8 @@
+   readonly get: (id: ID) => EffectRuntime.Effect<Request | undefined>
+   readonly forSession: (sessionID: SessionV2.ID) => EffectRuntime.Effect<ReadonlyArray<Request>>
+   readonly list: () => EffectRuntime.Effect<ReadonlyArray<Request>>
++  readonly setMode: (sessionID: SessionV2.ID, mode: PermissionMode.Mode) => EffectRuntime.Effect<void>
++  readonly getMode: (sessionID: SessionV2.ID) => EffectRuntime.Effect<PermissionMode.Mode>
+ }
+ 
+ export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Permission") {}
+@@ -115,6 +119,9 @@
+     const sessions = yield* SessionStore.Service
+     const saved = yield* PermissionSaved.Service
+     const pending = new Map<ID, Pending>()
++    // Session-level permission mode (Claude-Code-like). Runtime state, keyed by
++    // session, independent of the active agent/persona. Default: normal.
++    const modes = new Map<SessionV2.ID, PermissionMode.Mode>()
+ 
+     yield* EffectRuntime.addFinalizer(() =>
+       EffectRuntime.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new RejectedError()), {
+@@ -154,10 +161,28 @@
+ 
+     const evaluateInput = EffectRuntime.fnUntraced(function* (input: AssertInput) {
+       const rules = yield* configured(input.sessionID, input.agent)
++      // 1. Explicit deny from agent configuration always wins.
+       if (denied(input, rules)) return { effect: "deny" as const, rules }
+       const all = [...rules, ...(yield* savedRules())]
+       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
+-      const effect: Permission.Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
++      let effect: Permission.Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
++
++      // 2. Command guard runs in ALL modes (including AUTO) and always wins.
++      if (input.action === "bash") {
++        for (const resource of input.resources) {
++          if (PermissionMode.commandGuard(resource).blocked) return { effect: "deny" as const, rules: all }
++        }
++      }
++
++      // 3. Session permission mode overlay. NORMAL is a no-op; PLAN only makes
++      //    mutations stricter; AUTO only upgrades ask -> allow for bounded safe
++      //    project-local operations. Never weakens an explicit deny.
++      const mode = modes.get(input.sessionID) ?? PermissionMode.DEFAULT
++      if (mode !== "normal") {
++        const command = input.action === "bash" ? input.resources[0] : undefined
++        effect = PermissionMode.overlay(effect, mode, input.action, command)
++      }
++
+       return { effect, rules: all }
+     })
+ 
+@@ -296,7 +321,18 @@
+       return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
+     })
+ 
+-    return Service.of({ ask, assert, reply, get, forSession, list })
++    const setMode = EffectRuntime.fn("PermissionV2.setMode")(function* (
++      sessionID: SessionV2.ID,
++      mode: PermissionMode.Mode,
++    ) {
++      modes.set(sessionID, mode)
++    })
++
++    const getMode = EffectRuntime.fn("PermissionV2.getMode")(function* (sessionID: SessionV2.ID) {
++      return modes.get(sessionID) ?? PermissionMode.DEFAULT
++    })
++
++    return Service.of({ ask, assert, reply, get, forSession, list, setMode, getMode })
+   }),
+ )
+ 
+--- a/packages/opencode/src/server/routes/instance/httpapi/groups/permission.ts	2026-07-01 01:44:56.000000000 +0000
++++ b/packages/opencode/src/server/routes/instance/httpapi/groups/permission.ts	2026-06-30 19:57:13.431543933 +0000
+@@ -1,5 +1,6 @@
+ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+ import { Permission } from "@/permission"
++import { SessionID } from "@/session/schema"
+ import { Schema } from "effect"
+ import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+ import { PermissionNotFoundError } from "../errors"
+@@ -9,6 +10,13 @@
+ import { described } from "./metadata"
+ 
+ const root = "/permission"
++const PermissionModeSchema = Schema.Literals(["normal", "plan", "auto"])
++const ModePayload = Schema.Struct({
++  mode: PermissionModeSchema,
++})
++const ModeResult = Schema.Struct({
++  mode: PermissionModeSchema,
++})
+ const ReplyPayload = Schema.Struct({
+   reply: PermissionV1.Reply,
+   message: Schema.optional(Schema.String),
+@@ -41,6 +49,29 @@
+             description: "Approve or deny a permission request from the AI assistant.",
+           }),
+         ),
++        HttpApiEndpoint.get("modeGet", `${root}/mode/:sessionID`, {
++          params: { sessionID: SessionID },
++          query: WorkspaceRoutingQuery,
++          success: described(ModeResult, "Current session permission mode"),
++        }).annotateMerge(
++          OpenApi.annotations({
++            identifier: "permission.mode.get",
++            summary: "Get session permission mode",
++            description: "Get the current Claude-Code-like permission mode for a session.",
++          }),
++        ),
++        HttpApiEndpoint.put("modeSet", `${root}/mode/:sessionID`, {
++          params: { sessionID: SessionID },
++          query: WorkspaceRoutingQuery,
++          payload: ModePayload,
++          success: described(ModeResult, "Updated session permission mode"),
++        }).annotateMerge(
++          OpenApi.annotations({
++            identifier: "permission.mode.set",
++            summary: "Set session permission mode",
++            description: "Set the Claude-Code-like permission mode (normal|plan|auto) for a session.",
++          }),
++        ),
+       )
+       .annotateMerge(
+         OpenApi.annotations({
+--- a/packages/opencode/src/server/routes/instance/httpapi/handlers/permission.ts	2026-07-01 01:44:56.000000000 +0000
++++ b/packages/opencode/src/server/routes/instance/httpapi/handlers/permission.ts	2026-06-30 19:57:44.675542790 +0000
+@@ -1,18 +1,34 @@
+ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
++import { PermissionV2 } from "@opencode-ai/core/permission"
+ import { Permission } from "@/permission"
+ import { Effect } from "effect"
+ import { HttpApiBuilder } from "effect/unstable/httpapi"
+ import { InstanceHttpApi } from "../api"
+ import { PermissionNotFoundError } from "../errors"
++import type { SessionID } from "@/session/schema"
+ 
+ export const permissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "permission", (handlers) =>
+   Effect.gen(function* () {
+     const svc = yield* Permission.Service
++    const modeSvc = yield* PermissionV2.Service
+ 
+     const list = Effect.fn("PermissionHttpApi.list")(function* () {
+       return yield* svc.list()
+     })
+ 
++    const modeGet = Effect.fn("PermissionHttpApi.modeGet")(function* (ctx: { params: { sessionID: SessionID } }) {
++      const mode = yield* modeSvc.getMode(ctx.params.sessionID)
++      return { mode }
++    })
++
++    const modeSet = Effect.fn("PermissionHttpApi.modeSet")(function* (ctx: {
++      params: { sessionID: SessionID }
++      payload: { mode: PermissionV2.PermissionMode.Mode }
++    }) {
++      yield* modeSvc.setMode(ctx.params.sessionID, ctx.payload.mode)
++      return { mode: ctx.payload.mode }
++    })
++
+     const reply = Effect.fn("PermissionHttpApi.reply")(function* (ctx: {
+       params: { requestID: PermissionV1.ID }
+       payload: PermissionV1.ReplyBody
+@@ -36,6 +52,10 @@
+       return true
+     })
+ 
+-    return handlers.handle("list", list).handle("reply", reply)
++    return handlers
++      .handle("list", list)
++      .handle("reply", reply)
++      .handle("modeGet", modeGet)
++      .handle("modeSet", modeSet)
+   }),
+ )
+--- a/packages/opencode/src/server/routes/instance/httpapi/server.ts	2026-07-01 01:44:56.000000000 +0000
++++ b/packages/opencode/src/server/routes/instance/httpapi/server.ts	2026-06-30 19:58:05.359542034 +0000
+@@ -58,6 +58,7 @@
+ import { ModelsDev } from "@opencode-ai/core/models-dev"
+ import { Npm } from "@opencode-ai/core/npm"
+ import { PermissionSaved } from "@opencode-ai/core/permission/saved"
++import { PermissionV2 } from "@opencode-ai/core/permission"
+ import { ProjectV2 } from "@opencode-ai/core/project"
+ import { ProjectCopy } from "@opencode-ai/core/project/copy"
+ import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+@@ -230,6 +231,7 @@
+   Discovery.node,
+   Question.node,
+   Permission.node,
++  PermissionV2.node,
+   PermissionSaved.node,
+   Todo.node,
+   Session.node,
+--- a/packages/tui/src/config/keybind.ts	2026-07-01 01:44:56.000000000 +0000
++++ b/packages/tui/src/config/keybind.ts	2026-06-30 19:58:30.251541123 +0000
+@@ -127,7 +127,8 @@
+   console_org_switch: keybind("none", "Switch console organization"),
+   agent_list: keybind("<leader>a", "List agents"),
+   agent_cycle: keybind("tab", "Next agent"),
+-  agent_cycle_reverse: keybind("shift+tab", "Previous agent"),
++  agent_cycle_reverse: keybind("<leader>shift+tab", "Previous agent"),
++  permission_cycle: keybind("shift+tab,<leader>p", "Cycle permission mode (normal/auto/plan)"),
+   variant_cycle: keybind("ctrl+t", "Cycle model variants"),
+   variant_list: keybind("none", "List model variants"),
+ 
+@@ -333,6 +334,7 @@
+   agent_list: "agent.list",
+   agent_cycle: "agent.cycle",
+   agent_cycle_reverse: "agent.cycle.reverse",
++  permission_cycle: "permission.cycle",
+   variant_cycle: "variant.cycle",
+   variant_list: "variant.list",
+   messages_page_up: "session.page.up",
+--- a/packages/tui/src/context/local.tsx	2026-07-01 01:44:56.000000000 +0000
++++ b/packages/tui/src/context/local.tsx	2026-06-30 20:01:01.243535601 +0000
+@@ -14,6 +14,10 @@
+ import { useRoute } from "./route"
+ import { usePermission } from "./permission"
+ 
++export type PermissionModeValue = "normal" | "plan" | "auto"
++// Cycle order matches Claude Code feel: NORMAL -> AUTO -> PLAN -> NORMAL.
++export const PERMISSION_MODES: PermissionModeValue[] = ["normal", "auto", "plan"]
++
+ export type LocalTheme = {
+   secondary: RGBA
+   accent: RGBA
+@@ -530,12 +534,72 @@
+       })
+     })
+ 
++    // Claude-Code-like session permission mode. This is SESSION-LEVEL state and
++    // does NOT change the active agent/persona. The TUI keeps the current value
++    // for display + immediate feedback and pushes it to the server (which reads
++    // it in the PermissionV2 resolver) over a small raw request to avoid an SDK
++    // regeneration.
++    function createPermissionMode() {
++      const [modeStore, setModeStore] = createStore({
++        current: "normal" as PermissionModeValue,
++      })
++      async function push(sessionID: string | undefined, mode: PermissionModeValue) {
++        if (!sessionID) return
++        try {
++          const url = new URL(`/permission/mode/${sessionID}`, sdk.url)
++          if (sdk.directory) url.searchParams.set("directory", sdk.directory)
++          await (sdk.fetch ?? fetch)(url.toString(), {
++            method: "PUT",
++            headers: {
++              "Content-Type": "application/json",
++              ...(sdk.directory ? { "x-opencode-directory": encodeURIComponent(sdk.directory) } : {}),
++            },
++            body: JSON.stringify({ mode }),
++          })
++        } catch {
++          // best-effort; the local display still reflects the requested mode
++        }
++      }
++      return {
++        list() {
++          return PERMISSION_MODES
++        },
++        current() {
++          return modeStore.current
++        },
++        label() {
++          return modeStore.current.toUpperCase()
++        },
++        set(mode: PermissionModeValue, sessionID?: string) {
++          setModeStore("current", mode)
++          void push(sessionID, mode)
++          return mode
++        },
++        cycle(sessionID?: string) {
++          const order = PERMISSION_MODES
++          const index = order.indexOf(modeStore.current)
++          const next = order[(index + 1) % order.length]
++          setModeStore("current", next)
++          void push(sessionID, next)
++          return next
++        },
++        // Re-push the current mode for a session (used when sending a prompt so
++        // the server has the mode even after a restart).
++        sync(sessionID?: string) {
++          void push(sessionID, modeStore.current)
++        },
++      }
++    }
++
++    const permissionMode = createPermissionMode()
++
+     const result = {
+       model,
+       agent,
+       mcp,
+       session,
+       permission,
++      permissionMode,
+     }
+     return result
+   },
+--- a/packages/tui/src/app.tsx	2026-07-01 01:44:56.000000000 +0000
++++ b/packages/tui/src/app.tsx	2026-06-30 20:02:57.939531333 +0000
+@@ -110,6 +110,7 @@
+   "mcp.list",
+   "agent.cycle",
+   "agent.cycle.reverse",
++  "permission.cycle",
+   "variant.cycle",
+   "variant.list",
+   "provider.connect",
+@@ -731,6 +732,64 @@
+         },
+       },
+       {
++        name: "permission.cycle",
++        title: "Cycle permission mode",
++        category: "Agent",
++        slashName: "permission",
++        run: () => {
++          const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
++          const next = local.permissionMode.cycle(sessionID)
++          toast.show({ title: "Permission mode", message: `Mode: ${next.toUpperCase()}`, variant: "info", duration: 2000 })
++        },
++      },
++      {
++        name: "permission.plan",
++        title: "Permission mode: PLAN",
++        category: "Agent",
++        slashName: "permission-plan",
++        run: () => {
++          const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
++          local.permissionMode.set("plan", sessionID)
++          toast.show({ title: "Permission mode", message: "Mode: PLAN", variant: "info", duration: 2000 })
++        },
++      },
++      {
++        name: "permission.normal",
++        title: "Permission mode: NORMAL",
++        category: "Agent",
++        slashName: "permission-normal",
++        run: () => {
++          const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
++          local.permissionMode.set("normal", sessionID)
++          toast.show({ title: "Permission mode", message: "Mode: NORMAL", variant: "info", duration: 2000 })
++        },
++      },
++      {
++        name: "permission.auto",
++        title: "Permission mode: AUTO",
++        category: "Agent",
++        slashName: "permission-auto",
++        run: () => {
++          const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
++          local.permissionMode.set("auto", sessionID)
++          toast.show({ title: "Permission mode", message: "Mode: AUTO", variant: "info", duration: 2000 })
++        },
++      },
++      {
++        name: "permission.status",
++        title: "Permission mode: status",
++        category: "Agent",
++        slashName: "permission-status",
++        run: () => {
++          toast.show({
++            title: "Permission mode",
++            message: `Current mode: ${local.permissionMode.label()}`,
++            variant: "info",
++            duration: 3000,
++          })
++        },
++      },
++      {
+         name: "provider.connect",
+         title: "Connect provider",
+         suggested: !connected(),
+--- a/packages/tui/src/component/prompt/index.tsx	2026-07-01 01:44:56.000000000 +0000
++++ b/packages/tui/src/component/prompt/index.tsx	2026-06-30 20:04:22.655528234 +0000
+@@ -1086,6 +1086,8 @@
+       })
+     } else {
+       move.startSubmit()
++      // Ensure the server has the current session permission mode for this turn.
++      local.permissionMode.sync(sessionID)
+       sdk.client.session
+         .prompt(
+           {
+@@ -1442,6 +1444,25 @@
+                       <text fg={fadeColor(highlight(), agentMetaAlpha())}>
+                         {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
+                       </text>
++                      <Show when={store.mode === "normal"}>
++                        <text>
++                          <span
++                            style={{
++                              fg: fadeColor(
++                                local.permissionMode.current() === "auto"
++                                  ? theme.warning
++                                  : local.permissionMode.current() === "plan"
++                                    ? theme.info
++                                    : theme.textMuted,
++                                agentMetaAlpha(),
++                              ),
++                              bold: local.permissionMode.current() !== "normal",
++                            }}
++                          >
++                            {`[MODE: ${local.permissionMode.label()}]`}
++                          </span>
++                        </text>
++                      </Show>
+                       <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
+                         <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
+                       </Show>
