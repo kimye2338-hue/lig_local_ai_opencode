@@ -1,185 +1,123 @@
-# Permission Mode Implementation Report
+# Permission Approval Policy — Implementation Report
 
-`TRUE_PERMISSION_MODE_TOGGLE_NOT_IMPLEMENTED_INSIDE_AGENTOPS_LAYER`
+`PERMISSION_APPROVAL_POLICY_TOGGLE_PATCH_DELIVERED_FOR_UPSTREAM_OPENCODE_SOURCE`
 
-`TRUE_PERMISSION_MODE_TOGGLE_PATCH_DELIVERED_FOR_UPSTREAM_OPENCODE_SOURCE`
+## Goal
 
-## Outcome
+A Claude-Code-style **permission approval policy** toggle that is independent of
+agent/persona, workflow, and model. Shift+Tab flips only how permission requests
+are handled — not the agent, not the mode, not the model.
 
-OpenCode core/TUI source is still not vendored inside this AgentOps repository, so the true Claude-Code-like permission mode cannot be activated by AgentOps files alone.
+```text
+ASK  = show permission requests to the user (default OpenCode behavior)
+AUTO = auto-approve requests that reach the TUI as "permission.asked"
+Cycle: ASK -> AUTO -> ASK
+```
 
-However, this branch now includes a concrete upstream OpenCode source patch under:
+## Where it is implemented
+
+OpenCode core/TUI source is not vendored in this AgentOps repository, so the
+toggle ships as an upstream source patch under:
 
 ```text
 PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/
 ```
 
-That patch is intended to be applied to upstream OpenCode source commit:
+Target upstream commit:
 
 ```text
 afff74eb2c9fc3808a9795f365707f32853099e9
 ```
 
-## What is now delivered
+## Files changed by the patch
 
 ```text
-PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/README.md
-PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/opencode-permission-mode-toggle.patch
-PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/APPLY_AND_BUILD_PATCHED_OPENCODE.bat.txt
-PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/OPENCODE_CORE_PERMISSION_MODE_PATCH_DELIVERY.md
-PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/MANIFEST.json
+packages/tui/src/config/keybind.ts          Shift+Tab -> permission toggle; prev-agent -> Shift+F3
+packages/tui/src/context/permission.tsx     mode "ask" | "auto"; default ASK; set()/cycle()
+packages/tui/src/app.tsx                     "permission.mode" command cycles; exposes /permission
+packages/tui/src/component/prompt/index.tsx  /permission status|ask|auto|cycle
+packages/tui/src/routes/session/index.tsx    [PERM:ASK|AUTO shift+tab] badge, separate from agent name
 ```
 
-## What the upstream patch implements
+`context/sync.tsx` is intentionally **not** patched: upstream already replies
+`once` to `permission.asked` when `mode === "auto"`, so keeping the value `"auto"`
+means AUTO works through existing core behavior with no new event-handling code.
+
+## Keybind
 
 ```text
-- NORMAL -> AUTO -> PLAN -> NORMAL permission mode cycle
-- Shift+Tab cycles permission mode
-- Previous-agent cycling moves from Shift+Tab to Shift+F3
-- Active agent/persona is preserved while permission mode changes
-- Prompt footer displays [NORMAL shift+tab] / [AUTO shift+tab] / [PLAN shift+tab]
-- AUTO is bounded auto-approval, not blind dangerous skip-permissions
-- PLAN rejects write/risky permission requests
-```
-
-## Files changed by the upstream OpenCode patch
-
-```text
-packages/tui/src/config/keybind.ts
-packages/tui/src/context/permission.tsx
-packages/tui/src/context/sync.tsx
-packages/tui/src/app.tsx
-packages/tui/src/routes/session/index.tsx
-```
-
-## Keybind chosen
-
-```text
-Shift+Tab = cycle permission mode
+Tab      = next agent
 Shift+F3 = previous agent
-Tab = next agent
+Shift+Tab= toggle permission approval policy (ASK/AUTO)
 ```
 
-This resolves the upstream conflict where `shift+tab` originally meant previous-agent cycling.
+This resolves the upstream conflict where `shift+tab` meant previous-agent cycling.
 
-## Permission mode behavior
+## Behavior
 
-### NORMAL
-
-Existing OpenCode behavior. Permission requests are shown normally.
+### ASK
+Default OpenCode behavior. A `permission.asked` event shows the normal prompt.
 
 ### AUTO
+The TUI auto-replies `once` to `permission.asked`. It does not pop a prompt for
+each request.
 
-Bounded auto-approval.
+AUTO cannot bypass safety:
+- Explicit `deny` is resolved in opencode core
+  (`packages/opencode/src/permission/index.ts`) before a request becomes an
+  `ask`, so it never reaches the TUI and AUTO can never override it.
+- `.opencode/plugins/command-guard.ts` still blocks corrupted/dangerous bash in
+  `tool.execute.before`, independent of the approval policy.
 
-Approves only safe/read-like or clearly local verification requests, including:
+AUTO is not `--dangerously-skip-permissions`; it only auto-approves the `ask`-level
+requests the core resolver already allowed to surface.
 
-```text
-read / glob / grep / list / todowrite
-edit requests with filepath metadata
-safe bash verification/read-only commands such as git status, git diff, py_compile, test/check/build
-```
-
-Still prompts or rejects risky requests such as:
-
-```text
-external_directory
-webfetch / websearch
-task
-doom_loop
-question
-plan_enter / plan_exit
-dangerous or corrupted bash
-credential/token/cookie/password-like commands
-```
-
-### PLAN
-
-Rejects write/risky requests:
+## Independence guarantees (the success criterion)
 
 ```text
-edit
-bash
-task
-webfetch / websearch
-external_directory
-doom_loop
-question
-plan_exit
-dangerous/corrupted command shapes
+Shift+Tab / /permission changes only session-level approval policy.
+It does not call any agent-switch or model-switch code path.
+permission.tsx holds mode independently of agent state; toggling never writes agent/model.
 ```
 
-Read-like requests are not auto-rejected.
+## Relationship to the AgentOps fallback personas
 
-## AgentOps fallback still retained
+`agentops-plan` / `agentops-supervisor` / `agentops-autopilot` remain as ordinary
+personas for unpatched OpenCode. They are **not** the permission toggle and are no
+longer described as a permission mechanism. The real toggle is this core patch.
 
-The existing fallback persona mapping remains useful when running unpatched OpenCode:
+## Tests
+
+No live OpenCode runtime tests were run here (no upstream clone / no TUI in this
+environment). Static work completed:
 
 ```text
-PLAN fallback   = agentops-plan
-NORMAL fallback = agentops-supervisor
-AUTO fallback   = agentops-autopilot
+- Reworked the patch from a 3-state workflow-mode design to a 2-state ASK/AUTO approval policy.
+- Removed PLAN and all workflow/persona framing.
+- Verified every hunk's unified-diff line counts are internally consistent.
+- Confirmed the design reuses upstream core auto-approve (no sync.tsx change needed).
 ```
 
-This fallback is not the real Claude-Code-like mode toggle. The real mode toggle requires applying and running the upstream OpenCode patch.
-
-## Apply/build
-
-From this folder:
-
-```cmd
-PROJECT_FULL_SOURCE_TO_EDIT\opencode_core_patch
-```
-
-Run on a trusted Windows development PC with Git and Bun installed:
-
-```cmd
-copy APPLY_AND_BUILD_PATCHED_OPENCODE.bat.txt APPLY_AND_BUILD_PATCHED_OPENCODE.bat
-APPLY_AND_BUILD_PATCHED_OPENCODE.bat
-```
-
-The script clones `https://github.com/anomalyco/opencode`, checks out the target commit, applies the patch, runs Bun install/check/build, and leaves a patched OpenCode source tree at:
+Runtime tests required on the target machine (Git + Bun + OpenCode TUI):
 
 ```text
-PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/opencode-source/
-```
-
-## Tests run
-
-No live OpenCode runtime tests were run in this environment.
-
-What was completed:
-
-```text
-- Upstream OpenCode source was inspected through GitHub connector.
-- Keybind chokepoint located: packages/tui/src/config/keybind.ts.
-- Permission local state located: packages/tui/src/context/permission.tsx.
-- Runtime permission request handling located: packages/tui/src/context/sync.tsx.
-- App command registry located: packages/tui/src/app.tsx.
-- Session prompt footer/status insertion point located: packages/tui/src/routes/session/index.tsx.
-- Concrete patch file generated and added to this PR branch.
-```
-
-## Tests still required on target PC
-
-```text
-T1: patched OpenCode starts normally, default mode NORMAL
-T2: Shift+Tab cycles NORMAL -> AUTO -> PLAN -> NORMAL
-T3: active agent/persona does not change while cycling modes
-T4: prompt footer displays current mode badge
-T5: /permission command or palette command cycles mode
-T6: PLAN blocks edit/bash/risky requests
-T7: AUTO allows safe project-local edit/verification requests
-T8: AUTO blocks corrupted heredoc/prose bash
-T9: explicit deny still wins over AUTO
-T10: dangerous submit/delete/send/upload/download/credential-like actions are not silently allowed
+T1  start -> approval policy is ASK
+T2  Shift+Tab -> ASK to AUTO
+T3  Shift+Tab -> AUTO to ASK
+T4  agent/persona unchanged across toggles
+T5  model unchanged across toggles
+T6  AUTO auto-replies "once" to permission.asked
+T7  ASK shows the normal prompt
+T8  explicit deny not bypassed by AUTO
+T9  command-guard.ts still blocks dangerous bash under AUTO
+T10 /permission ask|auto|cycle|status changes only the approval policy
 ```
 
 ## Remaining risks
 
 ```text
-- The patch targets a specific upstream OpenCode commit and may need rebasing on future OpenCode versions.
-- The patch has not been built in this ChatGPT environment.
-- The patch has not been live-tested in the Windows/OpenCode TUI.
+- Patch targets a pinned upstream commit; may need context rebasing on newer OpenCode.
+- Not git-apply-checked or built in this environment (no upstream network access here).
+- Not live-tested in the OpenCode TUI yet.
 - Maintaining a forked OpenCode binary has upgrade/rebase cost.
 ```

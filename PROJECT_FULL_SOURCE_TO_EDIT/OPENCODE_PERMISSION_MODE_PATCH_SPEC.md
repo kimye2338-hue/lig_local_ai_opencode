@@ -1,6 +1,25 @@
-# OpenCode Permission-Mode Patch Spec — Claude-Code-style PLAN/NORMAL/AUTO
+# OpenCode Permission-Mode Patch Spec (SUPERSEDED — historical)
 
-**Status: `TRUE_PERMISSION_MODE_TOGGLE_NOT_IMPLEMENTED_BECAUSE_OPENCODE_SOURCE_WAS_NOT_AVAILABLE`.**
+> **SUPERSEDED.** This document described an early, wrong-direction design that
+> framed permissions as a **PLAN/NORMAL/AUTO workflow mode** and mapped modes to
+> agentops personas. That is **not** the delivered feature.
+>
+> The delivered feature is an independent **permission approval policy** toggle
+> (**ASK / AUTO**) that does not change the agent/persona, workflow, or model.
+> See the authoritative docs instead:
+>
+> - `opencode_core_patch/README.md`
+> - `opencode_core_patch/opencode-permission-mode-toggle.patch`
+> - `PERMISSION_MODE_IMPLEMENTATION_REPORT.md`
+>
+> Correct model: `ASK -> AUTO -> ASK`, toggled with `Shift+Tab`; AUTO auto-approves
+> only `permission.asked` requests and never bypasses an explicit core `deny`; the
+> command guard stays active in every policy. There is no PLAN mode and personas
+> are not a permission mechanism. The text below is kept only for history.
+
+---
+
+**Original status (obsolete): `TRUE_PERMISSION_MODE_TOGGLE_NOT_IMPLEMENTED_BECAUSE_OPENCODE_SOURCE_WAS_NOT_AVAILABLE`.**
 
 This package ships AgentOps snapshots only; no OpenCode core/TUI source tree was
 found in `PROJECT_FULL_SOURCE_TO_EDIT/`, in the surrounding workspace, or

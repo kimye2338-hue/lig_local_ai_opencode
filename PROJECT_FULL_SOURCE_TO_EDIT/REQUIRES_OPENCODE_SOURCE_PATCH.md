@@ -1,6 +1,14 @@
-# Requires OpenCode Source Patch — Permission-Mode Toggle (Phase 3)
+# Requires OpenCode Source Patch — Permission-Mode Toggle (SUPERSEDED)
 
-**Status: DESIGN ONLY. NOT IMPLEMENTED in this pass.**
+> **SUPERSEDED / IMPLEMENTED.** The permission toggle is now delivered as an
+> upstream source patch under `opencode_core_patch/`. It is an independent
+> **permission approval policy** (**ASK / AUTO**, `Shift+Tab`), not a
+> PLAN/NORMAL/AUTO workflow mode and not an agentops-persona switch. See
+> `opencode_core_patch/README.md` and `PERMISSION_MODE_IMPLEMENTATION_REPORT.md`.
+> The historical design notes below (PLAN/NORMAL/AUTO, mode-as-persona) are kept
+> for context only and are no longer the target behavior.
+
+**Original status (obsolete): DESIGN ONLY. NOT IMPLEMENTED in this pass.**
 
 > A fuller, more detailed version of this design (exact behavior tables, full
 > resolver pseudocode, search terms, T1–T8 tests, and the shipped C1 fallback)
