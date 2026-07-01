@@ -132,3 +132,5 @@ T8  explicit deny is not bypassed by AUTO (resolved in core before "asked")
 T9  command-guard.ts still blocks dangerous bash under AUTO
 T10 /permission status|ask|auto|cycle changes only the approval policy
 ```
+
+Workflow verification trigger: keep this branch moving so the GitHub Actions build can produce the offline package artifact.
