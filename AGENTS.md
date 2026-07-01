@@ -1,92 +1,69 @@
-# AI Agent Instructions
+# AI agent instructions
 
-This repository is used to build and review a patched offline OpenCode package for the user's Windows company PC.
+This repository builds and reviews a patched offline OpenCode package for a Windows company PC.
 
-## Read these first
+## Read first
 
-Before doing any work, read:
+1. `README.md`
+2. `docs/AI_HANDOFF.md`
+3. `docs/REPOSITORY_MAP.md`
+4. `docs/CURRENT_RELEASE.md`
 
-1. `AGENTS.md` — this file.
-2. `AI_REVIEW_HANDOFF.md` — current project state, source-of-truth files, run IDs, and review/fix protocol.
+## Source of truth
 
-## Primary goal
+- Workflow: `.github/workflows/build-offline-package.yml`
+- OpenCode patch: `patches/opencode-permission-mode-toggle.patch`
+- Installed workspace template: `workspace-template/`
+- Shared handoff and review context: `docs/AI_HANDOFF.md`
+- Current artifact/install state: `docs/CURRENT_RELEASE.md`
 
-The goal is **not** to modify OpenCode agent/persona/workflow/model behavior.
+Do not add a second competing workflow, patch file, installer folder, or handoff bundle unless the user explicitly asks.
 
-The goal is:
+## Primary behavior to preserve
 
-- `Shift+Tab` toggles only the permission approval policy between `ASK` and `AUTO`.
-- `Shift+Tab` must not cycle agents, personas, workflow mode, plan mode, or model variants.
-- Existing agent reverse cycling must be moved away from `Shift+Tab`, currently to `Shift+F3`.
-- TUI must clearly show the current permission mode, e.g. `[PERM:ASK shift+tab]` or `[PERM:AUTO shift+tab]`.
-- `/permission status`, `/permission ask`, `/permission auto`, `/permission cycle` must work.
-- `AUTO` must approve permission requests with `reply: "once"`, not `always`.
-- `AUTO` must not remove or bypass OpenCode core command guard / explicit deny behavior.
-
-## Source of truth files
-
-The current implementation is delivered through:
-
-- `.github/workflows/build-patched-opencode-offline.yml`
-- `PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/opencode-permission-mode-toggle.patch`
-
-The workflow clones upstream OpenCode at pinned commit:
-
-- upstream repo: `https://github.com/anomalyco/opencode.git`
-- pinned commit: `afff74eb2c9fc3808a9795f365707f32853099e9`
-
-## Working rules
-
-### Review-only tasks
-
-If the user asks for review/audit/feedback:
-
-- Do not modify files.
-- Do not commit.
-- Do not push.
-- Do not create a PR.
-- Do not rerun workflows unless explicitly asked.
-- Inspect the patch and workflow line-by-line.
-- Trace runtime behavior, especially permission auto-reply flow.
-- Classify findings as `Critical`, `High`, `Medium`, or `Low`.
-
-### Fix tasks
-
-If the user explicitly asks to fix:
-
-- Make minimal, targeted changes.
-- Keep the workflow and patch as the source of truth.
-- Avoid creating duplicate experimental workflows.
-- Prefer updating the existing offline workflow and patch over adding parallel alternatives.
-- After changes, run/verify the existing workflow and report run ID, artifact name, and exact verification results.
+- `Shift+Tab` toggles only permission approval policy: ASK <-> AUTO.
+- `Shift+Tab` must not cycle agents, personas, workflow mode, plan mode, or models.
+- Previous-agent reverse cycle is `Shift+F3`.
+- The TUI shows the current permission mode.
+- `/permission status|ask|auto|cycle` and `/perm status|ask|auto|cycle` behave identically.
+- AUTO approval uses `reply: "once"` only.
+- AUTO must not bypass command guard, explicit deny, or high-risk policy controls.
+- ASK mode must preserve the original permission prompt flow.
+- Direct `<spinner>` JSX must not be reintroduced unless the OpenTUI renderable registration is proven fixed in the offline build.
 
 ## Packaging constraints
 
-The offline package is intended for a company Windows PC.
+The company PC install must stay offline-friendly.
 
-Do not use or introduce:
+Do not introduce:
 
-- Base64 payload embedded in BAT files.
-- Self-extracting BAT installers.
-- `PowerShell -ExecutionPolicy Bypass` in the installer.
-- Company-PC internet downloads.
-- Company-PC git clone / npm / bun install requirements.
+- base64 payloads embedded in BAT files
+- self-extracting BAT installers
+- `PowerShell -ExecutionPolicy Bypass` in the installer
+- company-PC internet downloads
+- company-PC git clone, npm install, or bun install requirements
+- npm imports in OpenCode local plugins unless the offline install path is updated and validated
 
-The installer should remain a simple local-copy installer.
+## Review tasks
 
-## Known review priorities
+If the user asks for review/audit/feedback only:
 
-When reviewing, focus on these areas first:
+- Do not modify files.
+- Inspect the workflow, patch, and workspace template.
+- Classify findings by severity.
+- Report exact files and runtime implications.
 
-1. `PermissionPrompt` auto mode: `createEffect`, `autoReplied`, `replyOnce()`, race conditions, duplicate reply risk.
-2. `Shift+Tab` keybind path: `Definitions` → `CommandMap` → command registration → `local.permission.cycle()`.
-3. `/permission` slash command path and whether it conflicts with regular command registration.
-4. ASK mode preserving existing prompt behavior.
-5. AUTO mode not bypassing command guard / explicit deny.
-6. Offline installer safety and SHA256/package verification.
+## Fix tasks
 
-## Do not get distracted
+If the user asks to fix:
 
-Do not stop because there are no open PRs/issues. This repo may be used through direct commits and GitHub Actions.
+- Make minimal targeted changes.
+- Update `docs/AI_HANDOFF.md`, `docs/CURRENT_RELEASE.md`, or `docs/CHANGELOG.md` when behavior or packaging changes.
+- Run or trigger the existing workflow when package behavior changes.
+- Report workflow run ID, artifact ID, digest, and validation result.
 
-Do not require a local path like `/home/user/lig_local_ai_opencode`. Use GitHub repository state as the source of truth.
+## Collaboration protocol
+
+- Keep one shared handoff in `docs/AI_HANDOFF.md`.
+- Add unresolved ideas or review findings to `docs/CHANGELOG.md` or `docs/VALIDATION.md`; do not scatter new prompt bundles.
+- When Claude Code and Codex alternate, each agent should update the handoff with what changed, what was verified, and what remains.

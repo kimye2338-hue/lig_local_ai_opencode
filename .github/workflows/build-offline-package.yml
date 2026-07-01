@@ -1,21 +1,26 @@
-name: Build patched OpenCode offline package
+name: Build LIG OpenCode offline package
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
-      - claude/review-work-instructions-10nm51
       - codex/**
     paths:
-      - .github/workflows/build-patched-opencode-offline.yml
-      - PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/**
-      - PROJECT_FULL_SOURCE_TO_EDIT/installers_light/**
+      - .github/workflows/build-offline-package.yml
+      - patches/**
+      - workspace-template/**
+      - docs/**
+      - AGENTS.md
+      - README.md
   pull_request:
     paths:
-      - .github/workflows/build-patched-opencode-offline.yml
-      - PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/**
-      - PROJECT_FULL_SOURCE_TO_EDIT/installers_light/**
+      - .github/workflows/build-offline-package.yml
+      - patches/**
+      - workspace-template/**
+      - docs/**
+      - AGENTS.md
+      - README.md
 
 permissions:
   contents: read
@@ -30,11 +35,11 @@ jobs:
     env:
       OPENCODE_REPO: https://github.com/anomalyco/opencode.git
       OPENCODE_COMMIT: afff74eb2c9fc3808a9795f365707f32853099e9
-      PATCH_FILE: ${{ github.workspace }}\PROJECT_FULL_SOURCE_TO_EDIT\opencode_core_patch\opencode-permission-mode-toggle.patch
+      PATCH_FILE: ${{ github.workspace }}\patches\opencode-permission-mode-toggle.patch
       PACKAGE_NAME: LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE
 
     steps:
-      - name: Checkout AgentOps PR branch
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Bun
@@ -124,7 +129,14 @@ jobs:
           New-Item -ItemType Directory -Force -Path $workspace | Out-Null
 
           Copy-Item -LiteralPath '${{ steps.locate.outputs.binary }}' -Destination (Join-Path $payload 'opencode.exe') -Force
-          Copy-Item -Path PROJECT_FULL_SOURCE_TO_EDIT\* -Destination $workspace -Recurse -Force
+          Get-ChildItem -LiteralPath 'workspace-template' -Force | Copy-Item -Destination $workspace -Recurse -Force
+
+          $workspaceDocs = Join-Path $workspace 'docs'
+          $workspacePatches = Join-Path $workspace 'patches'
+          New-Item -ItemType Directory -Force -Path $workspaceDocs | Out-Null
+          New-Item -ItemType Directory -Force -Path $workspacePatches | Out-Null
+          Get-ChildItem -LiteralPath 'docs' -Force | Copy-Item -Destination $workspaceDocs -Recurse -Force
+          Get-ChildItem -LiteralPath 'patches' -Force | Copy-Item -Destination $workspacePatches -Recurse -Force
 
           @'
           @echo off
@@ -214,6 +226,8 @@ jobs:
           echo   %WS%\RUN_OPENCODE_LIG.bat
           echo Verify:
           echo   %WS%\VERIFY_OFFLINE_INSTALL.bat
+          echo Docs:
+          echo   %WS%\docs\AI_HANDOFF.md
           echo.
           pause
           exit /b 0
@@ -222,7 +236,7 @@ jobs:
           @'
           # LIG OpenCode patched offline package
 
-          This package contains a Windows OpenCode binary built from upstream OpenCode with the permission approval controller patch applied.
+          This package contains a Windows OpenCode binary built from upstream OpenCode with the LIG permission approval controller patch applied.
 
           Install on the offline company PC:
 
@@ -269,7 +283,9 @@ jobs:
             'workspace\.opencode\commands\permission.md',
             'workspace\.opencode\commands\agentmode.md',
             'workspace\.opencode\agents\agentops-supervisor.md',
-            'workspace\opencode_core_patch\opencode-permission-mode-toggle.patch'
+            'workspace\agent_ops\agentops.py',
+            'workspace\docs\AI_HANDOFF.md',
+            'workspace\patches\opencode-permission-mode-toggle.patch'
           )
           foreach ($item in $required) {
             $path = Join-Path $check $item
