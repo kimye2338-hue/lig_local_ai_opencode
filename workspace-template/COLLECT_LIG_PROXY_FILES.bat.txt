@@ -1,0 +1,85 @@
+@echo off
+rem ==========================================================================
+rem COLLECT_LIG_PROXY_FILES.bat  (ASCII only, read-only, offline-safe)
+rem Purpose: gather the files a reviewer needs to fix tool-call/JSON failures.
+rem It only COPIES files into a dated folder and writes a few diagnostics.
+rem It does NOT start opencode, install anything, or reach the internet.
+rem
+rem AFTER it finishes: open the output folder, DELETE any API keys / secrets
+rem from the copied *.json files, then zip the folder and share it.
+rem ==========================================================================
+setlocal enabledelayedexpansion
+chcp 65001 >nul
+
+set "STAMP=%DATE:/=-%_%TIME::=-%"
+set "STAMP=%STAMP: =0%"
+set "OUT=%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\collect_%STAMP%"
+mkdir "%OUT%" >nul 2>&1
+mkdir "%OUT%\config" >nul 2>&1
+mkdir "%OUT%\proxy"  >nul 2>&1
+mkdir "%OUT%\logs"   >nul 2>&1
+
+echo [1/6] Environment snapshot...
+(
+  echo === chcp ===
+  chcp
+  echo.
+  echo === opencode version ===
+  "%USERPROFILE%\OpenCodeLIG\bin\opencode.exe" --version 2^>^&1
+  echo.
+  echo === relevant env vars ===
+  set OPENCODE
+  set AGENTOPS
+  set XDG_
+  echo.
+  echo === python ===
+  where python 2^>^&1
+  python --version 2^>^&1
+) > "%OUT%\ENVIRONMENT.txt" 2>&1
+
+echo [2/6] OpenCode config files (provider / model / baseURL live here)...
+for %%P in (
+  "%USERPROFILE%\OpenCodeLIG_USERDATA\opencode_config\opencode.json"
+  "%USERPROFILE%\.config\opencode\opencode.json"
+  "%APPDATA%\opencode\opencode.json"
+  "%USERPROFILE%\OpenCodeLIG\workspace\opencode.json"
+  "%USERPROFILE%\OpenCodeLIG\workspace\.opencode\opencode.json"
+) do if exist "%%~P" ( copy /y "%%~P" "%OUT%\config\" >nul & echo   found: %%~P )
+
+echo [3/6] Searching common roots for LIG proxy / tool-call bridge scripts...
+rem File-name patterns from the missing-files list. Search shallow, safe roots only.
+for %%R in ("%USERPROFILE%" "%USERPROFILE%\OpenCodeLIG" "%USERPROFILE%\Desktop" "%USERPROFILE%\Documents" "C:\LIG" "C:\opencode" "C:\ai") do (
+  if exist "%%~R" (
+    for %%N in (lig_toolcall_proxy lig_proxy harmony openai_compat tool_router toolcall_adapter provider_adapter proxy server) do (
+      for /f "delims=" %%F in ('dir /b /s "%%~R\%%N*.py" 2^>nul') do ( copy /y "%%F" "%OUT%\proxy\" >nul & echo   found: %%F )
+    )
+  )
+)
+
+echo [4/6] Recent diagnostics / capture / session logs...
+for %%P in (
+  "%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\*.txt"
+  "%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\*.log"
+  "%USERPROFILE%\OpenCodeLIG_USERDATA\logs\*.log"
+  "%USERPROFILE%\OpenCodeLIG\workspace\agent_ops\logs\*.jsonl"
+) do if exist "%%~P" ( copy /y "%%~P" "%OUT%\logs\" >nul 2>&1 )
+
+echo [5/6] Writing a paste-here template for the failing screen...
+(
+  echo Paste 20-40 lines of the actual failing session here, including any of:
+  echo   - "invalid [tool=:" or "tool=bash ... JSON parsing failed"
+  echo   - the Korean "correct JSON format to create a file" message
+  echo   - a raw question-tool JSON array (header/options/multiple/custom^)
+  echo Then save this file.
+) > "%OUT%\logs\PASTE_FAILING_SCREEN_HERE.txt"
+
+echo [6/6] Done.
+echo.
+echo Output folder:
+echo   %OUT%
+echo.
+echo IMPORTANT: open config\*.json and REMOVE any apiKey / token / secret
+echo before zipping and sharing this folder.
+echo.
+pause
+endlocal

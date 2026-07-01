@@ -1,0 +1,47 @@
+@echo off
+rem ==========================================================================
+rem RUN_OPENCODE_LIG.bat  -  hardened launcher (ASCII only, no Korean output)
+rem Fixes at once:
+rem   P1 encoding  : force UTF-8 codepage on THIS console (child only)
+rem   P5 layout    : open maximized
+rem   P7 memory    : point OpenCode data/state/config/cache at USERDATA
+rem Korean notes live in docs/*.md, never in this file (keeps CP949 cmd safe).
+rem ==========================================================================
+setlocal
+chcp 65001 >nul
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
+
+set "OCODE_HOME=%USERPROFILE%\OpenCodeLIG"
+set "OCODE_EXE=%OCODE_HOME%\bin\opencode.exe"
+set "AGENTOPS_HOME=%OCODE_HOME%\workspace"
+
+rem --- persistent user data (survives patch / reinstall of OpenCodeLIG) ------
+set "USERDATA=%USERPROFILE%\OpenCodeLIG_USERDATA"
+set "OPENCODE_CONFIG=%USERDATA%\opencode_config\opencode.json"
+set "XDG_CONFIG_HOME=%USERDATA%\opencode_config"
+set "XDG_DATA_HOME=%USERDATA%\opencode_data"
+set "XDG_STATE_HOME=%USERDATA%\opencode_state"
+set "XDG_CACHE_HOME=%USERDATA%\opencode_cache"
+for %%D in ("%XDG_CONFIG_HOME%" "%XDG_DATA_HOME%" "%XDG_STATE_HOME%" "%XDG_CACHE_HOME%" "%USERDATA%\memory" "%USERDATA%\diagnostics" "%USERDATA%\logs") do (
+  if not exist "%%~D" mkdir "%%~D" >nul 2>&1
+)
+
+if not exist "%OCODE_EXE%" (
+  echo [ERROR] opencode.exe not found at "%OCODE_EXE%".
+  echo Run the offline installer first.
+  pause
+  exit /b 1
+)
+
+cd /d "%AGENTOPS_HOME%"
+
+rem AUTO-HIGH-TRUST by default: OpenCode --auto auto-approves any permission
+rem request that is NOT explicitly denied by opencode.json. Explicit deny and
+rem external_directory rules still stop it. Remove --auto to start in ASK.
+set "OCODE_ARGS=--auto"
+
+rem Open maximized so the TUI fills the window (P5). Uses cmd child so chcp and
+rem env above are inherited. %* forwards any extra args you pass to this .bat.
+start "OpenCodeLIG" /max cmd /c "chcp 65001 >nul & "%OCODE_EXE%" %OCODE_ARGS% %*"
+endlocal
