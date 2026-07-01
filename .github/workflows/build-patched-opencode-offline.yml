@@ -6,6 +6,12 @@ on:
     branches:
       - main
       - claude/review-work-instructions-10nm51
+      - codex/**
+    paths:
+      - .github/workflows/build-patched-opencode-offline.yml
+      - PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/**
+      - PROJECT_FULL_SOURCE_TO_EDIT/installers_light/**
+  pull_request:
     paths:
       - .github/workflows/build-patched-opencode-offline.yml
       - PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/**
@@ -63,7 +69,7 @@ jobs:
           Set-Location opencode-source
           git apply --recount --check "$env:PATCH_FILE"
           git apply --recount "$env:PATCH_FILE"
-          git diff -- packages/tui/src/config/keybind.ts packages/tui/src/context/permission.tsx packages/tui/src/app.tsx packages/tui/src/component/prompt/index.tsx packages/tui/src/routes/session/index.tsx packages/tui/src/routes/session/permission.tsx
+          git diff -- packages/tui/src/config/keybind.ts packages/tui/src/context/permission.tsx packages/tui/src/app.tsx packages/tui/src/component/prompt/index.tsx packages/tui/src/routes/session/index.tsx packages/tui/src/routes/session/permission.tsx packages/tui/src/component/spinner.tsx packages/opencode/src/cli/cmd/run/footer.subagent.tsx packages/opencode/src/cli/cmd/run/footer.view.tsx
 
       - name: Install dependencies
         shell: pwsh
@@ -96,12 +102,11 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           $candidates = Get-ChildItem -Path opencode-source\packages\opencode\dist -Recurse -File | Where-Object {
-            $_.Name -eq 'opencode.exe' -or $_.Name -eq 'opencode'
+            $_.Name -eq 'opencode.exe'
           } | Sort-Object FullName
           $candidates | ForEach-Object { Write-Host "candidate=$($_.FullName)" }
           $preferred = $candidates | Where-Object { $_.FullName -match 'windows.*x64' } | Select-Object -First 1
-          if (-not $preferred) { $preferred = $candidates | Select-Object -First 1 }
-          if (-not $preferred) { throw 'No opencode binary found under packages/opencode/dist' }
+          if (-not $preferred) { throw 'No Windows x64 opencode.exe found under packages/opencode/dist' }
           $out = Join-Path $env:GITHUB_WORKSPACE 'patched-opencode.exe'
           Copy-Item -LiteralPath $preferred.FullName -Destination $out -Force
           & $out --version
@@ -123,19 +128,62 @@ jobs:
 
           @'
           @echo off
-          setlocal EnableExtensions
+          setlocal EnableExtensions EnableDelayedExpansion
           set "ROOT=%USERPROFILE%\OpenCodeLIG"
           set "BIN=%ROOT%\bin"
           set "WS=%ROOT%\workspace"
+          set "SUMS=%~dp0SHA256SUMS.txt"
+          set "PAYLOAD_EXE=%~dp0payload\opencode.exe"
           echo.
           echo ============================================================
           echo LIG OpenCode patched offline installer
           echo ============================================================
           echo Target: %ROOT%
           echo.
+          if not exist "%PAYLOAD_EXE%" (
+            echo [ERROR] Missing payload\opencode.exe
+            pause
+            exit /b 1
+          )
+          if not exist "%SUMS%" (
+            echo [ERROR] Missing SHA256SUMS.txt
+            pause
+            exit /b 1
+          )
+          set "EXPECTED="
+          for /f "tokens=1,*" %%A in ('findstr /C:"payload/opencode.exe" "%SUMS%"') do set "EXPECTED=%%A"
+          if not defined EXPECTED (
+            echo [ERROR] payload/opencode.exe entry missing in SHA256SUMS.txt
+            pause
+            exit /b 1
+          )
+          set "ACTUAL="
+          for /f "tokens=1" %%A in ('certutil -hashfile "%PAYLOAD_EXE%" SHA256 ^| findstr /R "^[0-9A-Fa-f][0-9A-Fa-f]*$"') do if not defined ACTUAL set "ACTUAL=%%A"
+          if not defined ACTUAL (
+            echo [ERROR] Failed to calculate payload checksum
+            pause
+            exit /b 1
+          )
+          if /I not "!EXPECTED!"=="!ACTUAL!" (
+            echo [ERROR] payload/opencode.exe checksum mismatch
+            echo Expected: !EXPECTED!
+            echo Actual:   !ACTUAL!
+            pause
+            exit /b 1
+          )
+          if exist "%ROOT%" (
+            set "BACKUP=%USERPROFILE%\OpenCodeLIG_backup_%RANDOM%"
+            echo Existing installation found. Backing up to !BACKUP!
+            robocopy "%ROOT%" "!BACKUP!" /E /NFL /NDL /NJH /NJS /NP >nul
+            if errorlevel 8 (
+              echo [ERROR] Existing installation backup failed
+              pause
+              exit /b 1
+            )
+          )
           if not exist "%BIN%" mkdir "%BIN%"
           if not exist "%WS%" mkdir "%WS%"
-          copy /y "%~dp0payload\opencode.exe" "%BIN%\opencode.exe" >nul
+          copy /y "%PAYLOAD_EXE%" "%BIN%\opencode.exe" >nul
           if errorlevel 1 (
             echo [ERROR] Failed to copy opencode.exe
             pause
@@ -178,50 +226,77 @@ jobs:
 
           Install on the offline company PC:
 
-          1. Extract this ZIP.
-          2. Rename `INSTALL_OFFLINE_LIG_OPENCODE.bat.txt` to `INSTALL_OFFLINE_LIG_OPENCODE.bat`.
-          3. Run it.
-          4. Start OpenCode with `%USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat`.
-          5. Check permission approval control:
-             - `Shift+Tab` toggles `[PERM:ASK]` / `[PERM:AUTO]`.
-             - `/permission status`
-             - `/permission auto`
-             - `/permission ask`
+          1. Download the `LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE` artifact from GitHub Actions.
+          2. Extract the downloaded artifact ZIP. The extracted folder should contain `payload`, `workspace`, `SHA256SUMS.txt`, and `INSTALL_OFFLINE_LIG_OPENCODE.bat.txt` directly.
+          3. Rename `INSTALL_OFFLINE_LIG_OPENCODE.bat.txt` to `INSTALL_OFFLINE_LIG_OPENCODE.bat`.
+          4. Run it.
+          5. Start OpenCode with `%USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat`.
+          6. Verify with `%USERPROFILE%\OpenCodeLIG\workspace\VERIFY_OFFLINE_INSTALL.bat`.
+
+          The installer checks the `payload/opencode.exe` SHA256 before copying files. If `%USERPROFILE%\OpenCodeLIG` already exists, it backs it up before overwriting.
+
+          Permission approval control:
+
+          - `Shift+Tab` toggles `[PERM:ASK]` / `[PERM:AUTO]`.
+          - `Shift+F3` is the previous-agent shortcut.
+          - `/permission status`, `/permission auto`, `/permission ask`, `/permission cycle`.
+          - `/perm status`, `/perm auto`, `/perm ask`, `/perm cycle`.
 
           The installer uses local files only. It does not clone GitHub and does not use PowerShell execution-policy bypass.
           '@ | Set-Content -Path (Join-Path $pkg 'README_OFFLINE_INSTALL.md') -Encoding UTF8
 
           $hashes = @()
-          Get-ChildItem -Path $pkg -Recurse -File | Sort-Object FullName | ForEach-Object {
+          Get-ChildItem -Path $pkg -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
             $rel = $_.FullName.Substring($pkg.Length + 1).Replace('\','/')
             $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             $hashes += "$hash  $rel"
           }
           $hashes | Set-Content -Path (Join-Path $pkg 'SHA256SUMS.txt') -Encoding ASCII
 
-          Compress-Archive -Path "$pkg\*" -DestinationPath "$env:GITHUB_WORKSPACE\$env:PACKAGE_NAME.zip" -Force
-
       - name: Verify offline package contents
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
-          $zip = Join-Path $env:GITHUB_WORKSPACE "$env:PACKAGE_NAME.zip"
-          if (-not (Test-Path -LiteralPath $zip)) { throw "Package ZIP not found: $zip" }
-          $check = Join-Path $env:RUNNER_TEMP 'offline-package-check'
-          if (Test-Path -LiteralPath $check) { Remove-Item -LiteralPath $check -Recurse -Force }
-          New-Item -ItemType Directory -Force -Path $check | Out-Null
-          Expand-Archive -LiteralPath $zip -DestinationPath $check -Force
-          Get-ChildItem -Path $check -Recurse -File | ForEach-Object {
+          $check = Join-Path $env:GITHUB_WORKSPACE $env:PACKAGE_NAME
+          if (-not (Test-Path -LiteralPath $check)) { throw "Package directory not found: $check" }
+          $required = @(
+            'INSTALL_OFFLINE_LIG_OPENCODE.bat.txt',
+            'README_OFFLINE_INSTALL.md',
+            'SHA256SUMS.txt',
+            'payload\opencode.exe',
+            'workspace\.gitignore',
+            'workspace\.opencode\commands\permission.md',
+            'workspace\.opencode\commands\agentmode.md',
+            'workspace\.opencode\agents\agentops-supervisor.md',
+            'workspace\opencode_core_patch\opencode-permission-mode-toggle.patch'
+          )
+          foreach ($item in $required) {
+            $path = Join-Path $check $item
+            if (-not (Test-Path -LiteralPath $path)) { throw "Required package file missing: $item" }
+          }
+          Get-ChildItem -Path $check -Recurse -File -Force | ForEach-Object {
             Write-Host $_.FullName.Substring($check.Length + 1).Replace('\','/')
           }
+          $sumFile = Join-Path $check 'SHA256SUMS.txt'
+          foreach ($line in Get-Content -LiteralPath $sumFile) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $parts = $line -split '\s+', 2
+            if ($parts.Count -ne 2 -or $parts[0] -notmatch '^[a-f0-9]{64}$') { throw "Malformed SHA256SUMS line: $line" }
+            $relative = $parts[1].Replace('/', '\')
+            $target = Join-Path $check $relative
+            if (-not (Test-Path -LiteralPath $target)) { throw "SHA256SUMS target missing: $($parts[1])" }
+            $actual = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $parts[0]) { throw "SHA256 mismatch for $($parts[1])" }
+          }
           $exe = Join-Path $check 'payload\opencode.exe'
-          if (-not (Test-Path -LiteralPath $exe)) { throw 'payload/opencode.exe missing from offline package' }
           & $exe --version
 
       - name: Upload offline package artifact
         uses: actions/upload-artifact@v4
         with:
           name: LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE
-          path: LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE.zip
-          retention-days: 14
+          path: LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30

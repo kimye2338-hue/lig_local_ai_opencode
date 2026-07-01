@@ -112,7 +112,7 @@ diff --git a/packages/tui/src/component/prompt/index.tsx b/packages/tui/src/comp
 @@ -1049,6 +1049,38 @@ export function Prompt(props: PromptProps) {
          : []
  
-+    const permissionCommand = inputText.trim().match(/^\/permission(?:\s+(\S+))?\s*$/i)
++    const permissionCommand = inputText.trim().match(/^\/(?:permission|perm)(?:\s+(\S+))?\s*$/i)
 +    if (permissionCommand) {
 +      const action = (permissionCommand[1] ?? "status").toLowerCase()
 +      const validPolicies = ["ask", "auto"] as const
@@ -127,7 +127,7 @@ diff --git a/packages/tui/src/component/prompt/index.tsx b/packages/tui/src/comp
 +      } else {
 +        toast.show({
 +          title: "Unknown permission action",
-+          message: "Use /permission status, cycle, ask, or auto.",
++          message: "Use /permission status, cycle, ask, auto, or /perm aliases.",
 +          variant: "warning",
 +        })
 +      }
@@ -206,12 +206,12 @@ diff --git a/packages/tui/src/routes/session/permission.tsx b/packages/tui/src/r
  
  type PermissionStage = "permission" | "always" | "reject"
  
-@@ -131,7 +132,27 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?:
+@@ -131,7 +132,29 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?:
    })
  
    const { theme } = useTheme()
 +  const local = useLocal()
-+  let autoReplied = false
++  let autoRepliedRequestID: string | undefined
 +
 +  function replyOnce() {
 +    void sdk.client.permission.reply({
@@ -225,14 +225,15 @@ diff --git a/packages/tui/src/routes/session/permission.tsx b/packages/tui/src/r
 +  createEffect(() => {
 +    if (store.stage !== "permission") return
 +    if (local.permission.mode !== "auto") return
-+    if (autoReplied) return
-+    autoReplied = true
++    const requestID = props.request.id
++    if (autoRepliedRequestID === requestID) return
++    autoRepliedRequestID = requestID
 +    replyOnce()
 +  })
  
    return (
      <Switch>
-@@ -390,12 +411,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?:
+@@ -390,12 +413,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?:
                    })
                    return
                  }
@@ -246,3 +247,69 @@ diff --git a/packages/tui/src/routes/session/permission.tsx b/packages/tui/src/r
                }}
              />
            )
+diff --git a/packages/tui/src/component/spinner.tsx b/packages/tui/src/component/spinner.tsx
+--- a/packages/tui/src/component/spinner.tsx
++++ b/packages/tui/src/component/spinner.tsx
+@@ -1,23 +1,13 @@
+-import { Show } from "solid-js"
+ import { useTheme } from "../context/theme"
+-import { useKV } from "../context/kv"
+ import type { JSX } from "@opentui/solid"
+ import type { RGBA } from "@opentui/core"
+-import "opentui-spinner/solid"
+ 
+ export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+ 
+ export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
+   const { theme } = useTheme()
+-  const kv = useKV()
+   const color = () => props.color ?? theme.textMuted
+-  return (
+-    <Show when={kv.get("animations_enabled", true)} fallback={<text fg={color()}>⋯ {props.children}</text>}>
+-      <box flexDirection="row" gap={1}>
+-        <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
+-        <Show when={props.children}>
+-          <text fg={color()}>{props.children}</text>
+-        </Show>
+-      </box>
+-    </Show>
+-  )
++  return <text fg={color()}>⋯ {props.children}</text>
+ }
+diff --git a/packages/opencode/src/cli/cmd/run/footer.subagent.tsx b/packages/opencode/src/cli/cmd/run/footer.subagent.tsx
+--- a/packages/opencode/src/cli/cmd/run/footer.subagent.tsx
++++ b/packages/opencode/src/cli/cmd/run/footer.subagent.tsx
+@@ -126,13 +126,9 @@ export function RunFooterSubagentBody(props: {
+         <Show when={tab()}>
+           {(current) => (
+             <box width="100%" flexDirection="row" gap={1} paddingBottom={1} flexShrink={0}>
+-              {current().status === "running" ? (
+-                <box flexShrink={0}>
+-                  <spinner frames={SPINNER_FRAMES} interval={80} color={statusColor(footer(), current().status)} />
+-                </box>
+-              ) : (
+-                <text fg={statusColor(footer(), current().status)} wrapMode="none" truncate flexShrink={0}>
+-                  {statusIcon(current().status)}
+-                </text>
+-              )}
++              <text fg={statusColor(footer(), current().status)} wrapMode="none" truncate flexShrink={0}>
++                {statusIcon(current().status)}
++              </text>
+               <text fg={footer().text} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
+                 {title()}
+                 <Show when={subtitle().length > 0}>
+diff --git a/packages/opencode/src/cli/cmd/run/footer.view.tsx b/packages/opencode/src/cli/cmd/run/footer.view.tsx
+--- a/packages/opencode/src/cli/cmd/run/footer.view.tsx
++++ b/packages/opencode/src/cli/cmd/run/footer.view.tsx
+@@ -832,12 +832,6 @@ export function RunFooterView(props: RunFooterViewProps) {
+                   backgroundColor="transparent"
+                 >
+-                  <Show when={busy() && !exiting()}>
+-                    <box flexShrink={0}>
+-                      <spinner color={spin().color} frames={spin().frames} interval={40} />
+-                    </box>
+-                  </Show>
+-
+                   <text fg={statusColor()} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
+                     <Show when={busy() && !exiting()} fallback={statusText()}>
+                       <Show when={interruptLabel()}>
