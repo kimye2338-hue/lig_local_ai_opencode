@@ -30,7 +30,7 @@ diff --git a/packages/tui/src/context/permission.tsx b/packages/tui/src/context/
  
 -export type PermissionMode = "auto" | "normal"
 +// Permission approval policy. This is independent of the active agent/persona,
-+// the current workflow, and the current model — it only decides how incoming
++// the current workflow, and the current model - it only decides how incoming
 +// "permission.asked" events are handled by the TUI.
 +//   ASK  = show permission requests to the user (default OpenCode behavior).
 +//   AUTO = auto-approve (reply "once") the requests that reach the TUI.
@@ -188,3 +188,61 @@ diff --git a/packages/tui/src/routes/session/index.tsx b/packages/tui/src/routes
  function UserMessage(props: {
    message: UserMessage
    parts: Part[]
+diff --git a/packages/tui/src/routes/session/permission.tsx b/packages/tui/src/routes/session/permission.tsx
+--- a/packages/tui/src/routes/session/permission.tsx
++++ b/packages/tui/src/routes/session/permission.tsx
+@@ -1,6 +1,6 @@
+ import { createStore } from "solid-js/store"
+ import { dirname } from "node:path"
+-import { createMemo, For, Match, Show, Switch } from "solid-js"
++import { createEffect, createMemo, For, Match, Show, Switch } from "solid-js"
+ import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
+ import type { TextareaRenderable } from "@opentui/core"
+ import { useTheme, selectedForeground } from "../../context/theme"
+@@ -15,6 +15,7 @@ import { useTuiConfig } from "../../config"
+ import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
+ import { usePathFormatter } from "../../context/path-format"
++import { useLocal } from "../../context/local"
+ 
+ type PermissionStage = "permission" | "always" | "reject"
+ 
+@@ -131,7 +132,27 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?:
+   })
+ 
+   const { theme } = useTheme()
++  const local = useLocal()
++  let autoReplied = false
++
++  function replyOnce() {
++    void sdk.client.permission.reply({
++      reply: "once",
++      requestID: props.request.id,
++      directory: props.directory,
++      workspace: project.workspace.current(),
++    })
++  }
++
++  createEffect(() => {
++    if (store.stage !== "permission") return
++    if (local.permission.mode !== "auto") return
++    if (autoReplied) return
++    autoReplied = true
++    replyOnce()
++  })
+ 
+   return (
+     <Switch>
+@@ -390,12 +411,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?:
+                   })
+                   return
+                 }
+-                void sdk.client.permission.reply({
+-                  reply: "once",
+-                  requestID: props.request.id,
+-                  directory: props.directory,
+-                  workspace: project.workspace.current(),
+-                })
++                replyOnce()
+               }}
+             />
+           )
