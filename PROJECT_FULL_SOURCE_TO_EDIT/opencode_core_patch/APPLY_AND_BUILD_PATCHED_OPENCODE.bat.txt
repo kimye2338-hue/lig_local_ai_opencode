@@ -1,0 +1,67 @@
+@echo off
+setlocal EnableExtensions
+
+set "HERE=%~dp0"
+set "SRC=%HERE%opencode-source"
+set "PATCH=%HERE%opencode-permission-mode-toggle.patch"
+set "COMMIT=afff74eb2c9fc3808a9795f365707f32853099e9"
+
+echo [AgentOps] OpenCode permission-mode patch builder
+echo.
+
+where git >nul 2>nul
+if errorlevel 1 (
+  echo [ERROR] git was not found in PATH.
+  exit /b 1
+)
+
+where bun >nul 2>nul
+if errorlevel 1 (
+  echo [ERROR] bun was not found in PATH.
+  exit /b 1
+)
+
+if not exist "%PATCH%" (
+  echo [ERROR] Patch file not found: %PATCH%
+  exit /b 1
+)
+
+if not exist "%SRC%\.git" (
+  echo [STEP] Cloning OpenCode source...
+  git clone https://github.com/anomalyco/opencode "%SRC%"
+  if errorlevel 1 exit /b 1
+)
+
+cd /d "%SRC%" || exit /b 1
+
+git fetch origin
+if errorlevel 1 exit /b 1
+
+git checkout %COMMIT%
+if errorlevel 1 exit /b 1
+
+git reset --hard
+if errorlevel 1 exit /b 1
+
+git apply "%PATCH%"
+if errorlevel 1 (
+  echo [ERROR] Patch did not apply cleanly.
+  exit /b 1
+)
+
+bun install
+if errorlevel 1 exit /b 1
+
+bun run check
+if errorlevel 1 (
+  echo [WARN] check failed or unavailable. Trying typecheck...
+  bun run typecheck
+)
+
+bun run build
+if errorlevel 1 exit /b 1
+
+echo.
+echo [OK] Patched OpenCode build completed.
+echo [TEST] Verify Shift+Tab toggles permission approval ASK -^> AUTO -^> ASK and the agent name/model do not change.
+exit /b 0

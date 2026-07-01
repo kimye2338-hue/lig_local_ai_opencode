@@ -1,0 +1,186 @@
+diff --git a/packages/tui/src/config/keybind.ts b/packages/tui/src/config/keybind.ts
+--- a/packages/tui/src/config/keybind.ts
++++ b/packages/tui/src/config/keybind.ts
+@@ -128,8 +128,9 @@ export const Definitions = {
+   console_org_switch: keybind("none", "Switch console organization"),
+   agent_list: keybind("<leader>a", "List agents"),
+   agent_cycle: keybind("tab", "Next agent"),
+-  agent_cycle_reverse: keybind("shift+tab", "Previous agent"),
++  agent_cycle_reverse: keybind("shift+f3", "Previous agent"),
+   variant_cycle: keybind("ctrl+t", "Cycle model variants"),
++  permission_mode_cycle: keybind("shift+tab", "Toggle permission approval policy (ASK/AUTO)"),
+   variant_list: keybind("none", "List model variants"),
+
+   messages_page_up: keybind("pageup,ctrl+alt+b", "Scroll messages up by one page"),
+@@ -338,6 +339,7 @@ export const CommandMap = {
+   agent_list: "agent.list",
+   agent_cycle: "agent.cycle",
+   agent_cycle_reverse: "agent.cycle.reverse",
++  permission_mode_cycle: "permission.mode",
+   variant_cycle: "variant.cycle",
+   variant_list: "variant.list",
+   messages_page_up: "session.page.up",
+diff --git a/packages/tui/src/context/permission.tsx b/packages/tui/src/context/permission.tsx
+--- a/packages/tui/src/context/permission.tsx
++++ b/packages/tui/src/context/permission.tsx
+@@ -1,26 +1,46 @@
+ import { createStore } from "solid-js/store"
+ import { useArgs } from "./args"
+ import { createSimpleContext } from "./helper"
+
+-export type PermissionMode = "auto" | "normal"
++// Permission approval policy. This is independent of the active agent/persona,
++// the current workflow, and the current model — it only decides how incoming
++// "permission.asked" events are handled by the TUI.
++//   ASK  = show permission requests to the user (default OpenCode behavior).
++//   AUTO = auto-approve (reply "once") the requests that reach the TUI.
++// Explicit "deny" decisions are resolved in opencode core before a request is
++// ever surfaced as "permission.asked", so AUTO can never bypass an explicit deny.
++export type PermissionMode = "ask" | "auto"
++
++const PermissionModeOrder: PermissionMode[] = ["ask", "auto"]
+
+ export const { use: usePermission, provider: PermissionProvider } = createSimpleContext({
+   name: "Permission",
+   init: () => {
+     const args = useArgs()
+     const [store, setStore] = createStore<{ mode: PermissionMode }>({
+-      mode: args.auto ? "auto" : "normal",
++      mode: args.auto ? "auto" : "ask",
+     })
++
++    function set(mode: PermissionMode) {
++      setStore("mode", mode)
++    }
++
++    function cycle() {
++      setStore("mode", (mode) => {
++        const idx = PermissionModeOrder.indexOf(mode)
++        return PermissionModeOrder[(idx + 1) % PermissionModeOrder.length] ?? "ask"
++      })
++    }
++
+     return {
+       get mode() {
+         return store.mode
+       },
+-      set(mode: PermissionMode) {
+-        setStore("mode", mode)
+-      },
++      set,
++      cycle,
+       toggle() {
+-        setStore("mode", (mode) => (mode === "auto" ? "normal" : "auto"))
++        cycle()
+       },
+     }
+   },
+ })
+diff --git a/packages/tui/src/app.tsx b/packages/tui/src/app.tsx
+--- a/packages/tui/src/app.tsx
++++ b/packages/tui/src/app.tsx
+@@ -112,6 +112,7 @@ const appBindingCommands = [
+   "agent.list",
+   "mcp.list",
+   "agent.cycle",
++  "permission.mode",
+   "agent.cycle.reverse",
+   "variant.cycle",
+   "variant.list",
+@@ -373,11 +374,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugin
+       },
+       {
+         name: "permission.mode",
+-        title:
+-          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
++        title: `Permission approval: ${local.permission.mode.toUpperCase()} (toggle ASK/AUTO)`,
+         category: "System",
++        slashName: "permission",
++        slashAliases: ["perm"],
+         run: () => {
+-          local.permission.toggle()
++          local.permission.cycle()
+           dialog.clear()
+         },
+       },
+diff --git a/packages/tui/src/component/prompt/index.tsx b/packages/tui/src/component/prompt/index.tsx
+--- a/packages/tui/src/component/prompt/index.tsx
++++ b/packages/tui/src/component/prompt/index.tsx
+@@ -1049,5 +1049,37 @@ export function Prompt(props: PromptProps) {
+         : []
+
++    const permissionCommand = inputText.trim().match(/^\/permission(?:\s+(\S+))?\s*$/i)
++    if (permissionCommand) {
++      const action = (permissionCommand[1] ?? "status").toLowerCase()
++      const validPolicies = ["ask", "auto"] as const
++      if (action === "cycle") {
++        local.permission.cycle()
++        toast.show({ message: `Permission approval: ${local.permission.mode.toUpperCase()}`, variant: "info" })
++      } else if (action === "status") {
++        toast.show({ message: `Permission approval: ${local.permission.mode.toUpperCase()}`, variant: "info" })
++      } else if (validPolicies.includes(action as (typeof validPolicies)[number])) {
++        local.permission.set(action as (typeof validPolicies)[number])
++        toast.show({ message: `Permission approval: ${local.permission.mode.toUpperCase()}`, variant: "info" })
++      } else {
++        toast.show({
++          title: "Unknown permission action",
++          message: "Use /permission status, cycle, ask, or auto.",
++          variant: "warning",
++        })
++      }
++      history.append({
++        ...store.prompt,
++        mode: currentMode,
++      })
++      input.extmarks.clear()
++      setStore("prompt", { input: "", parts: [] })
++      setStore("extmarkToPartIndex", new Map())
++      props.onSubmit?.()
++      input.clear()
++      if (finishMoveProgress) move.finishSubmit()
++      return true
++    }
++
+     if (store.mode === "shell") {
+       move.startSubmit()
+       void sdk.client.session.shell({
+diff --git a/packages/tui/src/routes/session/index.tsx b/packages/tui/src/routes/session/index.tsx
+--- a/packages/tui/src/routes/session/index.tsx
++++ b/packages/tui/src/routes/session/index.tsx
+@@ -136,6 +136,7 @@ const sessionBindingCommands = [
+   "session.copy",
+   "session.export",
+   "session.child.first",
++  "permission.mode",
+   "session.parent",
+   "session.child.next",
+   "session.child.previous",
+@@ -1136,6 +1137,11 @@ export function Session() {
+                       }}
+                       sessionID={route.sessionID}
+-                      right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
++                      right={
++                        <box flexDirection="row" gap={1} alignItems="center">
++                          <PermissionModeBadge />
++                          <pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />
++                        </box>
++                      }
+                     />
+                   </pluginRuntime.Slot>
+                 </Show>
+@@ -1176,6 +1182,15 @@ export function Session() {
+   )
+ }
+
++function PermissionModeBadge() {
++  const local = useLocal()
++  const { theme } = useTheme()
++  const shortcut = useCommandShortcut("permission.mode")
++  const label = createMemo(() => local.permission.mode.toUpperCase())
++  const color = createMemo(() => (local.permission.mode === "auto" ? theme.warning : theme.textMuted))
++  return <text fg={color()}>{`[PERM:${label()} ${shortcut()}]`}</text>
++}
++
+ function UserMessage(props: {
+   message: UserMessage
+   parts: Part[]
