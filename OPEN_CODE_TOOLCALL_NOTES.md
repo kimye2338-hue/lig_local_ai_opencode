@@ -40,6 +40,7 @@ Important permission facts:
 - `doom_loop` is a guard for repeated identical tool calls.
 - `--auto` only auto-approves requests that would otherwise ask; explicit `deny` still wins.
 - `websearch` is only available with the OpenCode provider or when `OPENCODE_ENABLE_EXA` is set truthy.
+- `question` is a real tool for asking the user structured questions. Its JSON schema must not be printed to the user as normal assistant text.
 
 ## LIG internal-model compatibility issue
 
@@ -52,16 +53,136 @@ Previously observed and remembered:
 - Tool-use should be bridged through prompt conventions or a compatibility layer.
 - When OpenCode expects a tool call, the returned call must map to one of OpenCode's available tool names and the correct JSON argument schema.
 
-## Known bad symptoms
+## Full failure taxonomy to guard against
 
-These symptoms indicate the model/proxy emitted invalid tool-call syntax or tool names:
+Treat all of these as the same family of compatibility / leakage problems, not one-off user mistakes.
+
+### A. Invalid tool names
+
+Symptoms:
 
 ```text
 invalid [tool=:, error=Model tried to call unavailable tool ':']
-invalid [tool=bash, error=Invalid input for tool bash: JSON parsing failed]
+invalid [tool=python, error=Model tried to call unavailable tool 'python']
+invalid [tool=terminal, error=Model tried to call unavailable tool 'terminal']
+invalid [tool=run_command, error=Model tried to call unavailable tool 'run_command']
 ```
 
-Do not treat this as a user problem. It is a model/proxy/tool-call-format compatibility problem.
+Rules:
+
+- Never invent tool names.
+- Never emit punctuation-only tool names such as `:`.
+- Map model intentions only to actual OpenCode tools.
+- If there is no matching tool, answer in text or use `question` if valid.
+
+### B. Malformed tool arguments
+
+Symptoms:
+
+```text
+invalid [tool=bash, error=Invalid input for tool bash: JSON parsing failed]
+invalid [tool=edit, error=Invalid input for tool edit]
+invalid [tool=write, error=Invalid input for tool write]
+```
+
+Rules:
+
+- Tool arguments must be strict JSON matching the tool schema.
+- Do not pass a raw shell command string where an object is expected.
+- Do not double-encode JSON.
+- Do not include markdown fences in tool arguments.
+- If JSON parsing fails, repair internally and retry once; do not flood the user.
+
+### C. Tool schema leaked as assistant text
+
+Symptoms:
+
+```text
+[
+  {"question":"...","header":"...","options":[...],"multiple":false,"custom":true}
+]
+```
+
+or any of these printed in normal chat:
+
+```text
+{"tool":"bash","arguments":{...}}
+{"name":"question","input":{...}}
+<tool_call>...</tool_call>
+functions.bash({...})
+question([...])
+```
+
+Rules:
+
+- Tool-call JSON, XML-ish tags, function-call examples, and internal schemas must never be shown to the user as the final answer.
+- If a tool call cannot be made, convert it to a short natural-language question or answer.
+- For `question`, ask at most 1-3 concise natural-language questions unless the real `question` tool is successfully invoked.
+- Do not print `header`, `options`, `multiple`, `custom`, or other internal UI schema fields.
+
+### D. Raw execution logs flood the chat
+
+Symptoms:
+
+```text
+$ python --version
+$ pip list
+Package Version ...
+Click to expand
+```
+
+Rules:
+
+- Do not print long raw logs unless the user explicitly requests them.
+- Summarize shell output: success/failure + important lines only.
+- Never print full `pip list`, directory trees, large `dir`, large `grep`, or repeated shell prompts.
+- Keep noisy logs in internal/debug context, not user-facing final text.
+
+### E. Progress narration flood
+
+Symptoms:
+
+```text
+현재 제한사항...
+먼저 확인하겠습니다...
+다음과 같은 질문을 사용자에게 하여 계획을 구체화하겠습니다...
+```
+
+Rules:
+
+- Do not narrate routine internal steps.
+- Report only conclusions, required user action, and blocker summaries.
+- Ask clarifying questions only when they are necessary and not already known.
+
+### F. Unsupported web/tool assumptions
+
+Symptoms:
+
+```text
+websearch unavailable
+webfetch blocked
+ChromeDriver missing
+```
+
+Rules:
+
+- Do not assume `websearch` is available unless enabled.
+- Do not assume public internet access on the company PC.
+- For internal network work, prefer browser/manual HTML/source input when web tools are unavailable.
+- If a dependency is missing, list exactly what is needed, not a long diagnostic dump.
+
+### G. Final-text examples accidentally executed as tools
+
+Symptoms:
+
+- The model writes code examples or pseudo-calls, and the harness tries to execute them.
+- Example text like `functions.NAME({...})` or `tool({...})` is treated as a real call.
+
+Rules:
+
+- Treat code fences, inline examples, and explanatory pseudo-tool calls as text only.
+- The proxy must only execute tool calls emitted in the official tool-call channel/format.
+- Never infer executable tools from final answer prose.
 
 ## Required behavior for agents
 
@@ -77,13 +198,15 @@ When using OpenCodeLIG:
 8. Do not rely on `websearch` unless the provider/environment enables it.
 9. Do not rely on `webfetch` in restricted internal network unless explicitly available.
 10. Keep user-facing output concise.
+11. Never expose internal tool schemas or question arrays as final text.
+12. If the model cannot call a tool correctly, fall back to concise natural-language output.
 
 ## Recommended proxy normalization rules
 
 If maintaining the LIG proxy/tool-call bridge, enforce these rules before returning tool calls to OpenCode:
 
 - Reject unknown tool names before they reach OpenCode.
-- If the model emits colon-prefixed or markdown-ish pseudo calls, parse them as text, not tool calls.
+- If the model emits colon-prefixed, markdown-ish, JSON-ish, XML-ish, or function-call-looking pseudo calls in normal text, parse them as text, not tool calls.
 - Validate JSON arguments with a strict parser.
 - For `bash`, accept only an object matching the actual OpenCode bash input schema.
 - If parsing fails, return a concise model-facing correction message and retry once.
@@ -91,6 +214,9 @@ If maintaining the LIG proxy/tool-call bridge, enforce these rules before return
 - Use `finish_reason: "stop"` for normal text.
 - Do not pass `tools` directly to the internal API if the internal model cannot natively use them.
 - Keep `temperature=0` for tool-call extraction/bridging.
+- Maintain a whitelist of valid tool names.
+- Maintain per-tool JSON-schema validation before execution.
+- Add a final sanitizer: if assistant final text contains a raw tool schema, replace it with a natural-language summary before displaying it to the user.
 
 ## User-facing output policy
 
@@ -103,6 +229,10 @@ Do not print:
 - repeated shell prompts
 - raw invalid tool-call traces
 - long self-narration
+- `question` JSON arrays
+- tool schemas
+- function-call pseudo syntax
+- raw stack traces unless explicitly debugging
 
 Print only:
 
@@ -110,6 +240,7 @@ Print only:
 - what changed
 - what the user must do
 - short failure reason when needed
+- exact files/libraries needed when asked
 
 ## Persistent memory interaction
 
