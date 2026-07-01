@@ -262,33 +262,3 @@ diff --git a/packages/tui/src/component/spinner.tsx b/packages/tui/src/component
        <box flexDirection="row" gap={1}>
          <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
          <Show when={props.children}>
-diff --git a/packages/opencode/src/cli/cmd/run/footer.subagent.tsx b/packages/opencode/src/cli/cmd/run/footer.subagent.tsx
---- a/packages/opencode/src/cli/cmd/run/footer.subagent.tsx
-+++ b/packages/opencode/src/cli/cmd/run/footer.subagent.tsx
-@@ -126,7 +126,10 @@ export function RunFooterSubagentBody(props: {
-         <Show when={tab()}>
-           {(current) => (
-             <box width="100%" flexDirection="row" gap={1} paddingBottom={1} flexShrink={0}>
--              {current().status === "running" ? (
-+              {/* Keep the running status visible through the normal text icon path.
-+                  The custom <spinner> renderable can crash in the offline Windows
-+                  build when the reconciler has not registered the spinner type. */}
-+              {false && current().status === "running" ? (
-                 <box flexShrink={0}>
-                   <spinner frames={SPINNER_FRAMES} interval={80} color={statusColor(footer(), current().status)} />
-                 </box>
-diff --git a/packages/opencode/src/cli/cmd/run/footer.view.tsx b/packages/opencode/src/cli/cmd/run/footer.view.tsx
---- a/packages/opencode/src/cli/cmd/run/footer.view.tsx
-+++ b/packages/opencode/src/cli/cmd/run/footer.view.tsx
-@@ -832,7 +832,10 @@ export function RunFooterView(props: RunFooterViewProps) {
-                   backgroundColor="transparent"
-                 >
--                  <Show when={busy() && !exiting()}>
-+                  {/* Disable the custom <spinner> renderable for this offline Windows build.
-+                      It can crash with "Unknown component type spinner"; status text still
-+                      shows the running/interruption state next to the mode label. */}
-+                  <Show when={false && busy() && !exiting()}>
-                     <box flexShrink={0}>
-                       <spinner color={spin().color} frames={spin().frames} interval={40} />
-                     </box>
- 
