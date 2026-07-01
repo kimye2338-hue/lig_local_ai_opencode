@@ -1,10 +1,11 @@
 {
   "target_repo": "https://github.com/anomalyco/opencode",
   "target_commit": "afff74eb2c9fc3808a9795f365707f32853099e9",
+  "feature": "permission-approval-policy-toggle (ASK/AUTO, Shift+Tab)",
   "files": {
-    "opencode-permission-mode-toggle.patch": "d6d8446c56e3635212a1b986d2384e9f74c7e216ccd443b3e318093306c60378",
-    "README.md": "c840f3e883df1139f8cdce1ae5a9a24343dbe9111f171c6751233a1f66e174e5",
-    "APPLY_AND_BUILD_PATCHED_OPENCODE.bat.txt": "2e839dff8a217dae4ed4308f2dce888ca062948121abc7c6bb3e8f42351d2d52",
-    "OPENCODE_CORE_PERMISSION_MODE_PATCH_DELIVERY.md": "9f33838e170a56782280a170a84835fa6b88b8b317eb308bc0910e6dedc9dad9"
+    "opencode-permission-mode-toggle.patch": "e52ddde674eabb71d12046b6c636647e694210a325fa4523f9441bc0e04da91f",
+    "README.md": "e08502c06cf02ef56b9f462ed678e60cc28aa117229d9d8520fbcfcb3097efe6",
+    "APPLY_AND_BUILD_PATCHED_OPENCODE.bat.txt": "5d0dd76122f5d936bebe4768107a0489d5439e86fceb7926a0d328026bf835e7",
+    "OPENCODE_CORE_PERMISSION_MODE_PATCH_DELIVERY.md": "c6bacce68c2fef370e6fbf8eb042a47f307043b50312a57886208174388ee9d8"
   }
 }

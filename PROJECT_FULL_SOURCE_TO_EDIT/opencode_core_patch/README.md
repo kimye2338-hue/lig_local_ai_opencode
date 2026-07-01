@@ -1,77 +1,134 @@
-# OpenCode Core Patch: Permission Approval Controller
+# OpenCode Core Patch: Permission Approval Policy Toggle
 
-## Current status
+## What this is
 
-`NEEDS_REWORK_BEFORE_USE`
+An upstream OpenCode source patch that adds a **permission approval policy**
+toggle, modeled on Claude Code's Shift+Tab behavior.
 
-This folder contains an upstream OpenCode patch draft, but the current draft should not be treated as final.
-
-The required feature is not a workflow mode such as PLAN or AUTO and not an AgentOps persona switch. The required feature is an independent, higher-level permission approval controller similar to Claude Code's Shift+Tab behavior.
-
-## Correct target behavior
+It is **independent** of the active agent/persona, the current workflow, and the
+current model. Toggling it only changes how permission requests are handled — it
+never changes which agent is active, what task you are doing, or which model runs.
 
 ```text
-Shift+Tab changes permission approval behavior only.
-The active agent/persona must not change.
-The current task/workflow mode must not change.
-The current model must not change.
-The current approval state must be visible in the TUI.
+ASK  = show permission requests to the user (default OpenCode behavior)
+AUTO = auto-approve the requests that reach the TUI ("permission.asked")
+
+Cycle: ASK -> AUTO -> ASK
 ```
 
-The approval controller should sit above normal agent/persona selection.
-
-## What must be fixed in the patch
-
-The existing patch draft is too tied to mode names such as PLAN/NORMAL/AUTO. That framing is misleading for the user's requirement.
-
-The corrected patch should use approval-policy language, for example:
+## Keys
 
 ```text
-ASK    = show approval requests normally
-AUTO   = approve permission requests from the TUI controller
+Tab       = next agent            (unchanged)
+Shift+F3  = previous agent        (moved here; was Shift+Tab upstream)
+Shift+Tab = toggle ASK/AUTO permission approval policy
+Ctrl+T    = cycle model variants  (unchanged)
 ```
 
-or whatever names best match upstream OpenCode and Claude Code behavior.
+Upstream OpenCode bound `shift+tab` to *previous agent*. To keep agent cycling
+available, previous-agent moves to `shift+f3`, and `shift+tab` becomes the
+approval-policy toggle. Next-agent stays on `tab`.
 
-The important point is this:
+## `/permission` command
 
 ```text
-Permission approval is independent from agent/persona and independent from task/planning mode.
+/permission status   show the current approval policy
+/permission ask      set policy to ASK
+/permission auto     set policy to AUTO
+/permission cycle    toggle ASK/AUTO
+```
+
+`/permission` changes only the approval policy. It never changes the agent,
+persona, workflow, or model.
+
+## TUI indicator
+
+The session prompt shows a badge to the right of the prompt, separate from the
+agent name:
+
+```text
+[PERM:ASK shift+tab]
+[PERM:AUTO shift+tab]
+```
+
+## How AUTO stays safe
+
+`AUTO` is **not** `--dangerously-skip-permissions`:
+
+- Explicit `deny` decisions are resolved in opencode **core**
+  (`packages/opencode/src/permission/index.ts`) *before* a request is ever
+  surfaced as a `permission.asked` event. The TUI only ever sees requests that
+  the core resolver already turned into an `ask`. Therefore AUTO can only
+  auto-approve `ask` requests and can **never** bypass an explicit `deny`.
+- `.opencode/plugins/command-guard.ts` runs in `tool.execute.before` and blocks
+  corrupted/dangerous bash regardless of the approval policy. AUTO does not
+  disable it. The command guard is a separate defense-in-depth layer.
+
+So the two layers are orthogonal:
+
+```text
+approval policy (ASK/AUTO) = whether to prompt the user or auto-approve an "ask"
+command guard              = hard block of dangerous/corrupted bash before exec
+```
+
+## What the patch changes
+
+The design deliberately reuses OpenCode's existing permission state. Upstream
+already stores a mode (`auto` via `--auto`) and already auto-replies `once` to
+`permission.asked` when `mode === "auto"`, so the patch does **not** need to
+touch `context/sync.tsx` at all.
+
+```text
+packages/tui/src/config/keybind.ts          Shift+Tab -> toggle policy; prev-agent -> Shift+F3
+packages/tui/src/context/permission.tsx     mode type "ask" | "auto"; default ASK; set()/cycle()
+packages/tui/src/app.tsx                     command "permission.mode" -> cycle; /permission slash
+packages/tui/src/component/prompt/index.tsx  /permission status|ask|auto|cycle handler
+packages/tui/src/routes/session/index.tsx    [PERM:...] badge next to the agent name
 ```
 
 ## Upstream target
 
 ```text
-https://github.com/anomalyco/opencode
+repo:   https://github.com/anomalyco/opencode
+commit: afff74eb2c9fc3808a9795f365707f32853099e9
 ```
 
-Target commit inspected while preparing the draft:
+## Apply / build
 
-```text
-afff74eb2c9fc3808a9795f365707f32853099e9
+```cmd
+copy APPLY_AND_BUILD_PATCHED_OPENCODE.bat.txt APPLY_AND_BUILD_PATCHED_OPENCODE.bat
+APPLY_AND_BUILD_PATCHED_OPENCODE.bat
 ```
 
-## Files likely involved in upstream OpenCode
+The script clones upstream OpenCode, checks out the target commit, runs
+`git apply`, then `bun install` / `bun run check` / `bun run build`.
+
+## Validation status
+
+The patch was authored against the inspected upstream source locations for the
+target commit and its hunks are internally consistent (correct unified-diff
+line counts). It has **not** been `git apply`-checked or built in this
+environment, which has no network access to clone upstream OpenCode.
+
+Before use, on a machine with Git + Bun + network:
 
 ```text
-packages/tui/src/config/keybind.ts
-packages/tui/src/context/permission.tsx
-packages/tui/src/context/sync.tsx
-packages/tui/src/app.tsx
-packages/tui/src/component/prompt/index.tsx
-packages/tui/src/routes/session/index.tsx
+1. git apply --check opencode-permission-mode-toggle.patch   (adjust context if upstream drifted)
+2. bun run check / bun run build
+3. Runtime tests below.
 ```
 
-## Required next step
-
-A human or Claude Code should revise `opencode-permission-mode-toggle.patch` so that it implements an independent permission approval controller, not a workflow/persona mode.
-
-After revision, verify:
+Runtime tests to confirm:
 
 ```text
-1. Shift+Tab changes only approval behavior.
-2. Agent/persona remains unchanged.
-3. The mode indicator reflects approval state only.
-4. Direct commands such as /permission status, /permission ask, /permission auto, and /permission cycle work if supported.
-5. Existing command guard behavior remains separate from approval-state switching.
+T1  default policy is ASK
+T2  Shift+Tab: ASK -> AUTO
+T3  Shift+Tab: AUTO -> ASK
+T4  active agent/persona unchanged across toggles
+T5  model unchanged across toggles
+T6  AUTO auto-replies "once" to permission.asked
+T7  ASK shows the normal permission prompt
+T8  explicit deny is not bypassed by AUTO (resolved in core before "asked")
+T9  command-guard.ts still blocks dangerous bash under AUTO
+T10 /permission status|ask|auto|cycle changes only the approval policy
 ```

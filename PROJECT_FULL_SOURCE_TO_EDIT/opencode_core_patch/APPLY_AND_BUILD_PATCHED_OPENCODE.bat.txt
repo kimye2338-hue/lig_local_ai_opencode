@@ -63,5 +63,5 @@ if errorlevel 1 exit /b 1
 
 echo.
 echo [OK] Patched OpenCode build completed.
-echo [TEST] Verify Shift+Tab cycles NORMAL -^> AUTO -^> PLAN -^> NORMAL and the agent name does not change.
+echo [TEST] Verify Shift+Tab toggles permission approval ASK -^> AUTO -^> ASK and the agent name/model do not change.
 exit /b 0
