@@ -10,7 +10,7 @@ diff --git a/packages/tui/src/config/keybind.ts b/packages/tui/src/config/keybin
    variant_cycle: keybind("ctrl+t", "Cycle model variants"),
 +  permission_mode_cycle: keybind("shift+tab", "Toggle permission approval policy (ASK/AUTO)"),
    variant_list: keybind("none", "List model variants"),
-
+ 
    messages_page_up: keybind("pageup,ctrl+alt+b", "Scroll messages up by one page"),
 @@ -338,6 +339,7 @@ export const CommandMap = {
    agent_list: "agent.list",
@@ -27,7 +27,7 @@ diff --git a/packages/tui/src/context/permission.tsx b/packages/tui/src/context/
  import { createStore } from "solid-js/store"
  import { useArgs } from "./args"
  import { createSimpleContext } from "./helper"
-
+ 
 -export type PermissionMode = "auto" | "normal"
 +// Permission approval policy. This is independent of the active agent/persona,
 +// the current workflow, and the current model — it only decides how incoming
@@ -39,7 +39,7 @@ diff --git a/packages/tui/src/context/permission.tsx b/packages/tui/src/context/
 +export type PermissionMode = "ask" | "auto"
 +
 +const PermissionModeOrder: PermissionMode[] = ["ask", "auto"]
-
+ 
  export const { use: usePermission, provider: PermissionProvider } = createSimpleContext({
    name: "Permission",
    init: () => {
@@ -87,28 +87,31 @@ diff --git a/packages/tui/src/app.tsx b/packages/tui/src/app.tsx
    "agent.cycle.reverse",
    "variant.cycle",
    "variant.list",
-@@ -373,11 +374,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugin
-       },
-       {
-         name: "permission.mode",
--        title:
--          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
-+        title: `Permission approval: ${local.permission.mode.toUpperCase()} (toggle ASK/AUTO)`,
-         category: "System",
-+        slashName: "permission",
-+        slashAliases: ["perm"],
+@@ -708,6 +709,19 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugin
          run: () => {
--          local.permission.toggle()
-+          local.permission.cycle()
-           dialog.clear()
+           local.agent.move(-1)
          },
        },
++      {
++        name: "permission.mode",
++        title: `Permission approval: ${local.permission.mode.toUpperCase()} (toggle ASK/AUTO)`,
++        category: "System",
++        slashName: "permission",
++        slashAliases: ["perm"],
++        run: () => {
++          local.permission.cycle()
++          dialog.clear()
++        },
++      },
+       {
+         name: "provider.connect",
+         title: "Connect provider",
 diff --git a/packages/tui/src/component/prompt/index.tsx b/packages/tui/src/component/prompt/index.tsx
 --- a/packages/tui/src/component/prompt/index.tsx
 +++ b/packages/tui/src/component/prompt/index.tsx
-@@ -1049,5 +1049,37 @@ export function Prompt(props: PromptProps) {
+@@ -1049,6 +1049,38 @@ export function Prompt(props: PromptProps) {
          : []
-
+ 
 +    const permissionCommand = inputText.trim().match(/^\/permission(?:\s+(\S+))?\s*$/i)
 +    if (permissionCommand) {
 +      const action = (permissionCommand[1] ?? "status").toLowerCase()
@@ -155,7 +158,8 @@ diff --git a/packages/tui/src/routes/session/index.tsx b/packages/tui/src/routes
    "session.parent",
    "session.child.next",
    "session.child.previous",
-@@ -1136,6 +1137,11 @@ export function Session() {
+@@ -1297,7 +1298,12 @@ export function Session() {
+                         toBottom()
                        }}
                        sessionID={route.sessionID}
 -                      right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
@@ -168,10 +172,10 @@ diff --git a/packages/tui/src/routes/session/index.tsx b/packages/tui/src/routes
                      />
                    </pluginRuntime.Slot>
                  </Show>
-@@ -1176,6 +1182,15 @@ export function Session() {
+@@ -1330,6 +1336,15 @@ export function Session() {
    )
  }
-
+ 
 +function PermissionModeBadge() {
 +  const local = useLocal()
 +  const { theme } = useTheme()
