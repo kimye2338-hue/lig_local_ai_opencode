@@ -1,0 +1,192 @@
+name: Build patched OpenCode offline package
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/review-work-instructions-10nm51
+    paths:
+      - .github/workflows/build-patched-opencode-offline.yml
+      - PROJECT_FULL_SOURCE_TO_EDIT/opencode_core_patch/**
+      - PROJECT_FULL_SOURCE_TO_EDIT/installers_light/**
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-offline-package:
+    name: Build Windows offline package
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    env:
+      OPENCODE_REPO: https://github.com/anomalyco/opencode.git
+      OPENCODE_COMMIT: afff74eb2c9fc3808a9795f365707f32853099e9
+      PATCH_FILE: ${{ github.workspace }}\PROJECT_FULL_SOURCE_TO_EDIT\opencode_core_patch\opencode-permission-mode-toggle.patch
+      PACKAGE_NAME: LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE
+
+    steps:
+      - name: Checkout AgentOps PR branch
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Show tool versions
+        shell: pwsh
+        run: |
+          git --version
+          bun --version
+          node --version
+
+      - name: Clone upstream OpenCode at pinned commit
+        shell: pwsh
+        run: |
+          git clone --no-checkout "$env:OPENCODE_REPO" opencode-source
+          Set-Location opencode-source
+          git checkout "$env:OPENCODE_COMMIT"
+          git rev-parse HEAD
+
+      - name: Apply permission approval controller patch
+        shell: pwsh
+        run: |
+          Set-Location opencode-source
+          git apply --check "$env:PATCH_FILE"
+          git apply "$env:PATCH_FILE"
+          git diff -- packages/tui/src/config/keybind.ts packages/tui/src/context/permission.tsx packages/tui/src/app.tsx packages/tui/src/component/prompt/index.tsx packages/tui/src/routes/session/index.tsx
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          Set-Location opencode-source
+          bun install
+
+      - name: Typecheck patched OpenCode package
+        shell: pwsh
+        run: |
+          Set-Location opencode-source
+          bun run --cwd packages/opencode typecheck
+
+      - name: Build patched Windows OpenCode binary
+        shell: pwsh
+        run: |
+          Set-Location opencode-source
+          bun run --cwd packages/opencode build --single --skip-embed-web-ui
+
+      - name: Locate patched OpenCode binary
+        id: locate
+        shell: pwsh
+        run: |
+          $candidates = Get-ChildItem -Path opencode-source\packages\opencode\dist -Recurse -File | Where-Object {
+            $_.Name -eq 'opencode.exe' -or $_.Name -eq 'opencode'
+          } | Sort-Object FullName
+          $candidates | ForEach-Object { Write-Host "candidate=$($_.FullName)" }
+          $preferred = $candidates | Where-Object { $_.FullName -match 'windows.*x64' } | Select-Object -First 1
+          if (-not $preferred) { $preferred = $candidates | Select-Object -First 1 }
+          if (-not $preferred) { throw 'No opencode binary found under packages/opencode/dist' }
+          $out = Join-Path $env:GITHUB_WORKSPACE 'patched-opencode.exe'
+          Copy-Item -LiteralPath $preferred.FullName -Destination $out -Force
+          & $out --version
+          "binary=$out" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Assemble offline install package
+        shell: pwsh
+        run: |
+          $pkg = Join-Path $env:GITHUB_WORKSPACE $env:PACKAGE_NAME
+          $payload = Join-Path $pkg 'payload'
+          $workspace = Join-Path $pkg 'workspace'
+          New-Item -ItemType Directory -Force -Path $payload | Out-Null
+          New-Item -ItemType Directory -Force -Path $workspace | Out-Null
+
+          Copy-Item -LiteralPath '${{ steps.locate.outputs.binary }}' -Destination (Join-Path $payload 'opencode.exe') -Force
+          Copy-Item -Path PROJECT_FULL_SOURCE_TO_EDIT\* -Destination $workspace -Recurse -Force
+
+          @'
+@echo off
+setlocal EnableExtensions
+set "ROOT=%USERPROFILE%\OpenCodeLIG"
+set "BIN=%ROOT%\bin"
+set "WS=%ROOT%\workspace"
+echo.
+echo ============================================================
+echo LIG OpenCode patched offline installer
+echo ============================================================
+echo Target: %ROOT%
+echo.
+if not exist "%BIN%" mkdir "%BIN%"
+if not exist "%WS%" mkdir "%WS%"
+copy /y "%~dp0payload\opencode.exe" "%BIN%\opencode.exe" >nul
+if errorlevel 1 (
+  echo [ERROR] Failed to copy opencode.exe
+  pause
+  exit /b 1
+)
+robocopy "%~dp0workspace" "%WS%" /E /NFL /NDL /NJH /NJS /NP >nul
+if errorlevel 8 (
+  echo [ERROR] Workspace copy failed
+  pause
+  exit /b 1
+)
+(
+  echo @echo off
+  echo set "OCODE_EXE=%%USERPROFILE%%\OpenCodeLIG\bin\opencode.exe"
+  echo set "AGENTOPS_HOME=%%USERPROFILE%%\OpenCodeLIG\workspace"
+  echo cd /d "%%AGENTOPS_HOME%%"
+  echo "%%OCODE_EXE%%" %%*
+) > "%WS%\RUN_OPENCODE_LIG.bat"
+(
+  echo @echo off
+  echo "%%USERPROFILE%%\OpenCodeLIG\bin\opencode.exe" --version
+  echo if errorlevel 1 exit /b 1
+  echo echo [OK] patched opencode.exe exists and runs.
+) > "%WS%\VERIFY_OFFLINE_INSTALL.bat"
+echo.
+echo [OK] Installed.
+echo Run:
+echo   %WS%\RUN_OPENCODE_LIG.bat
+echo Verify:
+echo   %WS%\VERIFY_OFFLINE_INSTALL.bat
+echo.
+pause
+exit /b 0
+'@ | Set-Content -Path (Join-Path $pkg 'INSTALL_OFFLINE_LIG_OPENCODE.bat.txt') -Encoding ASCII
+
+          @'
+# LIG OpenCode patched offline package
+
+This package contains a Windows OpenCode binary built from upstream OpenCode with the permission approval controller patch applied.
+
+Install on the offline company PC:
+
+1. Extract this ZIP.
+2. Rename `INSTALL_OFFLINE_LIG_OPENCODE.bat.txt` to `INSTALL_OFFLINE_LIG_OPENCODE.bat`.
+3. Run it.
+4. Start OpenCode with `%USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat`.
+5. Check permission approval control:
+   - `Shift+Tab` toggles `[PERM:ASK]` / `[PERM:AUTO]`.
+   - `/permission status`
+   - `/permission auto`
+   - `/permission ask`
+
+The installer uses local files only. It does not clone GitHub and does not use PowerShell execution-policy bypass.
+'@ | Set-Content -Path (Join-Path $pkg 'README_OFFLINE_INSTALL.md') -Encoding UTF8
+
+          $hashes = @()
+          Get-ChildItem -Path $pkg -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $rel = $_.FullName.Substring($pkg.Length + 1).Replace('\','/')
+            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            $hashes += "$hash  $rel"
+          }
+          $hashes | Set-Content -Path (Join-Path $pkg 'SHA256SUMS.txt') -Encoding ASCII
+
+          Compress-Archive -Path "$pkg\*" -DestinationPath "$env:GITHUB_WORKSPACE\$env:PACKAGE_NAME.zip" -Force
+
+      - name: Upload offline package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE
+          path: LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE.zip
+          retention-days: 14
