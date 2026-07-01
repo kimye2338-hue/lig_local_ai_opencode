@@ -69,7 +69,7 @@ jobs:
           Set-Location opencode-source
           git apply --recount --check "$env:PATCH_FILE"
           git apply --recount "$env:PATCH_FILE"
-          git diff -- packages/tui/src/config/keybind.ts packages/tui/src/context/permission.tsx packages/tui/src/app.tsx packages/tui/src/component/prompt/index.tsx packages/tui/src/routes/session/index.tsx packages/tui/src/routes/session/permission.tsx
+          git diff -- packages/tui/src/config/keybind.ts packages/tui/src/context/permission.tsx packages/tui/src/app.tsx packages/tui/src/component/prompt/index.tsx packages/tui/src/routes/session/index.tsx packages/tui/src/routes/session/permission.tsx packages/tui/src/component/spinner.tsx packages/opencode/src/cli/cmd/run/footer.subagent.tsx packages/opencode/src/cli/cmd/run/footer.view.tsx
 
       - name: Install dependencies
         shell: pwsh
@@ -246,7 +246,7 @@ jobs:
           '@ | Set-Content -Path (Join-Path $pkg 'README_OFFLINE_INSTALL.md') -Encoding UTF8
 
           $hashes = @()
-          Get-ChildItem -Path $pkg -Recurse -File | Sort-Object FullName | ForEach-Object {
+          Get-ChildItem -Path $pkg -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
             $rel = $_.FullName.Substring($pkg.Length + 1).Replace('\','/')
             $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             $hashes += "$hash  $rel"
@@ -265,13 +265,17 @@ jobs:
             'README_OFFLINE_INSTALL.md',
             'SHA256SUMS.txt',
             'payload\opencode.exe',
+            'workspace\.gitignore',
+            'workspace\.opencode\commands\permission.md',
+            'workspace\.opencode\commands\agentmode.md',
+            'workspace\.opencode\agents\agentops-supervisor.md',
             'workspace\opencode_core_patch\opencode-permission-mode-toggle.patch'
           )
           foreach ($item in $required) {
             $path = Join-Path $check $item
             if (-not (Test-Path -LiteralPath $path)) { throw "Required package file missing: $item" }
           }
-          Get-ChildItem -Path $check -Recurse -File | ForEach-Object {
+          Get-ChildItem -Path $check -Recurse -File -Force | ForEach-Object {
             Write-Host $_.FullName.Substring($check.Length + 1).Replace('\','/')
           }
           $sumFile = Join-Path $check 'SHA256SUMS.txt'
@@ -293,5 +297,6 @@ jobs:
         with:
           name: LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE
           path: LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 30
