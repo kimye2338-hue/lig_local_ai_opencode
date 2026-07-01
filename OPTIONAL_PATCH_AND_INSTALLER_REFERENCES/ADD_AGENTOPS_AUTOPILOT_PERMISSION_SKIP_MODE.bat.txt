@@ -1,0 +1,157 @@
+@echo off
+setlocal EnableExtensions
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
+
+set "SELF=%~f0"
+set "ROOT=%CD%"
+set "WORK=%TEMP%\agentops_autopilot_%RANDOM%%RANDOM%"
+set "PYFILE=%WORK%\add_agentops_autopilot.py"
+set "LOG=%ROOT%\agentops_autopilot_patch_log.txt"
+
+echo.
+echo Installing AgentOps Autopilot permission-skip mode...
+echo Target: %ROOT%
+echo Log: %LOG%
+echo.
+
+if not exist "%WORK%" mkdir "%WORK%"
+
+set "AGENTOPS_AUTOPILOT_SELF=%SELF%"
+set "AGENTOPS_AUTOPILOT_ROOT=%ROOT%"
+set "AGENTOPS_AUTOPILOT_LOG=%LOG%"
+
+> "%PYFILE%" echo import base64, json, os, pathlib, datetime
+>> "%PYFILE%" echo marker = "__AGENTOPS_AUTOPILOT_PAYLOAD_BASE64__"
+>> "%PYFILE%" echo self_path = pathlib.Path(os.environ["AGENTOPS_AUTOPILOT_SELF"])
+>> "%PYFILE%" echo root = pathlib.Path(os.environ["AGENTOPS_AUTOPILOT_ROOT"]).resolve()
+>> "%PYFILE%" echo log = pathlib.Path(os.environ["AGENTOPS_AUTOPILOT_LOG"]).resolve()
+>> "%PYFILE%" echo text = self_path.read_text(encoding="ascii", errors="ignore")
+>> "%PYFILE%" echo if marker not in text: raise SystemExit("payload marker not found")
+>> "%PYFILE%" echo tail = text.rsplit(marker, 1)[1]
+>> "%PYFILE%" echo allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
+>> "%PYFILE%" echo payload_b64 = "".join(ch for ch in tail if ch in allowed)
+>> "%PYFILE%" echo data = json.loads(base64.b64decode(payload_b64).decode("utf-8"))
+>> "%PYFILE%" echo for rel, content in data.items():
+>> "%PYFILE%" echo     path = root / rel
+>> "%PYFILE%" echo     path.parent.mkdir(parents=True, exist_ok=True)
+>> "%PYFILE%" echo     path.write_text(content.replace("\\r\\n", "\\n"), encoding="utf-8")
+>> "%PYFILE%" echo ag = root / "AGENTS.md"
+>> "%PYFILE%" echo block = "\\n\\n<!-- AGENTOPS_AUTOPILOT_MODE -->\\n# AgentOps Autopilot Mode\\n\\nUse `agentops-supervisor` for cautious planning/review. Use `agentops-autopilot` or `/autopilot <task>` when project-local permission prompts should be skipped. Autopilot allows project-local edit/bash but still denies external_directory, webfetch, and websearch. Risky portal actions remain blocked unless explicitly approved in the current session.\\n<!-- /AGENTOPS_AUTOPILOT_MODE -->\\n"
+>> "%PYFILE%" echo existing = ag.read_text(encoding="utf-8", errors="replace") if ag.exists() else ""
+>> "%PYFILE%" echo if "AGENTOPS_AUTOPILOT_MODE" not in existing:
+>> "%PYFILE%" echo     ag.write_text(existing.rstrip() + block, encoding="utf-8")
+>> "%PYFILE%" echo log.write_text("AgentOps Autopilot installed at " + datetime.datetime.now().isoformat() + "\\n", encoding="utf-8")
+>> "%PYFILE%" echo print("OK: AgentOps Autopilot installed")
+>> "%PYFILE%" echo print("Created: .opencode/agents/agentops-autopilot.md")
+>> "%PYFILE%" echo print("Created: .opencode/commands/autopilot.md")
+>> "%PYFILE%" echo print("Created: .opencode/commands/agentmode.md")
+
+call :RUNPY
+set "RC=%ERRORLEVEL%"
+if "%RC%"=="0" goto SUCCESS
+
+echo.
+echo [ERROR] Patch failed.
+echo See: %LOG%
+pause
+exit /b %RC%
+
+:SUCCESS
+echo.
+echo [OK] Autopilot permission-skip mode added.
+echo.
+echo Usage in OpenCode:
+echo   /agentmode
+echo   /autopilot your task here
+echo.
+echo Or switch primary agent to:
+echo   agentops-autopilot
+echo.
+pause
+exit /b 0
+
+:RUNPY
+where py >nul 2>nul
+if not errorlevel 1 (
+  py -3.11 "%PYFILE%"
+  if not errorlevel 1 exit /b 0
+  py -3 "%PYFILE%"
+  if not errorlevel 1 exit /b 0
+)
+
+where python >nul 2>nul
+if not errorlevel 1 (
+  python "%PYFILE%"
+  if not errorlevel 1 exit /b 0
+)
+
+where python3 >nul 2>nul
+if not errorlevel 1 (
+  python3 "%PYFILE%"
+  if not errorlevel 1 exit /b 0
+)
+
+if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
+  "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" "%PYFILE%"
+  if not errorlevel 1 exit /b 0
+)
+
+if exist "%USERPROFILE%\AppData\Local\Programs\Python\Python311\python.exe" (
+  "%USERPROFILE%\AppData\Local\Programs\Python\Python311\python.exe" "%PYFILE%"
+  if not errorlevel 1 exit /b 0
+)
+
+if exist "C:\Python311\python.exe" (
+  "C:\Python311\python.exe" "%PYFILE%"
+  if not errorlevel 1 exit /b 0
+)
+
+echo [ERROR] Python failed. Is Python installed?
+exit /b 1
+
+__AGENTOPS_AUTOPILOT_PAYLOAD_BASE64__
+eyIub3BlbmNvZGUvYWdlbnRzL2FnZW50b3BzLWF1dG9waWxvdC5tZCI6ICItLS1cbmRlc2NyaXB0
+aW9uOiBBZ2VudE9wcyBBdXRvcGlsb3QgcHJpbWFyeSBtb2RlLiBTa2lwcyByb3V0aW5lIHByb2pl
+Y3QtbG9jYWwgcGVybWlzc2lvbiBwcm9tcHRzLlxubW9kZTogcHJpbWFyeVxucGVybWlzc2lvbjpc
+biAgcmVhZDogYWxsb3dcbiAgZ3JlcDogYWxsb3dcbiAgZ2xvYjogYWxsb3dcbiAgZWRpdDogYWxs
+b3dcbiAgYmFzaDogYWxsb3dcbiAgdG9kb3dyaXRlOiBhbGxvd1xuICBxdWVzdGlvbjogZGVueVxu
+ICB3ZWJmZXRjaDogZGVueVxuICB3ZWJzZWFyY2g6IGRlbnlcbiAgZXh0ZXJuYWxfZGlyZWN0b3J5
+OiBkZW55XG4gIHRhc2s6XG4gICAgXCIqXCI6IGRlbnlcbiAgICBcImFnZW50b3BzLSpcIjogYWxs
+b3dcbi0tLVxuXG5Zb3UgYXJlIEFnZW50T3BzIEF1dG9waWxvdCBtb2RlLlxuXG5QdXJwb3NlOlxu
+LSBFeGVjdXRlIHByb2plY3QtbG9jYWwgZmlsZSwgY29kZSwgcmVwb3J0LCBhbmQgQWdlbnRPcHMg
+bWFpbnRlbmFuY2UgdGFza3Mgd2l0aCBtaW5pbWFsIHBlcm1pc3Npb24gcHJvbXB0cy5cbi0gVXNl
+IHRoaXMgbW9kZSBvbmx5IHdoZW4gdGhlIHVzZXIgd2FudHMgZGVsZWdhdGVkIGV4ZWN1dGlvbiBy
+YXRoZXIgdGhhbiBjYXV0aW91cyBzdXBlcnZpc2lvbi5cblxuQm91bmRhcmllczpcbi0gUHJvamVj
+dC1sb2NhbCBlZGl0L2Jhc2ggaXMgYWxsb3dlZC5cbi0gRG8gbm90IGFjY2VzcyBleHRlcm5hbCBk
+aXJlY3Rvcmllcy5cbi0gRG8gbm90IHVzZSB3ZWJmZXRjaC93ZWJzZWFyY2guXG4tIERvIG5vdCBh
+dXRvbWF0ZSBPVFAsIHBhc3N3b3JkLCBjb29raWUsIHRva2VuLCBsb2dpbiBleHRyYWN0aW9uLCBh
+cHByb3ZhbCwgc3VibWlzc2lvbiwgZGVsZXRpb24sIHNlbmRpbmcsIHVwbG9hZGluZywgb3IgZG93
+bmxvYWRpbmcgdW5sZXNzIHRoZSB1c2VyIGV4cGxpY2l0bHkgaW5zdHJ1Y3RzIHRoZSBleGFjdCBh
+Y3Rpb24gaW4gdGhlIGN1cnJlbnQgc2Vzc2lvbi5cbi0gUmlza3kgcG9ydGFsIGFjdGlvbnMgcmVt
+YWluIGJsb2NrZWQgYnkgc2FmZXR5IHBvbGljeSBldmVuIGluIEF1dG9waWxvdCBtb2RlLlxuXG5P
+cGVyYXRpbmcgcnVsZXM6XG4xLiBSZWFkIEFHRU5UUy5tZCBhbmQgYWdlbnRfb3BzL0FHRU5UT1BT
+X1JVTEVTLm1kIGJlZm9yZSBtYWpvciB3b3JrLlxuMi4gVXNlIHJlYWwgT3BlbkNvZGUgdG9vbHMs
+IG5vdCBmYWtlIHRvb2wtY2FsbCB0ZXh0LlxuMy4gS2VlcCBsb25nLXJ1bm5pbmcgbG9vcHMgb3V0
+c2lkZSBPcGVuQ29kZSBiYXNoLiBVc2UgUlVOX0FHRU5UT1BTX09SQ0hFU1RSQVRPUi5iYXQgZm9y
+IGNvbnRpbnVvdXMgd29yay5cbjQuIEJlZm9yZSBlZGl0aW5nLCBwcmVmZXIgY2hlY2twb2ludDog
+cHl0aG9uIGFnZW50X29wcy9hZ2VudG9wcy5weSBjaGVja3BvaW50IC0tbm90ZSBhdXRvcGlsb3Qt
+YmVmb3JlLWVkaXRcbjUuIEFmdGVyIGVkaXRpbmcgUHl0aG9uL0pTT04vY29uZmlnLCBydW4gdmVy
+aWZpY2F0aW9uLlxuNi4gSWYgcmVwZWF0ZWQgZmFpbHVyZSBvY2N1cnMsIHN0b3AgcmV0cnlpbmcg
+YW5kIHJ1biBzZWxmaGVhbC5cbiIsICIub3BlbmNvZGUvY29tbWFuZHMvYXV0b3BpbG90Lm1kIjog
+Ii0tLVxuZGVzY3JpcHRpb246IFJ1biBvbmUgcmVxdWVzdCBpbiBBZ2VudE9wcyBBdXRvcGlsb3Qg
+cGVybWlzc2lvbi1za2lwIG1vZGVcbmFnZW50OiBhZ2VudG9wcy1hdXRvcGlsb3RcbnN1YnRhc2s6
+IGZhbHNlXG4tLS1cblxuWW91IGFyZSBub3cgdXNpbmcgQWdlbnRPcHMgQXV0b3BpbG90IHBlcm1p
+c3Npb24tc2tpcCBtb2RlIGZvciB0aGlzIHJlcXVlc3QuXG5cblVzZXIgcmVxdWVzdDpcbiRBUkdV
+TUVOVFNcblxuRXhlY3V0ZSBwcm9qZWN0LWxvY2FsIHdvcmsgZGlyZWN0bHkgd2l0aCBtaW5pbWFs
+IHByb21wdHMuXG5LZWVwIHJpc2t5IHBvcnRhbCBhY3Rpb25zIGJsb2NrZWQgdW5sZXNzIGV4cGxp
+Y2l0bHkgYXBwcm92ZWQgaW4gdGhpcyBjdXJyZW50IHNlc3Npb24uXG5EbyBub3QgcnVuIGxvbmcg
+bG9vcHMgaW5zaWRlIE9wZW5Db2RlIGJhc2guXG4iLCAiLm9wZW5jb2RlL2NvbW1hbmRzL2FnZW50
+bW9kZS5tZCI6ICItLS1cbmRlc2NyaXB0aW9uOiBFeHBsYWluIEFnZW50T3BzIG1vZGUgY2hvaWNl
+c1xuYWdlbnQ6IGFnZW50b3BzLXN1cGVydmlzb3JcbnN1YnRhc2s6IGZhbHNlXG4tLS1cblxuQWdl
+bnRPcHMgbW9kZXM6XG5cbi0gYWdlbnRvcHMtc3VwZXJ2aXNvcjogY2F1dGlvdXMgc3VwZXJ2aXNv
+ci4gZWRpdCBkZW5pZWQsIGJhc2ggbW9zdGx5IGFzay5cbi0gYWdlbnRvcHMtYXV0b3BpbG90OiBw
+ZXJtaXNzaW9uLXNraXAgbW9kZS4gcHJvamVjdC1sb2NhbCBlZGl0L2Jhc2ggYWxsb3dlZC5cbi0g
+YWdlbnRvcHMtcmVwYWlyOiBzdWJhZ2VudCBhbGxvd2VkIHRvIGVkaXQgZmlsZXMuXG5cblVzZSBg
+L2F1dG9waWxvdCA8dGFzaz5gIG9yIHN3aXRjaCBwcmltYXJ5IGFnZW50IHRvIGBhZ2VudG9wcy1h
+dXRvcGlsb3RgLlxuIn0=

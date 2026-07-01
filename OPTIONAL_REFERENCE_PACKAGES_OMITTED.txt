@@ -1,0 +1,1 @@
+OPTIONAL_REFERENCE_PACKAGES/ (3 reference .zip backups, ~430KB) omitted from git to keep the PR reviewable. They are reference-only per the START_HERE instructions.
