@@ -33,12 +33,150 @@ jobs:
           cd opencode-source
           git checkout afff74eb2c9fc3808a9795f365707f32853099e9
 
-      - name: Apply permission patch
+      - name: Patch OpenCode source directly
         shell: pwsh
         run: |
-          cd opencode-source
-          git apply --check ..\PROJECT_FULL_SOURCE_TO_EDIT\opencode_core_patch\opencode-permission-mode-toggle.patch
-          git apply ..\PROJECT_FULL_SOURCE_TO_EDIT\opencode_core_patch\opencode-permission-mode-toggle.patch
+          @'
+          from pathlib import Path
+          root = Path('opencode-source')
+          def p(x): return root / x
+          def r(x): return p(x).read_text(encoding='utf-8')
+          def w(x, s): p(x).write_text(s, encoding='utf-8', newline='\n')
+          def one(s, old, new, name):
+              n = s.count(old)
+              if n != 1: raise RuntimeError(f'{name}: {n} matches')
+              return s.replace(old, new, 1)
+
+          f='packages/tui/src/config/keybind.ts'
+          s=r(f)
+          s=one(s, '  agent_cycle_reverse: keybind("shift+tab", "Previous agent"),\n  variant_cycle: keybind("ctrl+t", "Cycle model variants"),', '  agent_cycle_reverse: keybind("shift+f3", "Previous agent"),\n  variant_cycle: keybind("ctrl+t", "Cycle model variants"),\n  permission_mode_cycle: keybind("shift+tab", "Toggle permission approval policy (ASK/AUTO)"),', 'keybind')
+          s=one(s, '  agent_cycle_reverse: "agent.cycle.reverse",\n  variant_cycle: "variant.cycle",', '  agent_cycle_reverse: "agent.cycle.reverse",\n  permission_mode_cycle: "permission.mode",\n  variant_cycle: "variant.cycle",', 'command map')
+          w(f,s)
+
+          w('packages/tui/src/context/permission.tsx', '''import { createStore } from "solid-js/store"
+          import { useArgs } from "./args"
+          import { createSimpleContext } from "./helper"
+
+          export type PermissionMode = "ask" | "auto"
+          const PermissionModeOrder: PermissionMode[] = ["ask", "auto"]
+
+          export const { use: usePermission, provider: PermissionProvider } = createSimpleContext({
+            name: "Permission",
+            init: () => {
+              const args = useArgs()
+              const [store, setStore] = createStore<{ mode: PermissionMode }>({
+                mode: args.auto ? "auto" : "ask",
+              })
+              function set(mode: PermissionMode) { setStore("mode", mode) }
+              function cycle() {
+                setStore("mode", (mode) => {
+                  const idx = PermissionModeOrder.indexOf(mode)
+                  return PermissionModeOrder[(idx + 1) % PermissionModeOrder.length] ?? "ask"
+                })
+              }
+              return {
+                get mode() { return store.mode },
+                set,
+                cycle,
+                toggle() { cycle() },
+              }
+            },
+          })
+          '''.replace('          ', ''))
+
+          f='packages/tui/src/app.tsx'
+          s=r(f)
+          s=one(s, '  "mcp.list",\n  "agent.cycle",\n  "agent.cycle.reverse",', '  "mcp.list",\n  "agent.cycle",\n  "permission.mode",\n  "agent.cycle.reverse",', 'app bindings')
+          s=one(s, '''      {
+                name: "agent.cycle.reverse",
+                title: "Agent cycle reverse",
+                category: "Agent",
+                hidden: true,
+                run: () => {
+                  local.agent.move(-1)
+                },
+              },
+              {
+                name: "provider.connect",''', '''      {
+                name: "agent.cycle.reverse",
+                title: "Agent cycle reverse",
+                category: "Agent",
+                hidden: true,
+                run: () => {
+                  local.agent.move(-1)
+                },
+              },
+              {
+                name: "permission.mode",
+                title: `Permission approval: ${local.permission.mode.toUpperCase()} (toggle ASK/AUTO)`,
+                category: "System",
+                slashName: "permission",
+                slashAliases: ["perm"],
+                run: () => {
+                  local.permission.cycle()
+                  dialog.clear()
+                },
+              },
+              {
+                name: "provider.connect",''', 'app command')
+          w(f,s)
+
+          f='packages/tui/src/component/prompt/index.tsx'
+          s=r(f)
+          block=r'''
+              const permissionCommand = inputText.trim().match(/^\/permission(?:\s+(\S+))?\s*$/i)
+              if (permissionCommand) {
+                const action = (permissionCommand[1] ?? "status").toLowerCase()
+                const validPolicies = ["ask", "auto"] as const
+                if (action === "cycle") {
+                  local.permission.cycle()
+                  toast.show({ message: `Permission approval: ${local.permission.mode.toUpperCase()}`, variant: "info" })
+                } else if (action === "status") {
+                  toast.show({ message: `Permission approval: ${local.permission.mode.toUpperCase()}`, variant: "info" })
+                } else if (validPolicies.includes(action as (typeof validPolicies)[number])) {
+                  local.permission.set(action as (typeof validPolicies)[number])
+                  toast.show({ message: `Permission approval: ${local.permission.mode.toUpperCase()}`, variant: "info" })
+                } else {
+                  toast.show({ title: "Unknown permission action", message: "Use /permission status, cycle, ask, or auto.", variant: "warning" })
+                }
+                history.append({ ...store.prompt, mode: currentMode })
+                input.extmarks.clear()
+                setStore("prompt", { input: "", parts: [] })
+                setStore("extmarkToPartIndex", new Map())
+                props.onSubmit?.()
+                input.clear()
+                if (finishMoveProgress) move.finishSubmit()
+                return true
+              }
+
+          '''
+          s=one(s, '    if (store.mode === "shell") {', block + '    if (store.mode === "shell") {', 'slash command')
+          w(f,s)
+
+          f='packages/tui/src/routes/session/index.tsx'
+          s=r(f)
+          s=one(s, '  "session.export",\n  "session.child.first",\n  "session.parent",', '  "session.export",\n  "session.child.first",\n  "permission.mode",\n  "session.parent",', 'session bindings')
+          s=one(s, '                      right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}\n', '''                      right={
+                                <box flexDirection="row" gap={1} alignItems="center">
+                                  <PermissionModeBadge />
+                                  <pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />
+                                </box>
+                              }
+          ''', 'badge slot')
+          s=one(s, 'function UserMessage(props: {', '''function PermissionModeBadge() {
+            const local = useLocal()
+            const { theme } = useTheme()
+            const shortcut = useCommandShortcut("permission.mode")
+            const label = createMemo(() => local.permission.mode.toUpperCase())
+            const color = createMemo(() => (local.permission.mode === "auto" ? theme.warning : theme.textMuted))
+            return <text fg={color()}>{`[PERM:${label()} ${shortcut()}]`}</text>
+          }
+
+          function UserMessage(props: {''', 'badge function')
+          w(f,s)
+          print('direct source patch complete')
+          '@ | Set-Content -Path patch_direct.py -Encoding UTF8
+          python patch_direct.py
 
       - name: Install dependencies
         shell: pwsh
