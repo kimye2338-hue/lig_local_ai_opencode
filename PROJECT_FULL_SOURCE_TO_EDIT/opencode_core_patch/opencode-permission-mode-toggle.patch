@@ -112,7 +112,7 @@ diff --git a/packages/tui/src/component/prompt/index.tsx b/packages/tui/src/comp
 @@ -1049,6 +1049,38 @@ export function Prompt(props: PromptProps) {
          : []
  
-+    const permissionCommand = inputText.trim().match(/^\/permission(?:\s+(\S+))?\s*$/i)
++    const permissionCommand = inputText.trim().match(/^\/(?:permission|perm)(?:\s+(\S+))?\s*$/i)
 +    if (permissionCommand) {
 +      const action = (permissionCommand[1] ?? "status").toLowerCase()
 +      const validPolicies = ["ask", "auto"] as const
@@ -127,7 +127,7 @@ diff --git a/packages/tui/src/component/prompt/index.tsx b/packages/tui/src/comp
 +      } else {
 +        toast.show({
 +          title: "Unknown permission action",
-+          message: "Use /permission status, cycle, ask, or auto.",
++          message: "Use /permission status, cycle, ask, auto, or /perm aliases.",
 +          variant: "warning",
 +        })
 +      }
@@ -206,12 +206,12 @@ diff --git a/packages/tui/src/routes/session/permission.tsx b/packages/tui/src/r
  
  type PermissionStage = "permission" | "always" | "reject"
  
-@@ -131,7 +132,27 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?:
+@@ -131,7 +132,29 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?:
    })
  
    const { theme } = useTheme()
 +  const local = useLocal()
-+  let autoReplied = false
++  let autoRepliedRequestID: string | undefined
 +
 +  function replyOnce() {
 +    void sdk.client.permission.reply({
@@ -225,14 +225,15 @@ diff --git a/packages/tui/src/routes/session/permission.tsx b/packages/tui/src/r
 +  createEffect(() => {
 +    if (store.stage !== "permission") return
 +    if (local.permission.mode !== "auto") return
-+    if (autoReplied) return
-+    autoReplied = true
++    const requestID = props.request.id
++    if (autoRepliedRequestID === requestID) return
++    autoRepliedRequestID = requestID
 +    replyOnce()
 +  })
  
    return (
      <Switch>
-@@ -390,12 +411,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?:
+@@ -390,12 +413,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?:
                    })
                    return
                  }
