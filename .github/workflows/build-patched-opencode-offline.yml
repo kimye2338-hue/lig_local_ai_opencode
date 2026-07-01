@@ -106,74 +106,74 @@ jobs:
           Copy-Item -Path PROJECT_FULL_SOURCE_TO_EDIT\* -Destination $workspace -Recurse -Force
 
           @'
-@echo off
-setlocal EnableExtensions
-set "ROOT=%USERPROFILE%\OpenCodeLIG"
-set "BIN=%ROOT%\bin"
-set "WS=%ROOT%\workspace"
-echo.
-echo ============================================================
-echo LIG OpenCode patched offline installer
-echo ============================================================
-echo Target: %ROOT%
-echo.
-if not exist "%BIN%" mkdir "%BIN%"
-if not exist "%WS%" mkdir "%WS%"
-copy /y "%~dp0payload\opencode.exe" "%BIN%\opencode.exe" >nul
-if errorlevel 1 (
-  echo [ERROR] Failed to copy opencode.exe
-  pause
-  exit /b 1
-)
-robocopy "%~dp0workspace" "%WS%" /E /NFL /NDL /NJH /NJS /NP >nul
-if errorlevel 8 (
-  echo [ERROR] Workspace copy failed
-  pause
-  exit /b 1
-)
-(
-  echo @echo off
-  echo set "OCODE_EXE=%%USERPROFILE%%\OpenCodeLIG\bin\opencode.exe"
-  echo set "AGENTOPS_HOME=%%USERPROFILE%%\OpenCodeLIG\workspace"
-  echo cd /d "%%AGENTOPS_HOME%%"
-  echo "%%OCODE_EXE%%" %%*
-) > "%WS%\RUN_OPENCODE_LIG.bat"
-(
-  echo @echo off
-  echo "%%USERPROFILE%%\OpenCodeLIG\bin\opencode.exe" --version
-  echo if errorlevel 1 exit /b 1
-  echo echo [OK] patched opencode.exe exists and runs.
-) > "%WS%\VERIFY_OFFLINE_INSTALL.bat"
-echo.
-echo [OK] Installed.
-echo Run:
-echo   %WS%\RUN_OPENCODE_LIG.bat
-echo Verify:
-echo   %WS%\VERIFY_OFFLINE_INSTALL.bat
-echo.
-pause
-exit /b 0
-'@ | Set-Content -Path (Join-Path $pkg 'INSTALL_OFFLINE_LIG_OPENCODE.bat.txt') -Encoding ASCII
+          @echo off
+          setlocal EnableExtensions
+          set "ROOT=%USERPROFILE%\OpenCodeLIG"
+          set "BIN=%ROOT%\bin"
+          set "WS=%ROOT%\workspace"
+          echo.
+          echo ============================================================
+          echo LIG OpenCode patched offline installer
+          echo ============================================================
+          echo Target: %ROOT%
+          echo.
+          if not exist "%BIN%" mkdir "%BIN%"
+          if not exist "%WS%" mkdir "%WS%"
+          copy /y "%~dp0payload\opencode.exe" "%BIN%\opencode.exe" >nul
+          if errorlevel 1 (
+            echo [ERROR] Failed to copy opencode.exe
+            pause
+            exit /b 1
+          )
+          robocopy "%~dp0workspace" "%WS%" /E /NFL /NDL /NJH /NJS /NP >nul
+          if errorlevel 8 (
+            echo [ERROR] Workspace copy failed
+            pause
+            exit /b 1
+          )
+          (
+            echo @echo off
+            echo set "OCODE_EXE=%%USERPROFILE%%\OpenCodeLIG\bin\opencode.exe"
+            echo set "AGENTOPS_HOME=%%USERPROFILE%%\OpenCodeLIG\workspace"
+            echo cd /d "%%AGENTOPS_HOME%%"
+            echo "%%OCODE_EXE%%" %%*
+          ) > "%WS%\RUN_OPENCODE_LIG.bat"
+          (
+            echo @echo off
+            echo "%%USERPROFILE%%\OpenCodeLIG\bin\opencode.exe" --version
+            echo if errorlevel 1 exit /b 1
+            echo echo [OK] patched opencode.exe exists and runs.
+          ) > "%WS%\VERIFY_OFFLINE_INSTALL.bat"
+          echo.
+          echo [OK] Installed.
+          echo Run:
+          echo   %WS%\RUN_OPENCODE_LIG.bat
+          echo Verify:
+          echo   %WS%\VERIFY_OFFLINE_INSTALL.bat
+          echo.
+          pause
+          exit /b 0
+          '@ | Set-Content -Path (Join-Path $pkg 'INSTALL_OFFLINE_LIG_OPENCODE.bat.txt') -Encoding ASCII
 
           @'
-# LIG OpenCode patched offline package
+          # LIG OpenCode patched offline package
 
-This package contains a Windows OpenCode binary built from upstream OpenCode with the permission approval controller patch applied.
+          This package contains a Windows OpenCode binary built from upstream OpenCode with the permission approval controller patch applied.
 
-Install on the offline company PC:
+          Install on the offline company PC:
 
-1. Extract this ZIP.
-2. Rename `INSTALL_OFFLINE_LIG_OPENCODE.bat.txt` to `INSTALL_OFFLINE_LIG_OPENCODE.bat`.
-3. Run it.
-4. Start OpenCode with `%USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat`.
-5. Check permission approval control:
-   - `Shift+Tab` toggles `[PERM:ASK]` / `[PERM:AUTO]`.
-   - `/permission status`
-   - `/permission auto`
-   - `/permission ask`
+          1. Extract this ZIP.
+          2. Rename `INSTALL_OFFLINE_LIG_OPENCODE.bat.txt` to `INSTALL_OFFLINE_LIG_OPENCODE.bat`.
+          3. Run it.
+          4. Start OpenCode with `%USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat`.
+          5. Check permission approval control:
+             - `Shift+Tab` toggles `[PERM:ASK]` / `[PERM:AUTO]`.
+             - `/permission status`
+             - `/permission auto`
+             - `/permission ask`
 
-The installer uses local files only. It does not clone GitHub and does not use PowerShell execution-policy bypass.
-'@ | Set-Content -Path (Join-Path $pkg 'README_OFFLINE_INSTALL.md') -Encoding UTF8
+          The installer uses local files only. It does not clone GitHub and does not use PowerShell execution-policy bypass.
+          '@ | Set-Content -Path (Join-Path $pkg 'README_OFFLINE_INSTALL.md') -Encoding UTF8
 
           $hashes = @()
           Get-ChildItem -Path $pkg -Recurse -File | Sort-Object FullName | ForEach-Object {
