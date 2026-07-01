@@ -250,15 +250,66 @@ diff --git a/packages/tui/src/routes/session/permission.tsx b/packages/tui/src/r
 diff --git a/packages/tui/src/component/spinner.tsx b/packages/tui/src/component/spinner.tsx
 --- a/packages/tui/src/component/spinner.tsx
 +++ b/packages/tui/src/component/spinner.tsx
-@@ -14,7 +14,10 @@ export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
-   const kv = useKV()
+@@ -1,23 +1,13 @@
+-import { Show } from "solid-js"
+ import { useTheme } from "../context/theme"
+-import { useKV } from "../context/kv"
+ import type { JSX } from "@opentui/solid"
+ import type { RGBA } from "@opentui/core"
+-import "opentui-spinner/solid"
+ 
+ export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+ 
+ export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
+   const { theme } = useTheme()
+-  const kv = useKV()
    const color = () => props.color ?? theme.textMuted
-   return (
+-  return (
 -    <Show when={kv.get("animations_enabled", true)} fallback={<text fg={color()}>⋯ {props.children}</text>}>
-+    // Disable the custom <spinner> renderable for this offline Windows build.
-+    // The bundled OpenTUI reconciler can crash with "Unknown component type spinner"
-+    // when opentui-spinner is not registered at runtime, so always use the text fallback.
-+    <Show when={false && kv.get("animations_enabled", true)} fallback={<text fg={color()}>⋯ {props.children}</text>}>
-       <box flexDirection="row" gap={1}>
-         <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
-         <Show when={props.children}>
+-      <box flexDirection="row" gap={1}>
+-        <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
+-        <Show when={props.children}>
+-          <text fg={color()}>{props.children}</text>
+-        </Show>
+-      </box>
+-    </Show>
+-  )
++  return <text fg={color()}>⋯ {props.children}</text>
+ }
+diff --git a/packages/opencode/src/cli/cmd/run/footer.subagent.tsx b/packages/opencode/src/cli/cmd/run/footer.subagent.tsx
+--- a/packages/opencode/src/cli/cmd/run/footer.subagent.tsx
++++ b/packages/opencode/src/cli/cmd/run/footer.subagent.tsx
+@@ -126,13 +126,9 @@ export function RunFooterSubagentBody(props: {
+         <Show when={tab()}>
+           {(current) => (
+             <box width="100%" flexDirection="row" gap={1} paddingBottom={1} flexShrink={0}>
+-              {current().status === "running" ? (
+-                <box flexShrink={0}>
+-                  <spinner frames={SPINNER_FRAMES} interval={80} color={statusColor(footer(), current().status)} />
+-                </box>
+-              ) : (
+-                <text fg={statusColor(footer(), current().status)} wrapMode="none" truncate flexShrink={0}>
+-                  {statusIcon(current().status)}
+-                </text>
+-              )}
++              <text fg={statusColor(footer(), current().status)} wrapMode="none" truncate flexShrink={0}>
++                {statusIcon(current().status)}
++              </text>
+               <text fg={footer().text} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
+                 {title()}
+                 <Show when={subtitle().length > 0}>
+diff --git a/packages/opencode/src/cli/cmd/run/footer.view.tsx b/packages/opencode/src/cli/cmd/run/footer.view.tsx
+--- a/packages/opencode/src/cli/cmd/run/footer.view.tsx
++++ b/packages/opencode/src/cli/cmd/run/footer.view.tsx
+@@ -832,12 +832,6 @@ export function RunFooterView(props: RunFooterViewProps) {
+                   backgroundColor="transparent"
+                 >
+-                  <Show when={busy() && !exiting()}>
+-                    <box flexShrink={0}>
+-                      <spinner color={spin().color} frames={spin().frames} interval={40} />
+-                    </box>
+-                  </Show>
+-
+                   <text fg={statusColor()} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
+                     <Show when={busy() && !exiting()} fallback={statusText()}>
+                       <Show when={interruptLabel()}>
