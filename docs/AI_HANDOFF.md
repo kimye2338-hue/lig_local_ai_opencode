@@ -4,7 +4,7 @@ This is the single shared handoff file for Codex, Claude Code, Claude chat, and 
 
 ## Current state
 
-The repository now builds one current offline Windows package through one workflow:
+The repository builds one current offline Windows package through one workflow:
 
 - Workflow: `.github/workflows/build-offline-package.yml`
 - Patch: `patches/opencode-permission-mode-toggle.patch`
@@ -13,22 +13,23 @@ The repository now builds one current offline Windows package through one workfl
 
 PR #4 was merged into `main` on 2026-07-01.
 
-Merge commit:
+Important commits:
 
-- `bde4cc036d091bb35971999faf7a4394b8865ddf`
+- PR #4 merge: `bde4cc036d091bb35971999faf7a4394b8865ddf`
+- Repository cleanup: `2ac5d4aa99476fe80a44ba5b42391747aee3de11`
 
-Latest validated package before repository cleanup:
+Verified cleanup baseline:
 
-- Workflow run: `28504106004`
-- Artifact ID: `8004407134`
-- Artifact digest: `sha256:e29ce2e8238352e2f6dd4f3953204d48f53a3b88a1ef48d0d5722a43dc8ec1b3`
-- `payload/opencode.exe` SHA256: `7a322c3f62c1190f11d4a22a482fb9edf02f11a6749a6177160a23895c0d4b51`
+- Workflow run: `28505265540`
+- Artifact ID: `8004882821`
+- Artifact digest: `sha256:2d52e390461b732491eadafcde025ec7f329577d40e7e1f52618be6aab991115`
+- `payload/opencode.exe` SHA256: `5fa524bbddb547fcbc776bf15c824945dcdd538b6aaccc077db4b47ff521545e`
 - Artifact ZIP SHA matched GitHub digest.
-- `SHA256SUMS.txt` verified 91 files with 0 mismatches.
-- Hidden workspace files such as `.opencode/commands/permission.md` and `.opencode/agents/agentops-supervisor.md` were present.
-- `payload/opencode.exe --version` exited successfully.
+- `SHA256SUMS.txt` verified 81 files with 0 mismatches.
+- Hidden workspace files were present.
+- `workspace/docs/AI_HANDOFF.md` and `workspace/patches/opencode-permission-mode-toggle.patch` were present.
 
-After the repository cleanup, use the next successful run from the renamed workflow path as the new install artifact.
+If a newer successful workflow run exists on `main`, use that newer artifact. The baseline above is the last manually downloaded and checksum-verified artifact.
 
 ## User-reported crash and fix
 
@@ -111,7 +112,7 @@ The patch changes these upstream OpenCode files after applying to the pinned com
 When an AI agent changes behavior or packaging:
 
 1. Update this file with the new current state.
-2. Update `docs/CURRENT_RELEASE.md` if a new artifact is validated.
+2. Update `docs/CURRENT_RELEASE.md` if a new artifact is manually downloaded and verified.
 3. Update `docs/CHANGELOG.md` with the decision and user impact.
 4. Keep old review material condensed in `docs/ARCHIVE_SUMMARY.md`; do not add a new large instruction bundle.
 5. Report exact workflow run ID, artifact ID, digest, and verification results.

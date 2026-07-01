@@ -6,16 +6,17 @@ Current focus: a patched OpenCode TUI where permission approval mode is separate
 
 ## Latest validated package
 
-Use the latest successful artifact from GitHub Actions, not old attached ZIPs or archived instruction bundles.
+Use the latest successful `LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE` artifact from GitHub Actions. The verified cleanup baseline is:
 
-- Merge commit: `bde4cc036d091bb35971999faf7a4394b8865ddf`
-- Source branch merged: `codex/permission-mode-next-version`
-- Workflow run: `28504106004`
+- Commit: `2ac5d4aa99476fe80a44ba5b42391747aee3de11`
+- Workflow run: `28505265540`
 - Artifact: `LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE`
-- Artifact ID: `8004407134`
-- Artifact digest: `sha256:e29ce2e8238352e2f6dd4f3953204d48f53a3b88a1ef48d0d5722a43dc8ec1b3`
-- `payload/opencode.exe` SHA256: `7a322c3f62c1190f11d4a22a482fb9edf02f11a6749a6177160a23895c0d4b51`
-- Validation: GitHub Actions success, downloaded artifact SHA matched, `SHA256SUMS.txt` checked 91 files with 0 mismatches, hidden `.opencode` files present.
+- Artifact ID: `8004882821`
+- Artifact digest: `sha256:2d52e390461b732491eadafcde025ec7f329577d40e7e1f52618be6aab991115`
+- `payload/opencode.exe` SHA256: `5fa524bbddb547fcbc776bf15c824945dcdd538b6aaccc077db4b47ff521545e`
+- Validation: GitHub Actions success, downloaded artifact SHA matched, `SHA256SUMS.txt` checked 81 files with 0 mismatches, hidden `.opencode` files plus `workspace/docs` and `workspace/patches` present.
+
+If a newer successful workflow run exists on `main`, use that newer artifact; it should be equivalent or newer than this baseline.
 
 ## Repository map
 

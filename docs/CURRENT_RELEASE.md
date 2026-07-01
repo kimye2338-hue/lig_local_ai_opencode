@@ -4,37 +4,40 @@ Status date: 2026-07-01
 
 ## Decision
 
-Latest validated pre-cleanup artifact: usable as the current fixed package.
+Use the latest successful `LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE` artifact from the `Build LIG OpenCode offline package` workflow on `main`.
 
-After the repository cleanup lands, prefer the next successful `Build LIG OpenCode offline package` artifact because it uses the clearer repository layout and includes `docs/` plus `patches/` in the installed workspace.
+Verified cleanup baseline:
 
-## Latest validated artifact before cleanup
-
-- Workflow run: `28504106004`
+- Commit: `2ac5d4aa99476fe80a44ba5b42391747aee3de11`
+- Workflow run: `28505265540`
 - Artifact: `LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE`
-- Artifact ID: `8004407134`
-- Artifact digest: `sha256:e29ce2e8238352e2f6dd4f3953204d48f53a3b88a1ef48d0d5722a43dc8ec1b3`
-- `payload/opencode.exe` SHA256: `7a322c3f62c1190f11d4a22a482fb9edf02f11a6749a6177160a23895c0d4b51`
-- Source merge commit: `bde4cc036d091bb35971999faf7a4394b8865ddf`
+- Artifact ID: `8004882821`
+- Artifact digest: `sha256:2d52e390461b732491eadafcde025ec7f329577d40e7e1f52618be6aab991115`
+- `payload/opencode.exe` SHA256: `5fa524bbddb547fcbc776bf15c824945dcdd538b6aaccc077db4b47ff521545e`
+
+If a newer successful run exists on `main`, use that newer artifact. This file records the last manually downloaded and checksum-verified baseline.
 
 ## Verified
 
 - GitHub Actions completed successfully.
-- Patch apply succeeded.
+- Patch apply succeeded from the new `patches/` path.
 - Dependency install succeeded.
 - OpenCode package typecheck succeeded.
 - Windows binary build succeeded.
-- Package assembly succeeded.
+- Package assembly succeeded from `workspace-template/`.
 - Package required-file verification succeeded.
 - Artifact upload succeeded.
 - Downloaded artifact ZIP SHA256 matched GitHub artifact digest.
-- `SHA256SUMS.txt` checked `91` files with `0` mismatches.
+- `SHA256SUMS.txt` checked `81` files with `0` mismatches.
 - Hidden files were present after extraction:
-  - `workspace/.gitignore`
   - `workspace/.opencode/commands/permission.md`
   - `workspace/.opencode/commands/agentmode.md`
   - `workspace/.opencode/agents/agentops-supervisor.md`
-- `payload/opencode.exe --version` exited successfully in local validation.
+  - `workspace/.opencode/plugins/command-guard.ts`
+- Context files were present after extraction:
+  - `workspace/docs/AI_HANDOFF.md`
+  - `workspace/docs/REPOSITORY_MAP.md`
+  - `workspace/patches/opencode-permission-mode-toggle.patch`
 
 ## Fixes included
 
@@ -45,7 +48,8 @@ After the repository cleanup lands, prefer the next successful `Build LIG OpenCo
 - Installer backs up an existing `%USERPROFILE%\OpenCodeLIG`.
 - Hidden `.opencode` files are included in artifacts.
 - Direct `<spinner>` render paths are removed to avoid OpenTUI reconciler crash.
+- GitHub repository structure is cleaned around `docs/`, `patches/`, and `workspace-template/`.
 
 ## Install note
 
-Do not use artifacts older than run `28504106004` for the spinner crash fix. Older artifacts can still crash with `unknown component type spinner` or miss hidden `.opencode` files.
+Do not use artifacts older than run `28505265540` for the cleaned repository layout. Do not use artifacts older than run `28504106004` for the spinner crash fix.
