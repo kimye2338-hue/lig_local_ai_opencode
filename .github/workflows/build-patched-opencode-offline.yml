@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - main
       - claude/review-work-instructions-10nm51
     paths:
       - .github/workflows/build-patched-opencode-offline.yml
@@ -56,7 +57,7 @@ jobs:
           Set-Location opencode-source
           git apply --check "$env:PATCH_FILE"
           git apply "$env:PATCH_FILE"
-          git diff -- packages/tui/src/config/keybind.ts packages/tui/src/context/permission.tsx packages/tui/src/app.tsx packages/tui/src/component/prompt/index.tsx packages/tui/src/routes/session/index.tsx
+          git diff -- packages/tui/src/config/keybind.ts packages/tui/src/context/permission.tsx packages/tui/src/app.tsx packages/tui/src/component/prompt/index.tsx packages/tui/src/routes/session/index.tsx packages/tui/src/routes/session/permission.tsx
 
       - name: Install dependencies
         shell: pwsh
@@ -183,6 +184,22 @@ The installer uses local files only. It does not clone GitHub and does not use P
           $hashes | Set-Content -Path (Join-Path $pkg 'SHA256SUMS.txt') -Encoding ASCII
 
           Compress-Archive -Path "$pkg\*" -DestinationPath "$env:GITHUB_WORKSPACE\$env:PACKAGE_NAME.zip" -Force
+
+      - name: Verify offline package contents
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:GITHUB_WORKSPACE "$env:PACKAGE_NAME.zip"
+          if (-not (Test-Path -LiteralPath $zip)) { throw "Package ZIP not found: $zip" }
+          $check = Join-Path $env:RUNNER_TEMP 'offline-package-check'
+          if (Test-Path -LiteralPath $check) { Remove-Item -LiteralPath $check -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $check | Out-Null
+          Expand-Archive -LiteralPath $zip -DestinationPath $check -Force
+          Get-ChildItem -Path $check -Recurse -File | ForEach-Object {
+            Write-Host $_.FullName.Substring($check.Length + 1).Replace('\','/')
+          }
+          $exe = Join-Path $check 'payload\opencode.exe'
+          if (-not (Test-Path -LiteralPath $exe)) { throw 'payload/opencode.exe missing from offline package' }
+          & $exe --version
 
       - name: Upload offline package artifact
         uses: actions/upload-artifact@v4
