@@ -1,0 +1,1 @@
+Trigger minimal patched OpenCode binary workflow after adding workflow file.
