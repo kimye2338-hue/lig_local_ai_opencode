@@ -190,3 +190,5 @@ The installer uses local files only. It does not clone GitHub and does not use P
           name: LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE
           path: LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE.zip
           retention-days: 14
+
+# Trigger note: this comment keeps the watched workflow file changing so the GitHub Actions build can run.
