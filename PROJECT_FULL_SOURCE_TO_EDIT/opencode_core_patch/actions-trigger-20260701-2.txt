@@ -1,0 +1,3 @@
+Trigger GitHub Actions after repository Actions settings were enabled.
+Timestamp: 2026-07-01T00:00:00Z
+Purpose: trigger Build patched OpenCode offline package workflow.
