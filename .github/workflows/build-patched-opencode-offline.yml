@@ -39,6 +39,8 @@ jobs:
       - name: Show tool versions
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           git --version
           bun --version
           node --version
@@ -46,6 +48,8 @@ jobs:
       - name: Clone upstream OpenCode at pinned commit
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           git clone --no-checkout "$env:OPENCODE_REPO" opencode-source
           Set-Location opencode-source
           git checkout "$env:OPENCODE_COMMIT"
@@ -54,26 +58,34 @@ jobs:
       - name: Apply permission approval controller patch
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           Set-Location opencode-source
-          git apply --check "$env:PATCH_FILE"
-          git apply "$env:PATCH_FILE"
+          git apply --recount --check "$env:PATCH_FILE"
+          git apply --recount "$env:PATCH_FILE"
           git diff -- packages/tui/src/config/keybind.ts packages/tui/src/context/permission.tsx packages/tui/src/app.tsx packages/tui/src/component/prompt/index.tsx packages/tui/src/routes/session/index.tsx packages/tui/src/routes/session/permission.tsx
 
       - name: Install dependencies
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           Set-Location opencode-source
           bun install
 
       - name: Typecheck patched OpenCode package
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           Set-Location opencode-source
           bun run --cwd packages/opencode typecheck
 
       - name: Build patched Windows OpenCode binary
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           Set-Location opencode-source
           bun run --cwd packages/opencode build --single --skip-embed-web-ui
 
@@ -81,6 +93,8 @@ jobs:
         id: locate
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           $candidates = Get-ChildItem -Path opencode-source\packages\opencode\dist -Recurse -File | Where-Object {
             $_.Name -eq 'opencode.exe' -or $_.Name -eq 'opencode'
           } | Sort-Object FullName
@@ -96,6 +110,8 @@ jobs:
       - name: Assemble offline install package
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           $pkg = Join-Path $env:GITHUB_WORKSPACE $env:PACKAGE_NAME
           $payload = Join-Path $pkg 'payload'
           $workspace = Join-Path $pkg 'workspace'
@@ -188,6 +204,8 @@ jobs:
       - name: Verify offline package contents
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           $zip = Join-Path $env:GITHUB_WORKSPACE "$env:PACKAGE_NAME.zip"
           if (-not (Test-Path -LiteralPath $zip)) { throw "Package ZIP not found: $zip" }
           $check = Join-Path $env:RUNNER_TEMP 'offline-package-check'
