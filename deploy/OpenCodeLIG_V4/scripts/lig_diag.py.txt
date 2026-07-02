@@ -43,9 +43,12 @@ def is_fast(r):
 # ------------------------------------------------------------------ [A]
 def section_a():
     env = C.build_env()
-    ok, identity = C.start_proxy(env)
-    a = {"healthy": ok, "identity": identity,
-         "identity_expected": identity == C.EXPECTED_IDENTITY}
+    status, h = C.start_proxy(env)
+    ok = status == "ok"
+    a = {"proxy_status": status, "healthy": ok, "identity": h.get("identity"),
+         "rev": h.get("rev"), "is_v4": h.get("is_v4"),
+         "upstream_configured": h.get("upstream_configured"),
+         "identity_expected": h.get("is_v4", False)}
     has_tool_calls = False
     if ok:
         import urllib.request
@@ -97,14 +100,27 @@ def section_b():
 
 
 # ------------------------------------------------------------------ [C]
-def section_c():
-    """Probe which flags `opencode run` supports on THIS build. Never -q."""
-    r = C.run_capture([C.EXE, "run", "--help"], cwd=C.WS, env=C.build_env(), timeout=30)
+def _probe_help(args):
+    r = C.run_capture([C.EXE] + args, cwd=C.WS, env=C.build_env(), timeout=30)
     helptext = (r.get("stdout", "") + "\n" + r.get("stderr", ""))
-    flags = {"--pure": "--pure" in helptext, "--auto": "--auto" in helptext,
-             "-m": ("-m," in helptext or "--model" in helptext or " -m " in helptext)}
-    c = {"probe_rc": r.get("returncode"), "flags": flags,
-         "help_tail": C.tail(helptext, 25)}
+    return r.get("returncode"), helptext
+
+
+def section_c():
+    """Probe which flags THIS build supports, for BOTH command shapes the
+    system actually uses: top-level TUI (`opencode [--pure] --auto`, the
+    daily launcher) and headless (`opencode run ...`, E2E). Never -q.
+    Results are saved to state\\cli_flags.json for the launcher."""
+    run_rc, run_help = _probe_help(["run", "--help"])
+    tui_rc, tui_help = _probe_help(["--help"])
+    flags = {
+        "run": {"--pure": "--pure" in run_help, "--auto": "--auto" in run_help,
+                "-m": ("-m," in run_help or "--model" in run_help or " -m " in run_help)},
+        "tui": {"--pure": "--pure" in tui_help, "--auto": "--auto" in tui_help},
+    }
+    C.write_cli_flags(flags)
+    c = {"run_probe_rc": run_rc, "tui_probe_rc": tui_rc, "flags": flags,
+         "run_help_tail": C.tail(run_help, 20), "tui_help_tail": C.tail(tui_help, 20)}
     log("C_cli_probe", c)
     return c
 
@@ -230,10 +246,11 @@ def section_e(cflags):
               "Its content must be exactly this one line: %s\n"
               "Do not use bash. After writing, reply with only the file path."
               % (target.name, marker))
+    run_flags = cflags.get("run", {})
     args = [C.EXE, "run"]
-    if cflags.get("--pure", True):
+    if run_flags.get("--pure", True):
         args.append("--pure")
-    if cflags.get("--auto", True):
+    if run_flags.get("--auto", True):
         args.append("--auto")
     args += ["-m", C.PROVIDER_MODEL, prompt]
 
@@ -287,15 +304,19 @@ def main():
     print("[E] headless E2E with unique marker file ...")
     e = section_e(c.get("flags", {}))
 
-    core_ok = bool(a.get("healthy") and a.get("identity_expected")
-                   and a.get("has_tool_calls") and b.get("routes_to_proxy")
-                   and b.get("model_ok") and b.get("fileops_in_instructions"))
+    core_ok = bool(a.get("healthy") and a.get("is_v4")
+                   and a.get("upstream_configured") and a.get("has_tool_calls")
+                   and b.get("routes_to_proxy") and b.get("model_ok")
+                   and b.get("fileops_in_instructions"))
     file_ok = bool(e.get("file_create_ok"))
     startup_ok = bool(d.get("pure_startup_ok") or d.get("normal_startup_ok"))
+    tui_flags = c.get("flags", {}).get("tui", {})
     go = core_ok and file_ok and startup_ok
 
     summary = {"CORE_OK": core_ok, "FILE_CREATE_OK": file_ok,
                "STARTUP_CLASS": cls, "STARTUP_MODE": mode,
+               "PROXY_STATUS": a.get("proxy_status"),
+               "TUI_FLAGS": tui_flags, "ERROR_REFS": e.get("error_refs", []),
                "GO": go, "report": str(REPORT)}
     log("F_summary", summary)
     (C.DIAGDIR / "LAST_RESULT.json").write_text(
@@ -305,12 +326,8 @@ def main():
     print("")
     print(line)
     print("[RESULT]")
-    print("  CORE_OK        = %s  (proxy=%s, tool_calls=%s, config=%s)"
-          % (core_ok, a.get("identity"), a.get("has_tool_calls"),
-             b.get("routes_to_proxy")))
-    print("  FILE_CREATE_OK = %s  (marker %s)"
-          % (file_ok, "verified" if file_ok else "MISSING; refs=%s"
-             % e.get("error_refs", [])))
+    print("  CORE_OK        = %s" % core_ok)
+    print("  FILE_CREATE_OK = %s" % file_ok)
     print("  STARTUP        = mode:%s  class:%s" % (mode, cls))
     for k in ("pure_flag", "no_plugins", "noop_plugin_only",
               "all_plugins_failfast", "all_plugins_default"):
@@ -318,10 +335,45 @@ def main():
             print("    %-22s %ss%s" % (k, d[k].get("seconds"),
                   " TIMEOUT" if d[k].get("timeout") else ""))
     print("  GO / NO-GO     = %s" % ("GO (%s mode)" % mode.upper() if go else "NO-GO"))
-    print("  report         = %s" % REPORT)
-    print("  next           = RUN_OPENCODE_LIG.bat" if go else
-          "  next           = send the [RESULT] block + last report section")
     print(line)
+
+    # ---- Korean explanation + triage (direct next actions, no internals)
+    print("[설명]")
+    if core_ok:
+        print("  CORE_OK=True : 프록시/설정/도구호출 변환 경로가 정상입니다.")
+    else:
+        if a.get("proxy_status") == "stale":
+            print(C.stale_proxy_message({"identity": a.get("identity"), "rev": a.get("rev")}))
+        elif not a.get("healthy"):
+            print("  프록시가 응답하지 않습니다. -> SET_LIG_SECRET.bat 실행 여부 확인 후")
+            print("     RUN_OPENCODE_LIG.bat 을 한 번 실행해 프록시를 띄우고 다시 진단하세요.")
+        elif not a.get("upstream_configured"):
+            print("  프록시에 사내 접속 정보가 없습니다. -> SET_LIG_SECRET.bat 을 실행하고,")
+            print("     떠 있는 프록시 콘솔 창을 닫은 뒤 다시 진단하세요.")
+        elif not a.get("has_tool_calls"):
+            print("  도구호출 변환이 실패했습니다. -> 사내 게이트웨이 상태 문제일 수 있습니다.")
+            print("     리포트 마지막 섹션을 전달해 주세요.")
+        else:
+            print("  설정 파일 문제입니다. -> APPLY_OR_REPAIR_OPENCODE_LIG.bat 을 실행하세요.")
+    if file_ok:
+        print("  FILE_CREATE_OK=True : OpenCode가 파일을 실제로 만들었고 내용까지 확인했습니다.")
+    elif core_ok:
+        print("  파일 생성 실패(코어는 정상) : 실행 경로 문제입니다. 아래 [보내기] 블록과")
+        print("     리포트 마지막 섹션(로그 꼬리 포함)을 전달해 주세요. refs=%s" % e.get("error_refs", []))
+    if mode == "pure":
+        print("  STARTUP=pure : 안전모드로 동작합니다. 기능 손실 없음 - 정상 사용 가능.")
+    else:
+        print("  STARTUP=normal : 일반모드 시작이 빠릅니다.")
+    if not (tui_flags.get("--pure", True) and tui_flags.get("--auto", True)):
+        print("  [주의] 이 빌드의 기본 실행 옵션 일부가 확인되지 않았습니다: %s" % tui_flags)
+        print("     런처가 자동으로 지원되는 옵션만 사용합니다.")
+    print("  다음 할 일 : %s" % ("RUN_OPENCODE_LIG.bat 실행 - 바로 사용 가능"
+                                if go else "아래 [보내기] 블록만 복사해서 전달"))
+    print("")
+    print("[보내기] ------ 아래부터 복사 ------")
+    print("OpenCodeLIG DIAG %s" % STAMP)
+    print(json.dumps(summary, ensure_ascii=False))
+    print("---------- 여기까지 복사 ----------")
     return 0 if go else 2
 
 

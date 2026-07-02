@@ -40,6 +40,8 @@ PROXY_BASE = "http://%s:%s/v1" % (HOST, PORT)
 MODEL_ID = "ai_infra_llm_api"
 PROVIDER_MODEL = "lig-proxy/" + MODEL_ID
 EXPECTED_IDENTITY = "LIG generic-toolcall-rescue-v2"
+EXPECTED_REV = "v3"  # V4 package ships proxy rev v3; older proxies have no rev
+CLI_FLAGS_FILE = STATEDIR / "cli_flags.json"
 
 # Registry fail-fast: on the isolated network any npm/bun registry fetch can
 # only hang until TCP timeout (~45s). Pointing it at a closed local port makes
@@ -203,36 +205,107 @@ def seed_fileops_if_missing():
 
 # ---------------------------------------------------------------- proxy
 def proxy_health(timeout=3):
+    """Full /health check. Returns a dict:
+      reachable  - port answered 200
+      identity   - "proxy" field
+      rev        - "rev" field ("" on pre-V4 proxies)
+      upstream_configured - bool ("" -> False on pre-V4 proxies)
+      is_v4      - identity AND rev match this package (strict check;
+                   NEVER trust the legacy identity string alone)
+    """
+    h = {"reachable": False, "identity": "unreachable", "rev": "",
+         "upstream_configured": False, "is_v4": False, "raw": ""}
     try:
         with urllib.request.urlopen("http://%s:%s/health" % (HOST, PORT), timeout=timeout) as r:
-            body = r.read(500).decode("utf-8", "replace")
-            identity = "unknown"
-            try:
-                identity = json.loads(body).get("proxy", "unknown")
-            except ValueError:
-                pass
-            return r.status == 200, identity, body
+            h["raw"] = r.read(500).decode("utf-8", "replace")
+            h["reachable"] = r.status == 200
     except Exception as exc:
-        return False, "unreachable", repr(exc)
+        h["raw"] = repr(exc)
+        return h
+    try:
+        j = json.loads(h["raw"])
+        h["identity"] = j.get("proxy", "unknown")
+        h["rev"] = j.get("rev", "")
+        h["upstream_configured"] = bool(j.get("upstream_configured"))
+    except ValueError:
+        h["identity"] = "not-json"
+    h["is_v4"] = (h["identity"] == EXPECTED_IDENTITY and h["rev"] == EXPECTED_REV)
+    return h
+
+
+def shutdown_proxy(timeout=3):
+    """Ask a V4 proxy to exit via POST /shutdown. Older proxies ignore this."""
+    try:
+        req = urllib.request.Request("http://%s:%s/shutdown" % (HOST, PORT),
+                                     data=b"{}", method="POST",
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status == 200
+    except Exception:
+        return False
 
 
 def start_proxy(env=None, wait=30):
-    """Start the proxy if not healthy. Returns (ok, identity)."""
-    ok, identity, _ = proxy_health()
-    if ok:
-        return True, identity
+    """Ensure the V4 proxy is running. Returns (status, health_dict) where
+    status is one of: "ok", "stale" (old proxy holds the port), "failed"."""
+    h = proxy_health()
+    if h["reachable"] and h["is_v4"]:
+        return "ok", h
+    if h["reachable"] and not h["is_v4"]:
+        # a V4-but-outdated proxy honors /shutdown; truly old ones do not
+        if shutdown_proxy():
+            time.sleep(1.5)
+            h = proxy_health()
+        if h["reachable"] and not h["is_v4"]:
+            return "stale", h
     if not PROXY_PY.exists():
-        return False, "proxy script missing: %s" % PROXY_PY
+        h["raw"] = "proxy script missing: %s" % PROXY_PY
+        return "failed", h
     env = env or build_env()
     flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if os.name == "nt" else 0
     subprocess.Popen([sys.executable, str(PROXY_PY)], cwd=str(WS), env=env,
                      creationflags=flags)
     for _ in range(wait):
         time.sleep(1)
-        ok, identity, _ = proxy_health()
-        if ok:
-            return True, identity
-    return False, identity
+        h = proxy_health()
+        if h["reachable"]:
+            return ("ok" if h["is_v4"] else "stale"), h
+    return "failed", h
+
+
+STALE_PROXY_MSG_KO = (
+    "[문제] 예전 버전 프록시가 이미 포트 %s 를 사용 중입니다 (identity=%%s rev=%%r).\n"
+    "       이 상태로는 새 기능(bash 가드 등)이 동작하지 않아 실행을 중단합니다.\n"
+    "[해결] 1. 화면에 떠 있는 프록시 콘솔 창(제목에 python/lig_toolcall 포함)을 닫으세요.\n"
+    "       2. 안 보이면 PC를 재부팅하거나, 작업 관리자에서 python 프로세스 중\n"
+    "          lig_toolcall_proxy 를 실행 중인 것만 종료하세요.\n"
+    "       3. 그 다음 RUN_OPENCODE_LIG.bat 을 다시 실행하세요." % PORT)
+
+
+def stale_proxy_message(h):
+    return STALE_PROXY_MSG_KO % (h.get("identity"), h.get("rev"))
+
+
+# ---------------------------------------------------------------- cli flags
+def write_cli_flags(flags):
+    STATEDIR.mkdir(parents=True, exist_ok=True)
+    CLI_FLAGS_FILE.write_text(json.dumps(flags, ensure_ascii=False, indent=2) + "\n",
+                              encoding="utf-8")
+
+
+def read_cli_flags():
+    """Flags probed by the last DIAG run: {"tui": {...}, "run": {...}}.
+    Defaults assume the currently-proven build behavior."""
+    default = {"tui": {"--pure": True, "--auto": True},
+               "run": {"--pure": True, "--auto": True, "-m": True}}
+    try:
+        j = json.loads(CLI_FLAGS_FILE.read_text(encoding="utf-8"))
+        for k in default:
+            if isinstance(j.get(k), dict):
+                default[k].update(j[k])
+    except (OSError, ValueError):
+        pass
+    return default
 
 
 # ---------------------------------------------------------------- subprocess

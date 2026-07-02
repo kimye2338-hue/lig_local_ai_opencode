@@ -2,10 +2,13 @@
 rem ==========================================================================
 rem INSTALL_OPENCODELIG_V4.bat - one-time install, re-runnable for updates.
 rem HOW TO USE: rename this file from .bat.txt to .bat, then double-click.
-rem It copies everything into %USERPROFILE%\OpenCodeLIG, strips the .txt
-rem suffixes, backs up existing AGENTS files, and applies the config.
-rem It never overwrites memory/MEMORY.md or checkpoints on update.
-rem ASCII only, no PowerShell, no downloads.
+rem What it does:
+rem   - creates all folders, copies files, strips .txt suffixes
+rem   - QUARANTINES old launcher/diag variants into USERDATA\backups\
+rem     (the root keeps exactly 4 entry points)
+rem   - backs up existing AGENTS files; never overwrites memory/checkpoints
+rem   - applies the config and prints a readiness checklist
+rem ASCII/CMD only, no PowerShell, no downloads.
 rem ==========================================================================
 setlocal
 chcp 65001 >nul
@@ -13,53 +16,91 @@ set "SRC=%~dp0"
 set "LIG=%USERPROFILE%\OpenCodeLIG"
 set "UD=%USERPROFILE%\OpenCodeLIG_USERDATA"
 
-echo [1/6] creating directories...
+echo [1/7] 폴더 생성...
 for %%D in ("%LIG%" "%LIG%\bin" "%LIG%\scripts" "%LIG%\proxy" "%LIG%\workspace" "%LIG%\docs" "%LIG%\logs" "%LIG%\secrets" "%LIG%\workspace\memory" "%LIG%\workspace\checkpoints" "%LIG%\workspace\skills" "%UD%" "%UD%\opencode_config" "%UD%\opencode_data" "%UD%\opencode_state" "%UD%\opencode_cache" "%UD%\diagnostics" "%UD%\backups" "%UD%\state") do if not exist "%%~D" mkdir "%%~D"
 
-echo [2/6] backing up existing workspace policy files...
+echo [2/7] 예전 실행 파일 격리 (삭제 아님, backups\deprecated_* 로 이동)...
+set "DEP=%UD%\backups\deprecated_%RANDOM%%RANDOM%"
+for %%N in (RUN_OPENCODE_LIG_PROXY RUN_OPENCODE_LIG_PROXY_SAFE_PURE DIAG_LIG_STARTUP_AND_TOOLCALL APPLY_CONFIG_ONLY OPENCODE_LIG_FINAL_ACCEPTANCE_TEST_ALL_IN_ONE lig_proxy_launch) do (
+  if exist "%LIG%\%%N.*" (
+    if not exist "%DEP%" mkdir "%DEP%"
+    move /y "%LIG%\%%N.*" "%DEP%\" >nul
+  )
+  if exist "%LIG%\workspace\%%N.*" (
+    if not exist "%DEP%" mkdir "%DEP%"
+    move /y "%LIG%\workspace\%%N.*" "%DEP%\" >nul
+  )
+)
+rem old script copies that used to live in the workspace root
+for %%N in (lig_diag lig_apply_config) do (
+  if exist "%LIG%\workspace\%%N.py" (
+    if not exist "%DEP%" mkdir "%DEP%"
+    move /y "%LIG%\workspace\%%N.py" "%DEP%\" >nul
+  )
+)
+if exist "%DEP%" echo        격리 위치: %DEP%
+
+echo [3/7] 기존 AGENTS 파일 백업...
 if not exist "%LIG%\workspace\AGENTS.md" goto SKIPBK
 set "BK=%UD%\backups\agents_backup_%RANDOM%%RANDOM%"
 mkdir "%BK%" >nul 2>nul
 copy /y "%LIG%\workspace\AGENTS*.md" "%BK%\" >nul
-echo        backup: %BK%
+echo        백업 위치: %BK%
 :SKIPBK
 
-echo [3/6] copying files...
+echo [4/7] 파일 복사...
 copy /y "%SRC%RUN_OPENCODE_LIG.bat.txt" "%LIG%\" >nul
 copy /y "%SRC%RUN_OPENCODE_LIG_SAFE_PURE.bat.txt" "%LIG%\" >nul
 copy /y "%SRC%DIAG_OPENCODE_LIG.bat.txt" "%LIG%\" >nul
 copy /y "%SRC%APPLY_OR_REPAIR_OPENCODE_LIG.bat.txt" "%LIG%\" >nul
 copy /y "%SRC%scripts\*.py.txt" "%LIG%\scripts\" >nul
+copy /y "%SRC%scripts\*.bat.txt" "%LIG%\scripts\" >nul
 copy /y "%SRC%proxy\*.py.txt" "%LIG%\proxy\" >nul
 xcopy /e /y /q "%SRC%workspace_seed\*" "%LIG%\workspace\" >nul
 copy /y "%SRC%RUNBOOK.md" "%LIG%\docs\" >nul
 copy /y "%SRC%ARCHITECTURE_REFORM_PLAN.md" "%LIG%\docs\" >nul 2>nul
 copy /y "%SRC%FEEDBACK_AND_WORK_PLAN.md" "%LIG%\docs\" >nul 2>nul
+copy /y "%SRC%AUTOMATION_ROADMAP.md" "%LIG%\docs\" >nul 2>nul
 
 rem seed durable memory only if it does not exist yet (never overwrite)
 if not exist "%LIG%\workspace\memory\MEMORY.md" copy /y "%LIG%\workspace\memory\MEMORY_SEED.md" "%LIG%\workspace\memory\MEMORY.md" >nul
 
-echo [4/6] activating scripts (removing .txt suffix)...
+echo [5/7] 스크립트 활성화 (.txt 제거)...
 for %%F in ("%LIG%\*.bat.txt") do call :STRIP "%%~fF"
 for %%F in ("%LIG%\scripts\*.py.txt") do call :STRIP "%%~fF"
+for %%F in ("%LIG%\scripts\*.bat.txt") do call :STRIP "%%~fF"
 for %%F in ("%LIG%\proxy\*.py.txt") do call :STRIP "%%~fF"
 
-echo [5/6] applying config...
-where python >nul 2>nul
-if errorlevel 1 (
-  echo [WARN] Python not found in PATH - config not applied yet.
-  echo        Fix PATH, then run %LIG%\APPLY_OR_REPAIR_OPENCODE_LIG.bat
+echo [6/7] 설정 적용...
+call "%LIG%\scripts\lig_python.bat"
+if not defined LIG_PY (
+  echo [경고] Python 을 찾지 못해 설정을 아직 적용하지 못했습니다.
+  echo        위 안내대로 Python 을 준비한 뒤 APPLY_OR_REPAIR_OPENCODE_LIG.bat 을 실행하세요.
 ) else (
-  python "%LIG%\scripts\lig_apply_config.py"
+  %LIG_PY% "%LIG%\scripts\lig_apply_config.py"
 )
 
-echo [6/6] install complete.
-echo.
-echo NEXT STEPS:
-echo   1. put opencode.exe into %LIG%\bin\   (from the offline package)
-echo   2. run SET_LIG_SECRET.bat once        (provided separately, NOT in git)
-echo   3. run %LIG%\DIAG_OPENCODE_LIG.bat    (expect GO)
-echo   4. daily use: %LIG%\RUN_OPENCODE_LIG.bat
+echo [7/7] 설치 완료 - 준비 상태 점검
+echo ==============================================
+if exist "%LIG%\bin\opencode.exe" (
+  echo   [OK]     opencode.exe 있음
+) else (
+  echo   [해야함] opencode.exe 를 %LIG%\bin\ 에 복사하세요 ^(오프라인 패키지에서^)
+)
+if exist "%LIG%\secrets\lig_local.env" (
+  echo   [OK]     사내 접속 정보 설정됨
+) else (
+  echo   [해야함] SET_LIG_SECRET.bat 을 한 번 실행하세요 ^(별도 전달 파일^)
+)
+if defined LIG_PY (
+  echo   [OK]     Python 사용 가능
+) else (
+  echo   [해야함] Python 3 설치 또는 LIG_PYTHON_EXE 지정
+)
+echo ==============================================
+echo   위 [해야함] 항목을 끝낸 뒤:
+echo   1. 진단:      %LIG%\DIAG_OPENCODE_LIG.bat   ^(GO 확인^)
+echo   2. 매일 사용: %LIG%\RUN_OPENCODE_LIG.bat
 echo.
 if not "%LIG_NONINTERACTIVE%"=="1" pause
 exit /b 0

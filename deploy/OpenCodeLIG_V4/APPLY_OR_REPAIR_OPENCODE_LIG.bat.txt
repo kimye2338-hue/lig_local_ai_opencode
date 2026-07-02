@@ -8,8 +8,9 @@ setlocal
 chcp 65001 >nul
 set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
-where python >nul 2>nul || (echo [ERROR] Python not found in PATH.& pause & exit /b 1)
-python "%USERPROFILE%\OpenCodeLIG\scripts\lig_apply_config.py"
+call "%USERPROFILE%\OpenCodeLIG\scripts\lig_python.bat"
+if not defined LIG_PY (pause & exit /b 9)
+%LIG_PY% "%USERPROFILE%\OpenCodeLIG\scripts\lig_apply_config.py"
 set "RC=%ERRORLEVEL%"
 echo.
 if not "%LIG_NONINTERACTIVE%"=="1" pause

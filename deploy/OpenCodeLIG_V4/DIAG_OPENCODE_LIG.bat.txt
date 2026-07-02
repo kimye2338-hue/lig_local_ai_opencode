@@ -1,15 +1,17 @@
 @echo off
 rem ==========================================================================
-rem DIAG_OPENCODE_LIG.bat (V4) - the ONE diagnostic. Prints a GO/NO-GO block
-rem and a report path. Safe to run any time; restores plugins afterwards.
+rem DIAG_OPENCODE_LIG.bat (V4) - the ONE diagnostic. Prints GO/NO-GO with a
+rem Korean explanation and a small copy-paste block for bug reports.
+rem Safe to run any time; restores plugins afterwards.
 rem Set LIG_NONINTERACTIVE=1 to skip the final pause (automation).
 rem ==========================================================================
 setlocal
 chcp 65001 >nul
 set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
-where python >nul 2>nul || (echo [ERROR] Python not found in PATH.& pause & exit /b 1)
-python "%USERPROFILE%\OpenCodeLIG\scripts\lig_diag.py"
+call "%USERPROFILE%\OpenCodeLIG\scripts\lig_python.bat"
+if not defined LIG_PY (pause & exit /b 9)
+%LIG_PY% "%USERPROFILE%\OpenCodeLIG\scripts\lig_diag.py"
 set "RC=%ERRORLEVEL%"
 echo.
 if not "%LIG_NONINTERACTIVE%"=="1" pause

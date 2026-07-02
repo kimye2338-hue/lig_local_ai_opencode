@@ -1,6 +1,6 @@
 {
-  "base_url": "http://INTERNAL_LIG_GATEWAY_PLACEHOLDER/ai_infra/llm_api/gateway/EXAONE-4.5-33B-default_think_off/v1",
+  "base_url": "http://INTERNAL_LIG_GATEWAY_PLACEHOLDER/v1",
   "api_key": "PUT_INTERNAL_API_KEY_OR_USE_ENV",
-  "model": "EXAONE-4.5-33B",
+  "model": "PUT_INTERNAL_MODEL_NAME",
   "timeout": 120
 }
