@@ -60,6 +60,24 @@ def execute_task(task: Dict[str, Any]) -> Dict[str, Any]:
         out = RESULTS / "llm_responses" / (task["task_id"] + ".md")
         atomic_write_text(out, content)
         return {"ok": True, "result": {"output_file": str(out), "memory_items_used": [m.get("id") for m in memories]}}
+    if kind == "llm_agent":
+        # Full tool-use loop: LLM tool-calls are dispatched to sandboxed local
+        # file operations inside the workspace root (see tool_dispatch).
+        if not _lig_config().get("ready"):
+            return {"ok": False, "error": "LIG providers not configured; set lig-api.env"}
+        from .core import ROOT
+        from .tool_dispatch import run_agent_loop
+        prompt = payload.get("prompt") or task.get("title") or "Continue current task."
+        loop_result = run_agent_loop(prompt, workspace_root=ROOT,
+                                     max_turns=int(payload.get("max_turns") or 10))
+        out = RESULTS / "llm_responses" / (task["task_id"] + ".md")
+        atomic_write_text(out, loop_result.get("final_content", ""))
+        summary_result = {"output_file": str(out), "outcome": loop_result["outcome"],
+                          "turns": loop_result["turns"],
+                          "tools_executed": len(loop_result["tool_results"])}
+        if not loop_result["ok"]:
+            return {"ok": False, "error": f"agent loop outcome: {loop_result['outcome']}", "result": summary_result}
+        return {"ok": True, "result": summary_result}
     if kind == "reflect":
         report = memorycheck()
         return {"ok": True, "result": report}
