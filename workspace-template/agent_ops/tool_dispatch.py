@@ -39,15 +39,17 @@ from .local_tools import (
 
 ToolFn = Callable[[Path, Dict[str, Any]], Dict[str, Any]]
 
-# name -> (fn, required args, optional args)
+# name -> (fn, required args, optional args, one-line description).
+# Descriptions are deliberately short: weak models pick tools better with a
+# hint, but long schemas eat their context and hurt call accuracy.
 REGISTRY: Dict[str, Dict[str, Any]] = {
-    "read_file":       {"fn": tool_read_file,       "required": ["path"],                 "optional": []},
-    "write_file":      {"fn": tool_write_file,      "required": ["path", "content"],      "optional": []},
-    "append_file":     {"fn": tool_append_file,     "required": ["path", "content"],      "optional": []},
-    "replace_in_file": {"fn": tool_replace_in_file, "required": ["path", "old", "new"],   "optional": ["count"]},
-    "list_dir":        {"fn": tool_list_dir,        "required": [],                       "optional": ["path"]},
-    "search_files":    {"fn": tool_search_files,    "required": ["query"],                "optional": ["path", "pattern"]},
-    "run_diagnostic":  {"fn": tool_run_diagnostic,  "required": [],                       "optional": []},
+    "read_file":       {"fn": tool_read_file,       "required": ["path"],                 "optional": [],                    "description": "Read a text file"},
+    "write_file":      {"fn": tool_write_file,      "required": ["path", "content"],      "optional": [],                    "description": "Create or overwrite a text file"},
+    "append_file":     {"fn": tool_append_file,     "required": ["path", "content"],      "optional": [],                    "description": "Append text to an existing file"},
+    "replace_in_file": {"fn": tool_replace_in_file, "required": ["path", "old", "new"],   "optional": ["count"],             "description": "Replace exact text inside a file"},
+    "list_dir":        {"fn": tool_list_dir,        "required": [],                       "optional": ["path"],              "description": "List files in a directory"},
+    "search_files":    {"fn": tool_search_files,    "required": ["query"],                "optional": ["path", "pattern"],   "description": "Search text across files"},
+    "run_diagnostic":  {"fn": tool_run_diagnostic,  "required": [],                       "optional": [],                    "description": "Check workspace health"},
 }
 
 _PARAM_DESCRIPTIONS = {
@@ -74,6 +76,7 @@ def tool_definitions() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": name,
+                "description": spec.get("description", ""),
                 "parameters": {"type": "object", "properties": props, "required": spec["required"]},
             },
         })
