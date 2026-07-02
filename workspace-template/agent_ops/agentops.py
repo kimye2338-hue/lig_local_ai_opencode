@@ -251,18 +251,32 @@ def cmd_agent(args):
     return 0 if result["ok"] else 1
 
 def cmd_plan(args):
-    """Task -> capability routing -> (optionally) artifact scaffolds.
+    """Task (+ optional input files) -> capability routing -> artifacts.
 
     Shows which capabilities a request maps to, what stays app/company
     validation pending, and with --make-artifacts generates the scaffolds
-    into results/artifacts/<run>/."""
+    into results/artifacts/<run>/. --input <파일|폴더> (repeatable) reads the
+    user's actual material so artifacts cite its contents; the ingested work
+    context is saved secret-free to diagnostics."""
     from agent_ops.capabilities import plan_task
-    from agent_ops.artifact_generators import generate_artifacts
+    from agent_ops.artifact_generators import build_artifact_context, generate_artifacts
 
     task = (args.task or "").strip()
     if not task:
         print("작업 내용이 없습니다. --task \"작업 설명\" 을 지정하세요.", file=sys.stderr)
         return 2
+    inputs = None
+    if getattr(args, "input", None):
+        from agent_ops.input_ingest import ingest_inputs
+        inputs = ingest_inputs(args.input)
+        print(f"입력 자료 요약: {inputs['summary']}")
+        for f in inputs["files"]:
+            first = f["facts"][0] if f["facts"] else f["type"]
+            print(f"  - {f['name']} ({f['size_bytes']:,} bytes): {first}")
+        for u in inputs["unsupported"]:
+            print(f"  - [unsupported] {u['name']}: {u['reason']}")
+        for e in inputs["errors"]:
+            print(f"  - [error] {e}")
     plan = plan_task(task)
     print(json.dumps(plan, ensure_ascii=False, indent=2))
     if not args.make_artifacts:
@@ -272,7 +286,18 @@ def cmd_plan(args):
         print("생성할 산출물 종류가 없습니다 (file_ops 계열 작업은 agent 명령을 사용하세요).")
         print(f"다음 명령: {plan['next_exact_command']}")
         return 0
-    result = generate_artifacts(task, plan["artifact_kinds"])
+    ctx = build_artifact_context(task, plan, inputs)
+    try:  # secret-free work context for diagnostics; never blocks generation
+        from agent_ops.lig_providers import DIAG_DIR
+        DIAG_DIR.mkdir(parents=True, exist_ok=True)
+        (DIAG_DIR / "work-context-last.json").write_text(
+            json.dumps(ctx, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+    result = generate_artifacts(task, plan["artifact_kinds"], context=ctx)
+    if inputs is not None:
+        grounded = "예" if result.get("input_grounded") else "아니오 (입력 반영 검증 실패 또는 읽은 파일 없음)"
+        print(f"입력 근거 반영(input-grounded): {grounded}")
     print(f"산출물 폴더: {result['out_dir']}")
     for f in result["files"]:
         print(f"  - {f}")
@@ -314,7 +339,7 @@ def main(argv=None):
     sub.add_parser("stop").set_defaults(func=cmd_agentstop)
     sub.add_parser("unstop").set_defaults(func=cmd_unstop)
     p = sub.add_parser("agent"); p.add_argument("--mode", choices=["mock", "real"], required=True); p.add_argument("--task", default=""); p.add_argument("--max-turns", type=int, default=10); p.set_defaults(func=cmd_agent)
-    p = sub.add_parser("plan"); p.add_argument("--task", default=""); p.add_argument("--make-artifacts", action="store_true"); p.set_defaults(func=cmd_plan)
+    p = sub.add_parser("plan"); p.add_argument("--task", default=""); p.add_argument("--input", action="append", default=[], help="입력 파일/폴더 (반복 지정 가능)"); p.add_argument("--make-artifacts", action="store_true"); p.set_defaults(func=cmd_plan)
     p = sub.add_parser("safety-check"); p.add_argument("text", nargs="*"); p.set_defaults(func=cmd_safety_check)
     p = sub.add_parser("safe-write"); p.add_argument("target"); p.add_argument("content_file"); p.set_defaults(func=cmd_safe_write)
     args = parser.parse_args(argv)

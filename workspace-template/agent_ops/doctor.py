@@ -93,7 +93,17 @@ def run_doctor() -> dict:
         from .lig_providers import DIAG_DIR as _diag_dir
         bench_file = RESULTS / "capability_bench" / "last_bench.json"
         bench_info = read_json(bench_file, {}) if bench_file.exists() else {}
+        try:
+            from .input_ingest import SUPPORTED_SUFFIXES
+            ingest_available = True
+            supported_types = sorted(SUPPORTED_SUFFIXES)
+        except Exception:
+            ingest_available = False
+            supported_types = []
         checks["artifact_pipeline"] = {
+            "input_ingest_available": ingest_available,
+            "supported_input_types": supported_types,
+            "last_work_context": str(_diag_dir / "work-context-last.json"),
             "planner_mode": "deterministic_keyword",
             "semantic_planner": "pending — plan_task(task, planner=...) hook ready",
             "quality_validator_available": quality_available,

@@ -23,8 +23,10 @@ os.environ["LIG_DIAG_DIR"] = tempfile.mkdtemp(prefix="capbench_diag_")
 
 from agent_ops.capabilities import (CAPABILITIES, ARTIFACT_KIND_INFO, classify_task,
                                     plan_task, capability_summary)
-from agent_ops.artifact_generators import GENERATORS, generate_artifacts, classify_mail
+from agent_ops.artifact_generators import (GENERATORS, generate_artifacts, classify_mail,
+                                           build_artifact_context)
 from agent_ops.artifact_quality import validate_artifact_set
+from agent_ops.input_ingest import ingest_inputs
 from agent_ops.adapters import ADAPTERS, adapter_summary
 
 PASS = 0
@@ -301,6 +303,120 @@ def main() -> None:
     check("enrichment attempts are recorded in diagnostics",
           (Path(os.environ["LIG_DIAG_DIR"]) / "artifact-enrich-last.json").exists())
 
+    # --- input ingestion: read the user's actual material, safely ---
+    input_dir = tmp / "입력 자료"
+    input_dir.mkdir()
+    (input_dir / "시험결과.csv").write_text(
+        "항목,측정값,기준상한,판정\n치수A,12.4,12.5,합격\n치수B,13.9,12.5,불합격\n"
+        "표면조도,0.8,1.6,합격\n경도,45,40,초과\n", encoding="utf-8")
+    (input_dir / "장비.log").write_text(
+        "2026-07-01 10:00 INFO start\n2026-07-01 10:05 ERROR vibration sensor timeout\n"
+        "2026-07-01 10:06 WARNING retry scheduled\n2026-07-01 10:07 ERROR spindle overload\n"
+        "2026-07-01 10:10 INFO done\n", encoding="utf-8")
+    (input_dir / "점검매크로.bas").write_text(
+        "Option Explicit\n\nSub CheckDims()\n    ' 치수 점검\nEnd Sub\n\n"
+        "Function GetLimit() As Double\n    GetLimit = 12.5\nEnd Function\n", encoding="utf-8")
+    (input_dir / "모델.bin").write_bytes(b"\x00\x01\x02BINARY")
+    mail_json = tmp / "메일목록.json"
+    mail_json.write_text(json.dumps([
+        {"from": "품질팀", "subject": "결재 요청: 시험 성적서", "body": "성적서 결재 부탁드립니다."},
+        {"from": "설계팀", "subject": "설계 검토 요청", "body": "도면 검토 후 회신 바랍니다."},
+        {"from": "noreply@ad", "subject": "[광고] 하계 특가", "body": "특가 안내"},
+        {"from": "연구소", "subject": "회의 일정 공지", "body": "금요일 10시 회의"},
+    ], ensure_ascii=False), encoding="utf-8")
+
+    ing = ingest_inputs([str(input_dir)])
+    check("ingest scans a folder with Korean/space path",
+          ing["ok"] and len(ing["files"]) == 3, str(ing["errors"]) + str(len(ing["files"])))
+    csv_facts = " ".join(next(f for f in ing["files"] if f["name"] == "시험결과.csv")["facts"])
+    check("ingest extracts CSV rows/columns/header", "4행" in csv_facts and "판정" in csv_facts, csv_facts)
+    check("ingest flags abnormal rows as notable items",
+          any("치수B" in n for n in ing["notable_items"])
+          and any("초과" in n for n in ing["notable_items"]), str(ing["notable_items"]))
+    log_facts = " ".join(next(f for f in ing["files"] if f["name"] == "장비.log")["facts"])
+    check("ingest counts log errors and warnings",
+          "ERROR 2건" in log_facts and "WARNING 1건" in log_facts, log_facts)
+    bas_facts = " ".join(next(f for f in ing["files"] if f["name"] == "점검매크로.bas")["facts"])
+    check("ingest lists macro entry points", "CheckDims" in bas_facts and "GetLimit" in bas_facts, bas_facts)
+    check("ingest records binary input as unsupported, not silently skipped",
+          any(u["name"] == "모델.bin" for u in ing["unsupported"]), str(ing["unsupported"]))
+    check("ingest reports a missing path as error without raising",
+          ingest_inputs([str(tmp / "없는파일.csv")])["errors"])
+    secret_file = tmp / "설정.txt"
+    secret_file.write_text("api_key = SECRET_VALUE_123\n일반 내용 줄\n", encoding="utf-8")
+    check("ingest masks secret-like lines before summarizing",
+          "SECRET_VALUE_123" not in json.dumps(ingest_inputs([str(secret_file)]), ensure_ascii=False))
+
+    # --- input-grounded scenario 1: test-result CSV -> report + slides ---
+    task_g1 = "시험 결과 파일 읽고 이상값 정리해서 보고서와 PPT 초안 만들어줘"
+    ctx_g1 = build_artifact_context(task_g1, plan_task(task_g1), ing)
+    out_g1 = generate_artifacts(task_g1, ["document", "slide_outline"],
+                                out_dir=tmp / "ground1", context=ctx_g1)
+    check("input-grounded generation passes quality incl. reflection",
+          out_g1["quality_ok"] and out_g1["input_grounded"], str(out_g1["quality"]))
+    gdoc = (tmp / "ground1" / "문서.md").read_text(encoding="utf-8")
+    check("report cites the input file and row count", "시험결과.csv" in gdoc and "4행" in gdoc)
+    check("report surfaces failed/abnormal items", "치수B" in gdoc and "불합격" in gdoc)
+    check("report action items follow from abnormal findings", "원인 확인 및 조치" in gdoc)
+    gsl = (tmp / "ground1" / "slide_outline.md").read_text(encoding="utf-8")
+    check("slides carry the same input evidence", "시험결과.csv" in gsl and "치수B" in gsl)
+    gspec = json.loads((tmp / "ground1" / "slide_spec.json").read_text(encoding="utf-8"))
+    check("slide spec core points come from input, not TODO",
+          any("치수B" in p for p in gspec["slides"][3]["points"]), str(gspec["slides"][3]))
+
+    # --- input-grounded scenario 2: provided mail list replaces mock inbox ---
+    task_g2 = "메일 목록 분류하고 오늘 액션아이템 만들어줘"
+    ing2 = ingest_inputs([str(mail_json)])
+    check("ingest parses a mail list JSON into mails",
+          bool(ing2["mails"]) and len(ing2["mails"]) == 4, str(ing2["facts"]))
+    out_g2 = generate_artifacts(task_g2, ["mail_report"], out_dir=tmp / "ground2",
+                                context=build_artifact_context(task_g2, plan_task(task_g2), ing2))
+    grep_md = (tmp / "ground2" / "메일_분류_보고서.md").read_text(encoding="utf-8")
+    check("mail report uses provided mails, not the sample inbox",
+          "설계 검토 요청" in grep_md and "주간 보고 취합 요청" not in grep_md)
+    check("mail report states provided-input basis with company pending",
+          "입력 메일" in grep_md and "company validation pending" in grep_md)
+    gact = (tmp / "ground2" / "액션아이템.md").read_text(encoding="utf-8")
+    check("action items derive from provided mails and skip ads",
+          "결재 요청: 시험 성적서" in gact and "하계 특가" not in gact)
+
+    # --- input-grounded scenario 3: review an existing macro ---
+    task_g3 = "이 매크로 검토해서 오류 가능성과 사용 설명서를 만들어줘"
+    ing3 = ingest_inputs([str(input_dir / "점검매크로.bas")])
+    out_g3 = generate_artifacts(task_g3, ["document"], out_dir=tmp / "ground3",
+                                context=build_artifact_context(task_g3, plan_task(task_g3), ing3))
+    gdoc3 = (tmp / "ground3" / "문서.md").read_text(encoding="utf-8")
+    check("macro review document cites the actual file and entry points",
+          "점검매크로.bas" in gdoc3 and "CheckDims" in gdoc3)
+
+    # --- input-grounded scenario 4: log -> root-cause analysis document ---
+    task_g4 = "이 로그 보고 원인 분석 문서 만들어줘"
+    ing4 = ingest_inputs([str(input_dir / "장비.log")])
+    out_g4 = generate_artifacts(task_g4, ["document"], out_dir=tmp / "ground4",
+                                context=build_artifact_context(task_g4, plan_task(task_g4), ing4))
+    gdoc4 = (tmp / "ground4" / "문서.md").read_text(encoding="utf-8")
+    check("log analysis document reports error counts and actual error lines",
+          "ERROR 2건" in gdoc4 and "vibration sensor timeout" in gdoc4)
+
+    # --- honesty: unsupported-only input, no input, fake success ---
+    ing5 = ingest_inputs([str(input_dir / "모델.bin")])
+    out_g5 = generate_artifacts("이 파일 정리해서 문서 만들어줘", ["document"], out_dir=tmp / "ground5",
+                                context=build_artifact_context("이 파일 정리해서 문서 만들어줘",
+                                                               plan_task("이 파일 정리해서 문서 만들어줘"), ing5))
+    gdoc5 = (tmp / "ground5" / "문서.md").read_text(encoding="utf-8")
+    check("unsupported-only input is not claimed as grounded",
+          out_g5["input_grounded"] is False and "모델.bin" in gdoc5 and "지원되지 않는 형식" in gdoc5)
+    out_plain = generate_artifacts(task_g1, ["document"], out_dir=tmp / "plain")
+    pdoc = (tmp / "plain" / "문서.md").read_text(encoding="utf-8")
+    check("no-input artifact honestly says no input was used",
+          "입력 자료: 없음" in pdoc and out_plain["input_grounded"] is False)
+    v_fake = validate_artifact_set("document", [gdoc.replace("시험결과.csv", "데이터")],
+                                   task=task_g1, filenames=["문서.md"],
+                                   required_terms=["시험결과.csv"])
+    check("validator blocks claimed-but-unreflected input (fake success)",
+          not v_fake["ok"] and any(x["rule"] == "input_reflected" for x in v_fake["violations"]),
+          str(v_fake["violations"]))
+
     # --- adapter skeleton: execution side is declared but honestly pending ---
     check("adapters cover generated artifact kinds",
           {"vba_macro", "browser_script"} <= {k for a in ADAPTERS.values() for k in a["consumes"]})
@@ -327,6 +443,23 @@ def main() -> None:
     r2 = subprocess.run(["py", "-3.11", str(WS_TEMPLATE / "agent_ops" / "agentops.py"), "plan"],
                         cwd=str(WS_TEMPLATE), env=env, capture_output=True, timeout=120)
     check("plan CLI without --task exits 2", r2.returncode == 2)
+    r3 = subprocess.run(["py", "-3.11", str(WS_TEMPLATE / "agent_ops" / "agentops.py"),
+                         "plan", "--task", "시험 결과 파일 읽고 보고서 만들어줘",
+                         "--input", str(input_dir / "시험결과.csv"), "--make-artifacts"],
+                        cwd=str(WS_TEMPLATE), env=env, capture_output=True, timeout=120)
+    out3 = r3.stdout.decode("utf-8", errors="replace")
+    check("plan CLI ingests --input and exits 0",
+          r3.returncode == 0 and "입력 자료 요약" in out3,
+          out3 + r3.stderr.decode("utf-8", errors="replace"))
+    check("plan CLI reports the input-grounded verdict",
+          "input-grounded" in out3 and "예" in out3, out3[-800:])
+    cli_docs = list((ws / "agent_ops" / "results" / "artifacts").rglob("문서.md"))
+    check("CLI artifact reflects the input contents",
+          bool(cli_docs) and any("치수B" in d.read_text(encoding="utf-8") for d in cli_docs),
+          str(cli_docs))
+    wc = tmp / "diag" / "work-context-last.json"
+    check("work context recorded secret-free in diagnostics",
+          wc.exists() and "시험결과.csv" in wc.read_text(encoding="utf-8"), str(wc))
 
     # --- leave a bench marker so doctor can report the last known result ---
     from agent_ops.core import RESULTS

@@ -92,8 +92,8 @@ _KIND_RULES: Dict[str, List[Rule]] = {
          lambda t: "건" in t),
         ("action_items", "액션 아이템 목록이 있어야 함",
          lambda t: ("액션 아이템" in t) or ("액션아이템" in t)),
-        ("mock_vs_company", "mock 기반임과 실제 메일함은 company pending임을 구분해야 함",
-         lambda t: ("mock" in t) and ("company validation pending" in t)),
+        ("source_and_company", "분류 근거(mock 또는 입력 메일)와 실제 메일함은 company pending임을 구분해야 함",
+         lambda t: (("mock" in t) or ("입력 메일" in t)) and ("company validation pending" in t)),
     ],
 }
 
@@ -154,12 +154,18 @@ def _validate_slide_spec(text: str) -> List[Dict[str, str]]:
 
 
 def validate_artifact_set(kind: str, texts: Sequence[str], task: str = "",
-                          filenames: Sequence[str] = ()) -> Dict[str, Any]:
+                          filenames: Sequence[str] = (),
+                          required_terms: Sequence[str] = ()) -> Dict[str, Any]:
     """Validate all files one kind produced for one task (as a set).
 
     Some rules span files on purpose (e.g. mail_report = 보고서 + 액션아이템),
     so rules run over the joined text; slide specs get structural JSON checks;
     VBA gets host-app rules keyed off the generated filename.
+
+    `required_terms` are input-grounding anchors (e.g. input file names): if
+    the caller claims artifacts were built from user inputs, every term must
+    actually appear in the set — this blocks "read it but didn't use it"
+    fake successes.
     """
     joined = "\n".join(texts)
     rules = _common_rules(task) + _KIND_RULES.get(kind, [])
@@ -177,6 +183,13 @@ def validate_artifact_set(kind: str, texts: Sequence[str], task: str = "",
         if not ok:
             violations.append({"rule": rule_id, "why": why})
     checked = len(rules)
+    if required_terms:
+        checked += 1
+        missing = [term for term in required_terms if term and term not in joined]
+        if missing:
+            violations.append(
+                {"rule": "input_reflected",
+                 "why": f"입력 근거가 산출물에 반영되지 않음: {', '.join(missing[:5])}"})
     allowed = _KIND_SUFFIXES.get(kind)
     if allowed and filenames:
         checked += 1
@@ -197,7 +210,9 @@ def validate_artifact_set(kind: str, texts: Sequence[str], task: str = "",
             "violations": violations}
 
 
-def validate_files(kind: str, paths: Sequence[Any], task: str = "") -> Dict[str, Any]:
+def validate_files(kind: str, paths: Sequence[Any], task: str = "",
+                   required_terms: Sequence[str] = ()) -> Dict[str, Any]:
     """Read and validate the files one kind generated (see validate_artifact_set)."""
     texts = [Path(p).read_text(encoding="utf-8", errors="replace") for p in paths]
-    return validate_artifact_set(kind, texts, task, [str(p) for p in paths])
+    return validate_artifact_set(kind, texts, task, [str(p) for p in paths],
+                                 required_terms=required_terms)

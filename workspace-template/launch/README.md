@@ -53,6 +53,20 @@ py -3.11 ..\agent_ops\agentops.py plan --task "Excel 매크로 만들어줘" --m
   py -3.11 ..\agent_ops\agentops.py plan --task "시험 결과 파일 읽고 표 정리해서 보고서와 PPT 초안 만들어줘" --make-artifacts
   ```
 
+- `--input 파일또는폴더` (반복 지정 가능)를 붙이면 실제 입력 자료를 읽고
+  그 내용(CSV 행/열/이상 행, 로그 ERROR 건수, 매크로 진입점, 메일 목록 등)을
+  산출물에 반영한다. 지원: MD/TXT/CSV/TSV/LOG/PY/BAS/BAT/JSON.
+
+  ```bat
+  py -3.11 ..\agent_ops\agentops.py plan --task "시험 결과 파일 읽고 이상값 정리해서 보고서 만들어줘" --input ..\..\시험결과.csv --make-artifacts
+  ```
+
+  - 출력의 `input-grounded: 예/아니오`가 입력 반영 여부를 정직하게 알려준다
+    (입력 파일명이 산출물에 반영되지 않으면 품질 검사가 실패한다).
+  - 미지원 형식(바이너리 등)은 산출물의 "입력 자료" 섹션에 미반영으로 명시된다.
+  - 읽은 입력 요약(work context)은 secret-free로
+    `%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\work-context-last.json`에 저장된다.
+
 - `--make-artifacts`를 붙이면 `agent_ops\results\artifacts\<실행시각>\`에
   열어서 바로 쓸 수 있는 scaffold(.bas/.md/slide_spec.json/.py)를 생성한다.
   - 생성 직후 품질 검사(artifact quality validator)가 자동 실행되어
