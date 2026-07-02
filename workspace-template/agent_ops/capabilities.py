@@ -37,7 +37,7 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "artifact_kinds": ["document"],
         "outputs": [".md", ".txt"],
         "pending": [],
-        "keywords": ["문서", "보고서", "작성", "요약", "정리", "메모",
+        "keywords": ["문서", "보고서", "작성", "요약", "정리", "메모", "설명서",
                      "document", "report", "summary", "write up"],
     },
     "macro_generation": {
@@ -56,7 +56,7 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "pending": ["xlsx 직접 생성: dependency_or_app_pending (openpyxl 또는 Excel COM)",
                     "app validation pending: Excel에서 매크로 실행"],
         "keywords": ["엑셀", "excel", "xlsx", "스프레드시트", "시트", "csv", "표로",
-                     "spreadsheet"],
+                     "표 정리", "표를", "데이터 정리", "spreadsheet"],
     },
     "presentation_generation": {
         "description": "PPT 슬라이드 구성안/스펙 생성",
@@ -103,25 +103,49 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
 DEFAULT_CAPABILITIES = ["file_ops", "document_generation"]
 
 
-def classify_task(task: str) -> List[str]:
-    """Route a free-form task to capability ids, best match first.
+def _match_capabilities(task: str) -> List[Dict[str, Any]]:
+    """Keyword scoring per capability, best match first, with evidence.
 
-    Keyword scoring only — deliberately simple so weak models and tests get
-    deterministic routing. Returns DEFAULT_CAPABILITIES when nothing matches.
+    Deterministic on purpose so weak models and tests get stable routing.
+    Composite requests ("...읽고 표 정리해서 보고서랑 PPT...") naturally match
+    several capabilities and are decomposed into all of them.
     """
     text = (task or "").lower()
     scored = []
     for cap_id, spec in CAPABILITIES.items():
-        score = sum(1 for kw in spec["keywords"] if kw in text)
-        if score > 0:
-            scored.append((score, cap_id))
+        hits = [kw for kw in spec["keywords"] if kw in text]
+        if hits:
+            scored.append((len(hits), cap_id, hits))
     scored.sort(key=lambda x: (-x[0], x[1]))
-    return [cap_id for _, cap_id in scored] or list(DEFAULT_CAPABILITIES)
+    return [
+        {"id": cap_id, "matched_keywords": hits,
+         "confidence": "high" if score >= 2 else "medium"}
+        for score, cap_id, hits in scored
+    ]
+
+
+def classify_task(task: str) -> List[str]:
+    """Route a free-form task to capability ids, best match first.
+
+    Returns DEFAULT_CAPABILITIES when nothing matches.
+    """
+    matches = _match_capabilities(task)
+    return [m["id"] for m in matches] or list(DEFAULT_CAPABILITIES)
 
 
 def plan_task(task: str) -> Dict[str, Any]:
-    """task -> capabilities -> artifact kinds -> pending items (no execution)."""
-    cap_ids = classify_task(task)
+    """task -> capabilities -> artifact kinds -> pending items (no execution).
+
+    Each capability entry carries its routing evidence (matched_keywords) and
+    a confidence tag so a misrouted request is diagnosable, not silent.
+    """
+    matches = _match_capabilities(task)
+    routing = "keyword_match"
+    if not matches:
+        routing = "default_fallback"
+        matches = [{"id": c, "matched_keywords": [], "confidence": "low"}
+                   for c in DEFAULT_CAPABILITIES]
+    cap_ids = [m["id"] for m in matches]
     artifact_kinds: List[str] = []
     pending: List[str] = []
     for cap_id in cap_ids:
@@ -134,14 +158,19 @@ def plan_task(task: str) -> Dict[str, Any]:
                 pending.append(item)
     return {
         "task": task,
+        "routing": routing,
         "capabilities": [
-            {"id": c, "status": CAPABILITIES[c]["status"],
-             "description": CAPABILITIES[c]["description"]}
-            for c in cap_ids
+            {"id": m["id"], "status": CAPABILITIES[m["id"]]["status"],
+             "description": CAPABILITIES[m["id"]]["description"],
+             "confidence": m["confidence"],
+             "matched_keywords": m["matched_keywords"]}
+            for m in matches
         ],
         "artifact_kinds": artifact_kinds,
         "pending": pending,
-        "note": "산출물 생성은 로컬에서 수행되며, 앱/회사망이 필요한 검증은 pending으로 표시됩니다.",
+        "note": "산출물 생성은 로컬에서 수행되며, 앱/회사망이 필요한 검증은 pending으로 표시됩니다."
+                + (" (keyword 미매칭: 기본 파일/문서 처리로 진행 — 요청을 더 구체적으로 쓰면 라우팅이 좋아집니다.)"
+                   if routing == "default_fallback" else ""),
     }
 
 

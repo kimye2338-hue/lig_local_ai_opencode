@@ -44,11 +44,19 @@ run-agent.bat --mode real --task "작업 설명"
 py -3.11 ..\agent_ops\agentops.py plan --task "Excel 매크로 만들어줘" --make-artifacts
 ```
 
-- 요청이 어떤 capability(문서/매크로/PPT/브라우저/메일 등)로 처리되는지와
+- 요청이 어떤 capability(문서/매크로/PPT/브라우저/메일 등)로 처리되는지,
+  왜 그렇게 판단했는지(matched_keywords/confidence)와
   app/company validation pending 항목을 보여준다.
+- 복합 업무도 자동 분해된다. 예:
+
+  ```bat
+  py -3.11 ..\agent_ops\agentops.py plan --task "시험 결과 파일 읽고 표 정리해서 보고서와 PPT 초안 만들어줘" --make-artifacts
+  ```
+
 - `--make-artifacts`를 붙이면 `agent_ops\results\artifacts\<실행시각>\`에
   열어서 바로 쓸 수 있는 scaffold(.bas/.md/slide_spec.json/.py)를 생성한다.
-- 현재 가능한 capability 전체 목록은 `diag.bat` 출력의 `capabilities` 섹션 참고.
+- 현재 가능한 capability 전체 목록은 `diag.bat` 출력의 `capabilities` 섹션,
+  앱 실행 연동 상태는 `app_adapters` 섹션 참고 (실제 앱 실행은 아직 전부 pending).
 
 ## 4. 문제 발생 시
 

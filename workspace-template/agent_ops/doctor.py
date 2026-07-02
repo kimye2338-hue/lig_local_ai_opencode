@@ -76,6 +76,12 @@ def run_doctor() -> dict:
         checks["capabilities"] = capability_summary()
     except Exception as exc:
         checks["capabilities"] = {"error": repr(exc)}
+    # Execution side: which app adapters exist and what each still needs.
+    try:
+        from .adapters import adapter_summary
+        checks["app_adapters"] = adapter_summary()
+    except Exception as exc:
+        checks["app_adapters"] = {"error": repr(exc)}
     atomic_write_json(RESULTS / "environment_check.json", checks)
     lines = ["# AgentOps Doctor Report", "", f"- Generated: {checks['timestamp']}", f"- ChromeDriver found: `{found or 'NOT FOUND'}`", f"- Chrome 9222 OK: `{checks['chrome_9222'].get('ok')}`", f"- UTF-8 roundtrip OK: `{checks['encoding']['roundtrip_ok']}`", "", "## Raw", "```json", json.dumps(checks, ensure_ascii=False, indent=2), "```"]
     atomic_write_text(REPORTS / "DOCTOR_REPORT.md", "\n".join(lines))

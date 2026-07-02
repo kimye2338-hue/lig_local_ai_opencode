@@ -55,6 +55,122 @@ _VBA_HOST_NOTES = {
 }
 
 
+# Per-app VBA bodies: real host-app structure (active-doc guard, doc-type
+# branches, error handling) so the user fills in work logic, not boilerplate.
+_VBA_BODIES = {
+    "solidworks": """Option Explicit
+
+' SolidWorks VBA — SldWorks 형식 라이브러리 참조 없이도 동작하는 late binding.
+Dim swApp As Object    ' SldWorks.Application
+Dim swModel As Object  ' ModelDoc2
+
+Sub Main()
+    On Error GoTo Fail
+    Set swApp = Application.SldWorks
+    Set swModel = swApp.ActiveDoc
+    If swModel Is Nothing Then
+        MsgBox "열려 있는 SolidWorks 문서가 없습니다. 문서를 연 뒤 실행하세요.", vbExclamation
+        Exit Sub
+    End If
+
+    ' 좌표계/형상 변경 전 반드시 사본을 저장하세요 (되돌리기 불가한 작업 있음).
+    ' 문서 타입 (swDocumentTypes_e): 1=Part, 2=Assembly, 3=Drawing
+    Select Case swModel.GetType
+        Case 1 ' 파트
+            ' TODO: 파트 작업 로직 (예: 기준 좌표계 선택 후 Feature 수정)
+        Case 2 ' 어셈블리
+            ' TODO: 어셈블리 작업 로직 (예: 컴포넌트 순회 - swModel.GetComponents)
+        Case 3 ' 도면
+            ' TODO: 도면 작업 로직
+        Case Else
+            MsgBox "지원하지 않는 문서 타입입니다.", vbExclamation
+            Exit Sub
+    End Select
+
+    swModel.EditRebuild3
+    MsgBox "작업 완료. 결과를 확인하고 이상 없으면 저장하세요.", vbInformation
+    Exit Sub
+Fail:
+    MsgBox "오류 발생: " & Err.Number & " - " & Err.Description, vbCritical
+End Sub
+""",
+    "excel": """Option Explicit
+
+' 적용 대상 — 실행 전 반드시 확인/수정하세요.
+Const TARGET_SHEET As String = "Sheet1"
+Const TARGET_RANGE As String = "A1"     ' 데이터 시작 셀
+
+Sub Main()
+    On Error GoTo Fail
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(TARGET_SHEET)
+
+    Application.ScreenUpdating = False
+
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, ws.Range(TARGET_RANGE).Column).End(xlUp).Row
+    ' TODO: 실제 작업 로직 (예: 데이터 정리/정렬/서식/집계)
+    ' Dim r As Long
+    ' For r = ws.Range(TARGET_RANGE).Row To lastRow
+    '     ...
+    ' Next r
+
+    Application.ScreenUpdating = True
+    MsgBox "작업 완료 (" & TARGET_SHEET & ", 마지막 행: " & lastRow & ")", vbInformation
+    Exit Sub
+Fail:
+    Application.ScreenUpdating = True
+    MsgBox "오류 발생: " & Err.Number & " - " & Err.Description, vbCritical
+End Sub
+""",
+    "word": """Option Explicit
+
+Sub Main()
+    On Error GoTo Fail
+    If Documents.Count = 0 Then
+        MsgBox "열려 있는 문서가 없습니다.", vbExclamation
+        Exit Sub
+    End If
+    Dim doc As Document
+    Set doc = ActiveDocument
+    ' TODO: 실제 작업 로직 (예: doc.Paragraphs 순회, 찾기/바꾸기)
+    MsgBox "작업 완료: " & doc.Name, vbInformation
+    Exit Sub
+Fail:
+    MsgBox "오류 발생: " & Err.Number & " - " & Err.Description, vbCritical
+End Sub
+""",
+    "powerpoint": """Option Explicit
+
+Sub Main()
+    On Error GoTo Fail
+    If Presentations.Count = 0 Then
+        MsgBox "열려 있는 프레젠테이션이 없습니다.", vbExclamation
+        Exit Sub
+    End If
+    Dim pres As Presentation
+    Set pres = ActivePresentation
+    ' TODO: 실제 작업 로직 (예: pres.Slides 순회, 서식 일괄 적용)
+    MsgBox "작업 완료: " & pres.Name & " (" & pres.Slides.Count & "장)", vbInformation
+    Exit Sub
+Fail:
+    MsgBox "오류 발생: " & Err.Number & " - " & Err.Description, vbCritical
+End Sub
+""",
+    "generic": """Option Explicit
+
+Sub Main()
+    On Error GoTo Fail
+    ' TODO: 대상 앱을 확인한 뒤 작업 로직을 채우세요.
+    MsgBox "OpenCodeLIG macro scaffold: 작업 로직을 채운 뒤 실행하세요.", vbInformation
+    Exit Sub
+Fail:
+    MsgBox "오류 발생: " & Err.Number & " - " & Err.Description, vbCritical
+End Sub
+""",
+}
+
+
 def gen_vba_macro(task: str, out_dir: Path) -> List[Path]:
     app = _detect_target_app(task)
     app_name, how_to_run, caution = _VBA_HOST_NOTES[app]
@@ -67,14 +183,7 @@ def gen_vba_macro(task: str, out_dir: Path) -> List[Path]:
 ' 주의     : {caution}
 ' 상태     : static scaffold — {_PENDING_APP}
 ' =====================================================================
-Option Explicit
-
-Sub Main()
-    ' TODO: 아래에 실제 작업 로직을 채우세요.
-    ' real 모드에서는 LLM이 이 scaffold를 요청 내용에 맞게 완성합니다.
-    MsgBox "OpenCodeLIG macro scaffold: 작업 로직을 채운 뒤 실행하세요.", vbInformation
-End Sub
-"""
+{_VBA_BODIES[app]}"""
     path = out_dir / f"macro_{app}.bas"
     atomic_write_text(path, body)
     return [path]
@@ -87,15 +196,36 @@ def gen_document(task: str, out_dir: Path) -> List[Path]:
 - 생성: {time.strftime('%Y-%m-%d %H:%M:%S')} (OpenCodeLIG)
 - 상태: locally generated — 내용 확정 후 그대로 사용하거나 편집하세요.
 
-## 개요
+## 1. 개요
 
-(real 모드에서는 LLM이 요청 내용을 기반으로 본문을 작성합니다.)
+(요청 배경을 한 단락으로. real 모드에서는 LLM이 요청 내용을 기반으로 작성합니다.)
 
-## 본문
+## 2. 목적
 
-- TODO: 핵심 내용
+- 이 문서가 답해야 할 질문:
+- 대상 독자:
 
-## 다음 단계
+## 3. 본문
+
+### 3.1 현황
+
+- TODO: 현재 상태/데이터 요약
+
+### 3.2 핵심 내용
+
+- TODO: 요청의 핵심 내용
+
+## 4. 결론
+
+- TODO: 판단/권고 한 줄 요약
+
+## 5. 액션 아이템
+
+| # | 할 일 | 담당 | 기한 |
+|---|------|------|------|
+| 1 | TODO |      |      |
+
+## 참고
 
 - 검토 후 필요한 형식(hwp/docx 등)으로 변환 — 해당 앱 변환은 app validation pending
 """
@@ -116,22 +246,35 @@ def gen_slide_outline(task: str, out_dir: Path) -> List[Path]:
 slide_spec.json의 슬라이드별 제목/핵심 메시지를 PowerPoint에 옮기거나,
 python-pptx 확보 후 자동 변환하세요.
 
+## 발표 흐름
+
+도입(1~2장: 왜 이 발표인가) → 본론(3~4장: 근거와 핵심 내용) → 결론(5장: 요청/다음 단계).
+슬라이드마다 "이 장이 전달할 한 문장(message)"을 먼저 정하고 본문을 채우세요.
+
 ## 구성
 
 1. 표지 — 제목/발표자
 2. 배경 및 목적
-3. 핵심 내용 (요청 기반으로 채움)
-4. 결론 및 다음 단계
+3. 현황/데이터
+4. 핵심 내용 (요청 기반으로 채움)
+5. 결론 및 다음 단계
 """
     spec = {
         "task": task,
         "status": "outline_only",
         "pptx_generation": "dependency_or_app_pending",
+        "flow": ["도입", "본론", "결론"],
         "slides": [
-            {"n": 1, "title": "표지", "points": ["제목", "발표자/일자"]},
-            {"n": 2, "title": "배경 및 목적", "points": ["요청 배경", "목표"]},
-            {"n": 3, "title": "핵심 내용", "points": ["TODO: 요청 내용 기반 핵심 메시지"]},
-            {"n": 4, "title": "결론 및 다음 단계", "points": ["결론", "후속 조치"]},
+            {"n": 1, "title": "표지", "message": "발표 주제 소개",
+             "points": ["제목", "발표자/일자"]},
+            {"n": 2, "title": "배경 및 목적", "message": "왜 이 작업이 필요한가",
+             "points": ["요청 배경", "목표"]},
+            {"n": 3, "title": "현황/데이터", "message": "지금 상태는 이렇다",
+             "points": ["TODO: 근거 데이터/현황 요약"]},
+            {"n": 4, "title": "핵심 내용", "message": "TODO: 이 발표의 핵심 한 문장",
+             "points": ["TODO: 요청 내용 기반 핵심 메시지"]},
+            {"n": 5, "title": "결론 및 다음 단계", "message": "결정/요청 사항",
+             "points": ["결론", "후속 조치"]},
         ],
     }
     p1 = out_dir / "slide_outline.md"
@@ -211,14 +354,20 @@ def classify_mail(item: Dict[str, str]) -> str:
     return "기타"
 
 
+# Categories that demand user action today, in priority order.
+_ACTIONABLE = ["결재/승인", "보고/제출", "검토 요청", "회의/일정"]
+
+
 def gen_mail_report(task: str, out_dir: Path,
                     inbox: Optional[List[Dict[str, str]]] = None) -> List[Path]:
     items = inbox if inbox is not None else SAMPLE_INBOX
     rows = []
     counts: Dict[str, int] = {}
+    by_cat: Dict[str, List[Dict[str, str]]] = {}
     for item in items:
         cat = classify_mail(item)
         counts[cat] = counts.get(cat, 0) + 1
+        by_cat.setdefault(cat, []).append(item)
         rows.append(f"| {cat} | {item.get('from','')} | {item.get('subject','')} | {item.get('body','')[:40]} |")
     summary = ", ".join(f"{k} {v}건" for k, v in counts.items())
     body = f"""# 메일 분류/요약 보고서
@@ -236,10 +385,32 @@ def gen_mail_report(task: str, out_dir: Path,
 ## 다음 조치
 
 - 결재/보고/검토 항목부터 처리 권장. 광고/스팸은 무시 가능.
+- 오늘 처리할 항목은 `액션아이템.md` 참고.
 """
-    path = out_dir / "메일_분류_보고서.md"
-    atomic_write_text(path, body)
-    return [path]
+    action_lines = []
+    n = 0
+    for cat in _ACTIONABLE:
+        for item in by_cat.get(cat, []):
+            n += 1
+            action_lines.append(
+                f"| {n} | {cat} | {item.get('subject','')} | {item.get('from','')} | 대기 |")
+    actions = f"""# 오늘 처리할 액션 아이템
+
+- 요청: {task}
+- 기준: 메일 분류 결과 중 조치가 필요한 분류({', '.join(_ACTIONABLE)})만 우선순위 순으로 추출.
+- 상태: locally validated with mock inbox — 실제 메일함 기준 목록은 company validation pending.
+
+| # | 분류 | 제목 | 발신 | 처리 |
+|---|------|------|------|------|
+{chr(10).join(action_lines) if action_lines else '| - | - | 조치 필요 메일 없음 | - | - |'}
+
+처리 완료 시 '처리' 열을 완료로 바꿔서 관리하세요.
+"""
+    p1 = out_dir / "메일_분류_보고서.md"
+    p2 = out_dir / "액션아이템.md"
+    atomic_write_text(p1, body)
+    atomic_write_text(p2, actions)
+    return [p1, p2]
 
 
 GENERATORS = {
