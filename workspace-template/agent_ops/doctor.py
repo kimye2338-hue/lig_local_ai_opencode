@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 from .core import RESULTS, REPORTS, ROOT, platform_info, run_cmd, atomic_write_text, atomic_write_json, read_json, CONFIG, now
 from .state_manager import heartbeat, update_checkpoint
+from .lig_providers import validate_config as validate_lig_config
 
 def chromedriver_candidates() -> list[str]:
     cfg = read_json(CONFIG / "agentops_config.json", {})
@@ -39,6 +41,15 @@ def run_doctor() -> dict:
     test_path = RESULTS / "encoding_test_utf8.txt"
     atomic_write_text(test_path, sample)
     checks["encoding"]["roundtrip_ok"] = test_path.read_text(encoding="utf-8", errors="replace") == sample
+    checks["toolchain"] = {
+        "python": run_cmd([sys.executable, "--version"], timeout=10),
+        "git": run_cmd(["git", "--version"], timeout=10),
+        "opencode": run_cmd(["opencode", "--version"], timeout=10),
+    }
+    try:
+        checks["lig_api_config"] = validate_lig_config()  # presence flags only, never secret values
+    except Exception as exc:
+        checks["lig_api_config"] = {"ready": False, "error": repr(exc)}
     atomic_write_json(RESULTS / "environment_check.json", checks)
     lines = ["# AgentOps Doctor Report", "", f"- Generated: {checks['timestamp']}", f"- ChromeDriver found: `{found or 'NOT FOUND'}`", f"- Chrome 9222 OK: `{checks['chrome_9222'].get('ok')}`", f"- UTF-8 roundtrip OK: `{checks['encoding']['roundtrip_ok']}`", "", "## Raw", "```json", json.dumps(checks, ensure_ascii=False, indent=2), "```"]
     atomic_write_text(REPORTS / "DOCTOR_REPORT.md", "\n".join(lines))
