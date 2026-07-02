@@ -14,7 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-ROOT = Path(__file__).resolve().parents[1]
+# AGENTOPS_ROOT overrides the workspace root (used by tests and relocated installs).
+ROOT = Path(os.environ.get("AGENTOPS_ROOT") or Path(__file__).resolve().parents[1])
 AGENT_OPS = ROOT / "agent_ops"
 STATE = AGENT_OPS / "state"
 LOGS = AGENT_OPS / "logs"

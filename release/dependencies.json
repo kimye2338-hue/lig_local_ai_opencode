@@ -1,0 +1,97 @@
+{
+  "$comment": "Offline dependency manifest for company-PC deployment. status: required|planned|optional|not_needed. Prefetch everything with status=required/planned while internet is available; verify SHA256 after transfer. No secrets belong in this file or in the bundle.",
+  "manifest_version": 1,
+  "updated": "2026-07-02",
+  "runtime_note": "agent_ops is stdlib-only by design: no pip wheels are required for the core runtime. Keep it that way when patching.",
+  "dependencies": [
+    {
+      "name": "python-embeddable",
+      "version": "3.11.9 (3.11.x acceptable; company target prefers 3.11.3)",
+      "source": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip",
+      "why": "Core runtime for agent_ops, diagnostics, install/repair scripts. Company PC python default must not be assumed.",
+      "status": "required",
+      "bundle_path": "release/vendor/python-embed/",
+      "sha256": "PENDING_PREFETCH",
+      "offline_install": "unzip to %USERPROFILE%\\OpenCodeLIG\\python311\\; no registry changes needed",
+      "offline_verify": "python311\\python.exe --version",
+      "fallback": "company-installed Python 3.11 via py -3.11 if present"
+    },
+    {
+      "name": "opencode-binary",
+      "version": "PENDING: pin exact version after local runtime validation",
+      "source": "official OpenCode release channel (verify licensing/redistribution before bundling)",
+      "why": "Primary agent runtime on the company PC.",
+      "status": "required",
+      "bundle_path": "release/vendor/opencode/",
+      "sha256": "PENDING_PREFETCH",
+      "offline_install": "copy binary; record version in diagnostics (opencode --version)",
+      "offline_verify": "opencode --version matches pinned version",
+      "fallback": "none; deployment blocked without it"
+    },
+    {
+      "name": "python-wheels",
+      "version": "n/a",
+      "source": "n/a",
+      "why": "Core agent_ops runtime is stdlib-only; no wheels needed today.",
+      "status": "not_needed",
+      "bundle_path": null,
+      "sha256": null,
+      "offline_install": null,
+      "offline_verify": "py -3.11 tests run with no pip packages installed",
+      "fallback": null
+    },
+    {
+      "name": "chromedriver",
+      "version": "match company Chrome major version (home Chrome: check at prefetch time)",
+      "source": "https://googlechromelabs.github.io/chrome-for-testing/",
+      "why": "Browser automation via Selenium/CDP, only if that route is chosen (doctor.py already probes CHROMEDRIVER_PATH and CDP port 9222).",
+      "status": "planned",
+      "bundle_path": "release/vendor/chromedriver/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "copy chromedriver.exe; set CHROMEDRIVER_PATH",
+      "offline_verify": "chromedriver.exe --version",
+      "fallback": "CDP via Chrome --remote-debugging-port=9222 without a driver binary"
+    },
+    {
+      "name": "pywinauto-and-deps",
+      "version": "PENDING_DECISION",
+      "source": "pip download pywinauto -d release/vendor/wheels-ui/",
+      "why": "Windows UI automation, only if that capability is adopted.",
+      "status": "planned",
+      "bundle_path": "release/vendor/wheels-ui/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "py -3.11 -m pip install --no-index --find-links release/vendor/wheels-ui pywinauto",
+      "offline_verify": "py -3.11 -c \"import pywinauto\"",
+      "fallback": "skip UI automation; core file/LLM workflow unaffected"
+    },
+    {
+      "name": "nodejs-runtime",
+      "version": "n/a unless OpenCode distribution requires it",
+      "source": "https://nodejs.org/dist/",
+      "why": "Only if the pinned OpenCode build needs Node.",
+      "status": "planned",
+      "bundle_path": "release/vendor/node/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "unzip portable node; no installer",
+      "offline_verify": "node --version",
+      "fallback": "n/a if OpenCode ships self-contained"
+    },
+    {
+      "name": "7zip-portable",
+      "version": "latest stable at prefetch",
+      "source": "https://www.7-zip.org/",
+      "why": "Bundle extraction/verification convenience on the company PC.",
+      "status": "optional",
+      "bundle_path": "release/vendor/7zip/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "copy 7za.exe",
+      "offline_verify": "7za.exe i",
+      "fallback": "Python zipfile (stdlib) — already validated locally"
+    }
+  ],
+  "transfer": {
+    "format": "transparent ZIP or plain folder tree; no self-extracting executables, no encoded payloads",
+    "checksum_procedure": "generate release/manifest-sha256.txt via certutil -hashfile or Python hashlib; re-verify after transfer on the company PC",
+    "secret_policy": "bundle must contain no lig-api.env, no API keys, no internal hostnames; verify with a pre-zip scan"
+  }
+}
