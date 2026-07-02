@@ -1,0 +1,16 @@
+@echo off
+rem ==========================================================================
+rem APPLY_OR_REPAIR_OPENCODE_LIG.bat (V4) - safe config repair.
+rem Rewrites opencode.proxy.json (automatic backup first) and proves by
+rem read-back that baseURL/model/instructions are correct. No secrets needed.
+rem ==========================================================================
+setlocal
+chcp 65001 >nul
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
+where python >nul 2>nul || (echo [ERROR] Python not found in PATH.& pause & exit /b 1)
+python "%USERPROFILE%\OpenCodeLIG\scripts\lig_apply_config.py"
+set "RC=%ERRORLEVEL%"
+echo.
+if not "%LIG_NONINTERACTIVE%"=="1" pause
+exit /b %RC%

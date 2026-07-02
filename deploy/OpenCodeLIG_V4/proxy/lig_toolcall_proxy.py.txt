@@ -1,0 +1,330 @@
+# -*- coding: utf-8 -*-
+# lig_toolcall_proxy.py (v3, identity stays "LIG generic-toolcall-rescue-v2")
+# OpenAI-compatible endpoint on 127.0.0.1:8765 for OpenCodeLIG. Forwards chat
+# to the LIG gateway; when OpenCode passes `tools` and the model answers in
+# plain text, extracts/repairs a strict-JSON tool call and returns real
+# OpenAI `tool_calls`. Streaming + non-streaming. Standard library only.
+#
+# v3 changes:
+#   - NO hardcoded secrets: upstream URL + key come from environment or from
+#     %USERPROFILE%\OpenCodeLIG\secrets\lig_local.env (written once by
+#     SET_LIG_SECRET.bat). Refuses to start with a clear message otherwise.
+#   - bash-write guard (replaces the command-guard plugin, which cannot load
+#     in --pure mode): if the model tool-calls bash with echo/heredoc/cat
+#     file-writing or destructive patterns, re-prompts once for a write/edit
+#     tool call; if it insists, returns a short refusal message instead.
+#   - SSE responses send Connection: close (avoids clients waiting on a
+#     kept-alive stream).
+import json
+import os
+import re
+import sys
+import time
+import uuid
+import urllib.error
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+def _load_env_file():
+    p = os.path.join(os.environ.get("USERPROFILE", os.path.expanduser("~")),
+                     "OpenCodeLIG", "secrets", "lig_local.env")
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
+    except OSError:
+        pass
+
+
+_load_env_file()
+
+HOST = os.environ.get("LIG_PROXY_HOST", "127.0.0.1")
+PORT = int(os.environ.get("LIG_PROXY_PORT", "8765"))
+UPSTREAM = os.environ.get("LIG_PROXY_CHAT_UPSTREAM", "").rstrip("/")
+UP_MODEL = os.environ.get("LIG_PROXY_MODEL", "ai_infra_llm_api")
+API_KEY = os.environ.get("LIG_API_KEY", "")
+TEMP = float(os.environ.get("LIG_PROXY_TEMPERATURE", "0"))
+TOP_P = float(os.environ.get("LIG_PROXY_TOP_P", "1"))
+LOG_DIR = os.environ.get("LIG_LOG_DIR", ".")
+BANNER = "LIG generic-toolcall-rescue-v2"
+REV = "v3"
+
+FILE_TOOL_HINT = (
+    "When the user asks to create, write, or modify a file, you MUST call the "
+    "write or edit tool with the file path and content. Do NOT use the bash tool "
+    "with echo/cat/printf/heredoc to create files. Keep the EXACT file path the "
+    "user gave. After the tool call, reply with only the file path and a 3-line "
+    "summary; never paste the full file contents into the chat."
+)
+
+# ---- bash guard (ported from command-guard.ts; runs proxy-side so it works
+# ---- even in --pure mode where OpenCode plugins are disabled)
+BASH_WRITE_PATTERNS = [
+    re.compile(r"\bcat\s*>\s*\S"), re.compile(r"\bcat\s+<<"),
+    re.compile(r"<<\s*['\"]?[A-Za-z0-9_]+['\"]?"),
+    re.compile(r"\becho\b..*>\s*\S", re.DOTALL),
+    re.compile(r"\bprintf\b.*>\s*\S", re.DOTALL),
+    re.compile(r"\bpython(?:3)?\s+-c\b", re.IGNORECASE),
+    re.compile(r"\bpy\s+-3(?:\.\d+)?\s+-c\b", re.IGNORECASE),
+]
+BASH_DANGEROUS_PATTERNS = [
+    re.compile(r"\brm\s+-rf?\b", re.IGNORECASE),
+    re.compile(r"\bdel\s+/[qsf]\b", re.IGNORECASE),
+    re.compile(r"\brmdir\s+/s\b", re.IGNORECASE),
+    re.compile(r"\brd\s+/s\b", re.IGNORECASE),
+    re.compile(r"\bformat\s+[a-z]:", re.IGNORECASE),
+    re.compile(r"encodedcommand", re.IGNORECASE),
+    re.compile(r"invoke-expression", re.IGNORECASE),
+]
+BASH_TOOL_NAMES = ("bash", "shell", "cmd")
+
+
+def bash_guard_reason(name, args):
+    if name not in BASH_TOOL_NAMES or not isinstance(args, dict):
+        return None
+    cmd = str(args.get("command") or args.get("cmd") or "")
+    if not cmd:
+        return None
+    for p in BASH_DANGEROUS_PATTERNS:
+        if p.search(cmd):
+            return "dangerous"
+    for p in BASH_WRITE_PATTERNS:
+        if p.search(cmd):
+            return "file_write_via_bash"
+    return None
+
+
+def logline(msg):
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        with open(os.path.join(LOG_DIR, "lig_toolcall_proxy.log"), "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + msg + "\n")
+    except OSError:
+        pass
+
+
+def upstream_chat(messages, timeout=180):
+    payload = {"model": UP_MODEL, "messages": messages, "temperature": TEMP,
+               "top_p": TOP_P, "stream": False}
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        UPSTREAM + "/chat/completions", data=data, method="POST",
+        headers={"Content-Type": "application/json",
+                 "Authorization": "Bearer " + API_KEY})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        body = json.loads(r.read().decode("utf-8", "replace"))
+    return body["choices"][0]["message"].get("content") or ""
+
+
+def tool_instruction(tools):
+    names = [t.get("function", {}).get("name") for t in tools if t.get("function")]
+    lines = ["You can call tools. If a tool is needed, respond with EXACTLY ONE JSON object and nothing else:",
+             '{"name": "<tool>", "arguments": { ... }}',
+             "Valid tool names: " + ", ".join(n for n in names if n) + ".",
+             "Do not explain. Do not add prose before or after the JSON. If no tool is needed, answer normally.",
+             FILE_TOOL_HINT]
+    for t in tools:
+        fn = t.get("function", {})
+        if fn.get("name"):
+            lines.append("- %s: %s params=%s" % (fn["name"], fn.get("description", ""),
+                                                 json.dumps(fn.get("parameters", {}), ensure_ascii=False)))
+    return "\n".join(lines)
+
+
+_JSON_OBJ = re.compile(r"\{.*\}", re.DOTALL)
+
+
+def _safe_json(s):
+    try:
+        return json.loads(s)
+    except ValueError:
+        return None
+
+
+def extract_tool_call(content, valid_names):
+    if not content:
+        return None
+    text = content.strip()
+    candidates = []
+    m = re.search(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", text, re.DOTALL)
+    if m:
+        candidates.append(m.group(1))
+    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if m:
+        candidates.append(m.group(1))
+    m = re.search(r"([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*(\{.*\})\s*\)", text, re.DOTALL)
+    if m:
+        candidates.append(json.dumps({"name": m.group(1), "arguments": _safe_json(m.group(2))}))
+    m = _JSON_OBJ.search(text)
+    if m:
+        candidates.append(m.group(0))
+    for c in candidates:
+        obj = _safe_json(c)
+        if not isinstance(obj, dict):
+            continue
+        name = obj.get("name") or obj.get("tool") or obj.get("function")
+        args = obj.get("arguments")
+        if args is None:
+            args = obj.get("args") or obj.get("parameters") or {k: v for k, v in obj.items()
+                    if k not in ("name", "tool", "function")}
+        if isinstance(args, str):
+            args = _safe_json(args) or {"_raw": args}
+        if not isinstance(args, dict):
+            continue
+        if name and valid_names and name not in valid_names and len(valid_names) == 1:
+            name = valid_names[0]
+        if name:
+            return name, args
+    return None
+
+
+GUARD_CORRECTION = (
+    "Your previous answer tool-called bash to write a file or run a blocked "
+    "command. That is forbidden. Respond again with EXACTLY ONE JSON object "
+    "calling the write or edit tool (path + content). No bash. No prose."
+)
+GUARD_REFUSAL = ("[guard] bash로 파일을 쓰거나 위험 명령을 실행하는 요청이 차단되었습니다. "
+                 "write/edit 도구를 사용해 다시 요청해 주세요.")
+
+
+def resolve_message(messages, tools):
+    """Upstream call + tool-call extraction + bash guard with one retry."""
+    valid = [t.get("function", {}).get("name") for t in (tools or []) if t.get("function")]
+    valid = [n for n in valid if n]
+    content = upstream_chat(messages)
+    for attempt in (1, 2):
+        if not tools:
+            return {"role": "assistant", "content": content}, "stop"
+        tc = extract_tool_call(content, valid)
+        if not tc:
+            return {"role": "assistant", "content": content}, "stop"
+        name, args = tc
+        reason = bash_guard_reason(name, args)
+        if reason is None:
+            return {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "call_" + uuid.uuid4().hex[:8], "type": "function",
+                 "function": {"name": name,
+                              "arguments": json.dumps(args, ensure_ascii=False)}}]}, "tool_calls"
+        logline("guard blocked bash (%s), attempt %d" % (reason, attempt))
+        if reason == "dangerous" or attempt == 2:
+            return {"role": "assistant", "content": GUARD_REFUSAL}, "stop"
+        content = upstream_chat(messages + [
+            {"role": "assistant", "content": content},
+            {"role": "system", "content": GUARD_CORRECTION}])
+    return {"role": "assistant", "content": content}, "stop"
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def _send(self, code, obj, ctype="application/json"):
+        data = (obj if isinstance(obj, bytes) else json.dumps(obj, ensure_ascii=False).encode("utf-8"))
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self):
+        if self.path == "/health" or self.path.rstrip("/").endswith("/health"):
+            return self._send(200, {"status": "ok", "proxy": BANNER, "rev": REV,
+                                    "upstream_configured": bool(UPSTREAM and API_KEY)})
+        if self.path.endswith("/models"):
+            return self._send(200, {"object": "list", "data": [
+                {"id": UP_MODEL, "object": "model", "owned_by": "lig"}]})
+        return self._send(404, {"error": "not found"})
+
+    def do_POST(self):
+        if not self.path.endswith("/chat/completions"):
+            return self._send(404, {"error": "not found"})
+        try:
+            n = int(self.headers.get("Content-Length", "0"))
+            req = json.loads(self.rfile.read(n).decode("utf-8", "replace"))
+        except Exception as e:
+            return self._send(400, {"error": "bad request: " + repr(e)})
+        tools = req.get("tools") or []
+        stream = bool(req.get("stream"))
+        messages = list(req.get("messages") or [])
+        if tools:
+            messages = [{"role": "system", "content": tool_instruction(tools)}] + messages
+        try:
+            message, finish = resolve_message(messages, tools)
+        except urllib.error.HTTPError as e:
+            logline("upstream HTTPError %s: %s" % (e.code, e.read().decode('utf-8', 'replace')[:300]))
+            return self._error(stream, "upstream error %s" % e.code)
+        except Exception as e:
+            logline("upstream error: " + repr(e))
+            return self._error(stream, "upstream unreachable")
+        logline("finish=%s tools=%d tool_calls=%s" % (finish, len(tools), "tool_calls" in message))
+        cid = "chatcmpl-" + uuid.uuid4().hex[:12]
+        created = int(time.time())
+        if not stream:
+            return self._send(200, {"id": cid, "object": "chat.completion", "created": created,
+                "model": req.get("model", UP_MODEL),
+                "choices": [{"index": 0, "message": message, "finish_reason": finish}]})
+        return self._stream(cid, created, req.get("model", UP_MODEL), message, finish)
+
+    def _sse_headers(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.close_connection = True
+        self.end_headers()
+
+    def _error(self, stream, msg):
+        if not stream:
+            return self._send(502, {"error": msg})
+        self._sse_headers()
+        self._sse({"choices": [{"index": 0, "delta": {"role": "assistant", "content": "[proxy] " + msg},
+                                "finish_reason": "stop"}]})
+        self.wfile.write(b"data: [DONE]\n\n")
+
+    def _sse(self, obj):
+        self.wfile.write(("data: " + json.dumps(obj, ensure_ascii=False) + "\n\n").encode("utf-8"))
+
+    def _stream(self, cid, created, model, message, finish):
+        self._sse_headers()
+        base = {"id": cid, "object": "chat.completion.chunk", "created": created, "model": model}
+        self._sse(dict(base, choices=[{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}]))
+        if "tool_calls" in message:
+            tc = message["tool_calls"][0]
+            self._sse(dict(base, choices=[{"index": 0, "delta": {"tool_calls": [
+                {"index": 0, "id": tc["id"], "type": "function",
+                 "function": {"name": tc["function"]["name"], "arguments": tc["function"]["arguments"]}}]},
+                "finish_reason": None}]))
+            self._sse(dict(base, choices=[{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]))
+        else:
+            content = message.get("content") or ""
+            for i in range(0, max(len(content), 1), 400):
+                self._sse(dict(base, choices=[{"index": 0, "delta": {"content": content[i:i + 400]},
+                                               "finish_reason": None}]))
+            self._sse(dict(base, choices=[{"index": 0, "delta": {}, "finish_reason": "stop"}]))
+        self.wfile.write(b"data: [DONE]\n\n")
+
+    def log_message(self, *a):
+        pass
+
+
+def main():
+    if not UPSTREAM or not API_KEY:
+        print("[ERROR] upstream not configured.")
+        print("  LIG_PROXY_CHAT_UPSTREAM set:", bool(UPSTREAM))
+        print("  LIG_API_KEY set            :", bool(API_KEY))
+        print("  Fix: run SET_LIG_SECRET.bat once (writes OpenCodeLIG\\secrets\\lig_local.env).")
+        sys.exit(4)
+    print(BANNER, "(rev %s)" % REV)
+    print("listen:  http://%s:%d/v1" % (HOST, PORT))
+    print("health:  http://%s:%d/health" % (HOST, PORT))
+    print("upstream: [configured] model:", UP_MODEL, "temp:", TEMP)
+    print("logs:   ", LOG_DIR)
+    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+
+
+if __name__ == "__main__":
+    main()

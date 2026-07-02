@@ -1,0 +1,4 @@
+# never commit secrets or locally-generated artifacts
+SET_LIG_SECRET*
+*.env
+lig_local.*

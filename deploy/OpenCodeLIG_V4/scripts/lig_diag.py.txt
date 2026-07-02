@@ -1,0 +1,329 @@
+# -*- coding: utf-8 -*-
+# lig_diag.py (V4) - honest GO/NO-GO diagnostic for OpenCodeLIG.
+# Called by DIAG_OPENCODE_LIG.bat. stdlib only. NEVER calls input().
+#
+# Sections:
+#   [A] proxy health/identity + forced tool-call smoke test
+#   [B] config sanity (baseURL / model / instructions)
+#   [C] CLI capability probe (which flags this local build supports; never -q)
+#   [D] startup matrix with plugin isolation (5-way, incl. no-op plugin and
+#       registry fail-fast) -> classification + writes startup_mode.txt
+#   [E] headless E2E with a UNIQUE marker file (cannot false-pass on a
+#       preexisting file); on failure auto-collects err_* refs and log tails
+#   [F] GO/NO-GO summary block + report path
+import datetime
+import json
+import re
+import sys
+import time
+
+import lig_common as C
+
+STAMP = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+REPORT = C.DIAGDIR / ("LIG_DIAG_%s.txt" % STAMP)
+FAST_LIMIT = 15.0  # seconds; acceptance criteria threshold
+DEBUG_TIMEOUT = 45
+
+
+def log(section, payload):
+    with REPORT.open("a", encoding="utf-8") as f:
+        f.write("\n=== %s ===\n" % section)
+        f.write(payload if isinstance(payload, str)
+                else json.dumps(payload, ensure_ascii=False, indent=2))
+        f.write("\n")
+
+
+def is_fast(r):
+    return (isinstance(r, dict) and not r.get("timeout")
+            and isinstance(r.get("returncode"), int)
+            and isinstance(r.get("seconds"), (int, float))
+            and r["seconds"] <= FAST_LIMIT)
+
+
+# ------------------------------------------------------------------ [A]
+def section_a():
+    env = C.build_env()
+    ok, identity = C.start_proxy(env)
+    a = {"healthy": ok, "identity": identity,
+         "identity_expected": identity == C.EXPECTED_IDENTITY}
+    has_tool_calls = False
+    if ok:
+        import urllib.request
+        payload = {
+            "model": C.MODEL_ID, "temperature": 0,
+            "messages": [
+                {"role": "system", "content": "You must call write_file. Do not explain."},
+                {"role": "user", "content": "Create smoke_test.md with a short note."}],
+            "tools": [{"type": "function", "function": {
+                "name": "write_file", "description": "Write a text file.",
+                "parameters": {"type": "object", "properties": {
+                    "path": {"type": "string"}, "content": {"type": "string"}},
+                    "required": ["path", "content"]}}}],
+            "tool_choice": "auto"}
+        req = urllib.request.Request(
+            C.PROXY_BASE + "/chat/completions",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json",
+                     "Authorization": "Bearer local-proxy"}, method="POST")
+        t0 = time.time()
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                body = json.loads(r.read().decode("utf-8", "replace"))
+            has_tool_calls = bool(body["choices"][0]["message"].get("tool_calls"))
+            a["smoke_seconds"] = round(time.time() - t0, 1)
+        except Exception as e:
+            a["smoke_error"] = repr(e)
+    a["has_tool_calls"] = has_tool_calls
+    log("A_proxy_and_toolcall", a)
+    return a
+
+
+# ------------------------------------------------------------------ [B]
+def section_b():
+    b = {}
+    try:
+        cfg = json.loads(C.CFG.read_text(encoding="utf-8"))
+        base = cfg["provider"]["lig-proxy"]["options"]["baseURL"]
+        b = {"config_exists": True,
+             "routes_to_proxy": base == C.PROXY_BASE,
+             "model_ok": cfg.get("model") == C.PROVIDER_MODEL,
+             "instructions": cfg.get("instructions", []),
+             "fileops_in_instructions":
+                 "AGENTS_FILEOPS.md" in (cfg.get("instructions") or [])}
+    except Exception as e:
+        b = {"config_exists": False, "error": repr(e)}
+    log("B_config_check", b)
+    return b
+
+
+# ------------------------------------------------------------------ [C]
+def section_c():
+    """Probe which flags `opencode run` supports on THIS build. Never -q."""
+    r = C.run_capture([C.EXE, "run", "--help"], cwd=C.WS, env=C.build_env(), timeout=30)
+    helptext = (r.get("stdout", "") + "\n" + r.get("stderr", ""))
+    flags = {"--pure": "--pure" in helptext, "--auto": "--auto" in helptext,
+             "-m": ("-m," in helptext or "--model" in helptext or " -m " in helptext)}
+    c = {"probe_rc": r.get("returncode"), "flags": flags,
+         "help_tail": C.tail(helptext, 25)}
+    log("C_cli_probe", c)
+    return c
+
+
+# ------------------------------------------------------------------ [D]
+NOOP_PLUGIN = "export const DiagNoop = async () => ({})\n"
+
+
+def discover_plugin_dirs():
+    return [d for d in (C.WS / ".opencode" / "plugins",
+                        C.WS / ".opencode" / "plugin") if d.is_dir()]
+
+
+def discover_plugins(dirs):
+    files = []
+    for d in dirs:
+        for pat in ("*.ts", "*.js"):
+            files.extend(sorted(d.glob(pat)))
+    return files
+
+
+def run_debug(extra_args, env):
+    return {k: v for k, v in
+            C.run_capture([C.EXE] + extra_args + ["debug", "config"], cwd=C.WS,
+                          env=env, timeout=DEBUG_TIMEOUT).items()
+            if k in ("seconds", "returncode", "timeout")}
+
+
+def section_d():
+    if not C.EXE.exists():
+        d = {"note": "opencode.exe missing; skipped"}
+        log("D_startup_matrix", d)
+        return d, "unknown", "pure"
+
+    dirs = discover_plugin_dirs()
+    plugins = discover_plugins(dirs)
+    disabled = []
+    noop = None
+    d = {"plugin_files": [str(p) for p in plugins]}
+
+    def disable_all():
+        for p in list(plugins):
+            off = p.with_name(p.name + ".diagoff")
+            p.rename(off)
+            disabled.append((off, p))
+
+    def restore_all():
+        while disabled:
+            off, orig = disabled.pop()
+            try:
+                if off.exists():
+                    off.rename(orig)
+            except OSError as e:
+                d.setdefault("restore_errors", []).append(repr(e))
+
+    try:
+        print("  [D] pure_flag ...")
+        d["pure_flag"] = run_debug(["--pure"], C.build_env())
+        if plugins:
+            disable_all()
+            print("  [D] no_plugins ...")
+            d["no_plugins"] = run_debug([], C.build_env())
+            if dirs:
+                noop = dirs[0] / "zz_diag_noop.ts"
+                noop.write_text(NOOP_PLUGIN, encoding="utf-8")
+                print("  [D] noop_plugin_only ...")
+                d["noop_plugin_only"] = run_debug([], C.build_env())
+                noop.unlink()
+                noop = None
+            restore_all()
+            print("  [D] all_plugins_failfast (registry fail-fast) ...")
+            d["all_plugins_failfast"] = run_debug([], C.build_env(registry_failfast=True))
+            print("  [D] all_plugins_default ...")
+            d["all_plugins_default"] = run_debug([], C.build_env(registry_failfast=False))
+        else:
+            print("  [D] no local plugins found; normal == no_plugins")
+            d["no_plugins"] = run_debug([], C.build_env())
+    finally:
+        restore_all()
+        if noop is not None and noop.exists():
+            noop.unlink()
+
+    # classification (see FINAL_ACCEPTANCE_CRITERIA)
+    pure_ok = is_fast(d.get("pure_flag"))
+    if not plugins:
+        normal_ok = is_fast(d.get("no_plugins"))
+        cls = "startup_ok" if normal_ok else "slow_even_without_plugins"
+    else:
+        normal_ok = is_fast(d.get("all_plugins_failfast"))
+        if not is_fast(d.get("no_plugins")):
+            cls = "slow_even_without_plugins"
+        elif normal_ok and not is_fast(d.get("all_plugins_default")):
+            cls = "network_fetch_in_plugin_loader_fixed_by_registry_failfast"
+        elif normal_ok:
+            cls = "startup_ok"
+        elif "noop_plugin_only" in d and not is_fast(d["noop_plugin_only"]):
+            cls = "any_local_plugin_or_plugin_runtime_slow"
+        else:
+            cls = "plugin_code_or_loader_slow"
+    mode = "normal" if normal_ok else "pure"
+    d["classification"] = cls
+    d["pure_startup_ok"] = pure_ok
+    d["normal_startup_ok"] = normal_ok
+    d["recommended_mode"] = mode
+    C.set_mode(mode, "diag %s: %s" % (STAMP, cls))
+    log("D_startup_matrix", d)
+    return d, cls, mode
+
+
+# ------------------------------------------------------------------ [E]
+def section_e(cflags):
+    marker = "LIG_E2E_MARKER_" + STAMP
+    target = C.WS / ("E2E_%s.md" % STAMP)
+    # clean old E2E artifacts (>7 days)
+    for old in C.WS.glob("E2E_*.md"):
+        try:
+            if old.stat().st_mtime < time.time() - 7 * 86400:
+                old.unlink()
+        except OSError:
+            pass
+
+    prompt = ("Use the write tool to create the file %s in the current directory. "
+              "Its content must be exactly this one line: %s\n"
+              "Do not use bash. After writing, reply with only the file path."
+              % (target.name, marker))
+    args = [C.EXE, "run"]
+    if cflags.get("--pure", True):
+        args.append("--pure")
+    if cflags.get("--auto", True):
+        args.append("--auto")
+    args += ["-m", C.PROVIDER_MODEL, prompt]
+
+    e = {"command": " ".join(str(a) for a in args[:-1]) + " <prompt>",
+         "target": str(target), "marker": marker,
+         "before_exists": target.exists()}
+    r = C.run_capture(args, cwd=C.WS, env=C.build_env(), timeout=240)
+    e.update({"seconds": r["seconds"], "returncode": r["returncode"],
+              "timed_out": r["timeout"],
+              "stdout_tail": C.tail(r["stdout"], 10),
+              "stderr_tail": C.tail(r["stderr"], 10)})
+
+    marker_found = False
+    if target.exists():
+        try:
+            marker_found = marker in target.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            pass
+    e["marker_found"] = marker_found
+    e["file_create_ok"] = marker_found  # rc alone NEVER passes
+
+    if not marker_found:
+        refs = sorted(set(re.findall(r"err_[0-9a-f]+", r["stdout"] + r["stderr"])))
+        e["error_refs"] = refs
+        tails = {"proxy_log": C.tail_file(C.LOGS / "lig_toolcall_proxy.log", 40)}
+        for p in C.recent_logs(limit=3):
+            tails[str(p)] = C.tail_file(p, 40)
+        log("E_failure_log_tails", tails)
+    log("E_headless_e2e", e)
+    return e
+
+
+# ------------------------------------------------------------------ main
+def main():
+    C.ensure_dirs()
+    C.load_secrets()
+    log("meta", {"stamp": STAMP, "python": sys.version.split()[0],
+                 "exe_exists": C.EXE.exists(), "secrets_ok": C.secrets_ok()})
+    if not C.secrets_ok():
+        print(C.secrets_help())
+        # continue: config/startup checks still meaningful, but proxy/E2E will fail
+
+    print("[A] proxy + forced tool-call ...")
+    a = section_a()
+    print("[B] config sanity ...")
+    b = section_b()
+    print("[C] CLI capability probe ...")
+    c = section_c()
+    print("[D] startup matrix (up to ~4 min) ...")
+    d, cls, mode = section_d()
+    print("[E] headless E2E with unique marker file ...")
+    e = section_e(c.get("flags", {}))
+
+    core_ok = bool(a.get("healthy") and a.get("identity_expected")
+                   and a.get("has_tool_calls") and b.get("routes_to_proxy")
+                   and b.get("model_ok") and b.get("fileops_in_instructions"))
+    file_ok = bool(e.get("file_create_ok"))
+    startup_ok = bool(d.get("pure_startup_ok") or d.get("normal_startup_ok"))
+    go = core_ok and file_ok and startup_ok
+
+    summary = {"CORE_OK": core_ok, "FILE_CREATE_OK": file_ok,
+               "STARTUP_CLASS": cls, "STARTUP_MODE": mode,
+               "GO": go, "report": str(REPORT)}
+    log("F_summary", summary)
+    (C.DIAGDIR / "LAST_RESULT.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    line = "=" * 52
+    print("")
+    print(line)
+    print("[RESULT]")
+    print("  CORE_OK        = %s  (proxy=%s, tool_calls=%s, config=%s)"
+          % (core_ok, a.get("identity"), a.get("has_tool_calls"),
+             b.get("routes_to_proxy")))
+    print("  FILE_CREATE_OK = %s  (marker %s)"
+          % (file_ok, "verified" if file_ok else "MISSING; refs=%s"
+             % e.get("error_refs", [])))
+    print("  STARTUP        = mode:%s  class:%s" % (mode, cls))
+    for k in ("pure_flag", "no_plugins", "noop_plugin_only",
+              "all_plugins_failfast", "all_plugins_default"):
+        if k in d:
+            print("    %-22s %ss%s" % (k, d[k].get("seconds"),
+                  " TIMEOUT" if d[k].get("timeout") else ""))
+    print("  GO / NO-GO     = %s" % ("GO (%s mode)" % mode.upper() if go else "NO-GO"))
+    print("  report         = %s" % REPORT)
+    print("  next           = RUN_OPENCODE_LIG.bat" if go else
+          "  next           = send the [RESULT] block + last report section")
+    print(line)
+    return 0 if go else 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

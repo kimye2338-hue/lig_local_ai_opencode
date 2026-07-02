@@ -18,9 +18,20 @@ Use the latest successful `LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE` artifact from G
 
 If a newer successful workflow run exists on `main`, use that newer artifact; it should be equivalent or newer than this baseline.
 
+## OpenCodeLIG V4 (proxy + launcher + diagnostics)
+
+`deploy/OpenCodeLIG_V4/` is the current, self-contained Windows deployment for the
+LIG tool-call proxy setup: one daily launcher, one diagnostic (GO/NO-GO), one
+repair script, agent instruction/skill/memory files, and a Korean RUNBOOK. Start
+with `deploy/OpenCodeLIG_V4/RUNBOOK.md`. Design and rationale:
+`deploy/OpenCodeLIG_V4/FEEDBACK_AND_WORK_PLAN.md` and `ARCHITECTURE_REFORM_PLAN.md`.
+Committed files contain no API key and no internal URLs; secrets are written
+locally once by a separately-delivered `SET_LIG_SECRET.bat`.
+
 ## Repository map
 
 ```text
+deploy/OpenCodeLIG_V4/                       Windows OpenCodeLIG deployment (see above).
 .github/workflows/build-offline-package.yml  Build the Windows offline package.
 patches/opencode-permission-mode-toggle.patch  Patch applied to pinned upstream OpenCode.
 workspace-template/                         Files copied into the installed workspace.

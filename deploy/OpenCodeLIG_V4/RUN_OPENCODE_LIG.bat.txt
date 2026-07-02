@@ -1,0 +1,24 @@
+@echo off
+rem ==========================================================================
+rem RUN_OPENCODE_LIG.bat (V4) - THE daily launcher.
+rem Mode-aware: reads OpenCodeLIG_USERDATA\state\startup_mode.txt written by
+rem DIAG_OPENCODE_LIG.bat (defaults to SAFE PURE until diag proves normal ok).
+rem ASCII only, no PowerShell. Needs Python 3 in PATH.
+rem ==========================================================================
+if "%~1"=="__MAX" goto MAIN
+start "OpenCodeLIG" /max cmd /c "%~f0" __MAX
+exit /b
+
+:MAIN
+chcp 65001 >nul
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
+where python >nul 2>nul || (echo [ERROR] Python not found in PATH.& pause & exit /b 1)
+python "%USERPROFILE%\OpenCodeLIG\scripts\lig_launch.py"
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" (
+  echo.
+  echo [EXIT] code=%RC%   ^(10 = secrets missing: run SET_LIG_SECRET.bat once^)
+  pause
+)
+exit /b %RC%

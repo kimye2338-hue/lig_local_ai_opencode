@@ -1,0 +1,62 @@
+# -*- coding: utf-8 -*-
+# lig_launch.py (V4) - the ONLY launcher logic. Called by RUN_OPENCODE_LIG.bat
+# (mode-aware) and RUN_OPENCODE_LIG_SAFE_PURE.bat (forces pure).
+# Never calls input(); the .bat handles pause on error. stdlib only.
+import sys
+import subprocess
+
+import lig_common as C
+
+
+def main():
+    C.ensure_dirs()
+    C.load_secrets()
+
+    if not C.EXE.exists():
+        print("[ERROR] opencode.exe not found: %s" % C.EXE)
+        print("        Copy the offline-package opencode.exe into %s" % C.BIN)
+        return 2
+    if not C.secrets_ok():
+        print(C.secrets_help())
+        return 10
+
+    C.seed_fileops_if_missing()
+    cfg = C.write_config(backup=False)
+
+    env = C.build_env()
+    ok, identity = C.start_proxy(env)
+    if not ok:
+        print("[ERROR] proxy did not become healthy: %s" % identity)
+        print("        log: %s" % (C.LOGS / "lig_toolcall_proxy.log"))
+        return 3
+    if identity != C.EXPECTED_IDENTITY:
+        print("[WARN] proxy identity mismatch: %r (expected %r)" % (identity, C.EXPECTED_IDENTITY))
+        print("       An old proxy may still be running on port %s." % C.PORT)
+
+    # mode: CLI arg > LIG_PURE env > saved state (diag-written) > default pure
+    argv = [a.lower() for a in sys.argv[1:]]
+    if "--pure" in argv:
+        mode = "pure"
+    elif "--normal" in argv:
+        mode = "normal"
+    elif env.get("LIG_PURE", "") in ("1", "true", "yes"):
+        mode = "pure"
+    else:
+        mode = C.get_mode()
+
+    print("[OK] proxy identity : %s" % identity)
+    print("[OK] config         : %s" % C.CFG)
+    print("[OK] instructions   : %s" % cfg["instructions"])
+    print("[OK] startup mode   : %s%s" % (mode.upper(),
+          "  (safe: no local plugins)" if mode == "pure" else ""))
+
+    args = [str(C.EXE)]
+    if mode == "pure":
+        args.append("--pure")
+    args.append("--auto")
+    print("[NEXT] launching: %s" % " ".join(args))
+    return subprocess.call(args, cwd=str(C.WS), env=env)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
