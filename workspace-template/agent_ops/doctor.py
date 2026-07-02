@@ -91,6 +91,8 @@ def run_doctor() -> dict:
         except Exception:
             quality_available = False
         from .lig_providers import DIAG_DIR as _diag_dir
+        bench_file = RESULTS / "capability_bench" / "last_bench.json"
+        bench_info = read_json(bench_file, {}) if bench_file.exists() else {}
         checks["artifact_pipeline"] = {
             "planner_mode": "deterministic_keyword",
             "semantic_planner": "pending — plan_task(task, planner=...) hook ready",
@@ -98,6 +100,9 @@ def run_doctor() -> dict:
             "llm_enrichment": ("mock available via generate_artifacts(enrich=True, llm_client=...); "
                                "real LLM fill: company validation pending"),
             "enrich_diagnostics": str(_diag_dir / "artifact-enrich-last.json"),
+            "last_bench_result": {"path": str(bench_file), "exists": bench_file.exists(),
+                                  "checks_passed": bench_info.get("checks_passed"),
+                                  "timestamp": bench_info.get("timestamp")},
             "next_commands": [
                 'py -3.11 agent_ops\\agentops.py plan --task "작업 설명" --make-artifacts',
                 'py -3.11 tests\\test_capability_bench.py',

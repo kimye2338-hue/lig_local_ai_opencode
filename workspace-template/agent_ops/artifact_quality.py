@@ -121,6 +121,17 @@ _VBA_APP_RULES: Dict[str, List[Rule]] = {
 }
 
 
+# Allowed file extensions per kind: a macro delivered as .txt or a report
+# delivered as .py would not serve its purpose even with perfect content.
+_KIND_SUFFIXES: Dict[str, set] = {
+    "vba_macro": {".bas"},
+    "document": {".md", ".txt"},
+    "slide_outline": {".md", ".json"},
+    "browser_script": {".py"},
+    "mail_report": {".md"},
+}
+
+
 def _validate_slide_spec(text: str) -> List[Dict[str, str]]:
     """Structural check of slide_spec.json (parsed, not substring-matched)."""
     violations: List[Dict[str, str]] = []
@@ -166,6 +177,16 @@ def validate_artifact_set(kind: str, texts: Sequence[str], task: str = "",
         if not ok:
             violations.append({"rule": rule_id, "why": why})
     checked = len(rules)
+    allowed = _KIND_SUFFIXES.get(kind)
+    if allowed and filenames:
+        checked += 1
+        for name in filenames:
+            suffix = Path(str(name)).suffix.lower()
+            if suffix not in allowed:
+                violations.append(
+                    {"rule": "file_extension",
+                     "why": f"{Path(str(name)).name}: {kind} 산출물 확장자가 목적에 맞지 않음 "
+                            f"(허용: {sorted(allowed)})"})
     if kind == "slide_outline":
         for text, name in zip(texts, list(filenames) or [""] * len(texts)):
             if str(name).endswith(".json"):

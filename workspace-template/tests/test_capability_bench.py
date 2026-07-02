@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 WS_TEMPLATE = Path(__file__).resolve().parents[1]
@@ -257,6 +258,10 @@ def main() -> None:
                                    task=spec["task"], filenames=["slide_spec.json"])
     check("validator enforces minimum slide count in spec",
           any(x["rule"] == "spec_min_slides" for x in v_spec["violations"]), str(v_spec["violations"]))
+    v_ext = validate_artifact_set("vba_macro", [xl], task="엑셀 시트 정리 매크로",
+                                  filenames=["macro_excel.txt"])
+    check("validator catches a file extension that defeats the purpose",
+          any(x["rule"] == "file_extension" for x in v_ext["violations"]), str(v_ext["violations"]))
 
     # --- enrichment: LLM fill is quality-gated and never lossy ---
     task_doc = "설비 점검 결과 보고서 작성해줘"
@@ -322,6 +327,17 @@ def main() -> None:
     r2 = subprocess.run(["py", "-3.11", str(WS_TEMPLATE / "agent_ops" / "agentops.py"), "plan"],
                         cwd=str(WS_TEMPLATE), env=env, capture_output=True, timeout=120)
     check("plan CLI without --task exits 2", r2.returncode == 2)
+
+    # --- leave a bench marker so doctor can report the last known result ---
+    from agent_ops.core import RESULTS
+    marker = RESULTS / "capability_bench" / "last_bench.json"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json.dumps({
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "checks_passed": PASS + 1,  # including this final check
+        "test_file": "tests/test_capability_bench.py",
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    check("bench result recorded for doctor", marker.exists(), str(marker))
 
     print(f"\nALL {PASS} CHECKS PASSED (capability benchmark)")
 
