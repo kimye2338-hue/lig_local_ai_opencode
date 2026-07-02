@@ -250,6 +250,38 @@ def cmd_agent(args):
     print(f"진단 위치: {DIAG_DIR}")
     return 0 if result["ok"] else 1
 
+def cmd_plan(args):
+    """Task -> capability routing -> (optionally) artifact scaffolds.
+
+    Shows which capabilities a request maps to, what stays app/company
+    validation pending, and with --make-artifacts generates the scaffolds
+    into results/artifacts/<run>/."""
+    from agent_ops.capabilities import plan_task
+    from agent_ops.artifact_generators import generate_artifacts
+
+    task = (args.task or "").strip()
+    if not task:
+        print("작업 내용이 없습니다. --task \"작업 설명\" 을 지정하세요.", file=sys.stderr)
+        return 2
+    plan = plan_task(task)
+    print(json.dumps(plan, ensure_ascii=False, indent=2))
+    if not args.make_artifacts:
+        return 0
+    if not plan["artifact_kinds"]:
+        print("생성할 산출물 종류가 없습니다 (file_ops 계열 작업은 agent 명령을 사용하세요).")
+        return 0
+    result = generate_artifacts(task, plan["artifact_kinds"])
+    print(f"산출물 폴더: {result['out_dir']}")
+    for f in result["files"]:
+        print(f"  - {f}")
+    if plan["pending"]:
+        print("검증 pending:")
+        for item in plan["pending"]:
+            print(f"  - {item}")
+    for err in result["errors"]:
+        print(f"[ERROR] {err}", file=sys.stderr)
+    return 0 if result["ok"] else 1
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="OpenCode AgentOps v3.1 Co-Growth Runtime")
     sub = parser.add_subparsers(dest="cmd")
@@ -273,6 +305,7 @@ def main(argv=None):
     sub.add_parser("stop").set_defaults(func=cmd_agentstop)
     sub.add_parser("unstop").set_defaults(func=cmd_unstop)
     p = sub.add_parser("agent"); p.add_argument("--mode", choices=["mock", "real"], required=True); p.add_argument("--task", default=""); p.add_argument("--max-turns", type=int, default=10); p.set_defaults(func=cmd_agent)
+    p = sub.add_parser("plan"); p.add_argument("--task", default=""); p.add_argument("--make-artifacts", action="store_true"); p.set_defaults(func=cmd_plan)
     p = sub.add_parser("safety-check"); p.add_argument("text", nargs="*"); p.set_defaults(func=cmd_safety_check)
     p = sub.add_parser("safe-write"); p.add_argument("target"); p.add_argument("content_file"); p.set_defaults(func=cmd_safe_write)
     args = parser.parse_args(argv)

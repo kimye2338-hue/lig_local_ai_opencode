@@ -69,6 +69,13 @@ def run_doctor() -> dict:
         }
     except Exception as exc:
         checks["agent_runtime"] = {"error": repr(exc)}
+    # What kinds of office/engineering work can be handled right now, and
+    # which validations are still pending (secret-free inventory).
+    try:
+        from .capabilities import capability_summary
+        checks["capabilities"] = capability_summary()
+    except Exception as exc:
+        checks["capabilities"] = {"error": repr(exc)}
     atomic_write_json(RESULTS / "environment_check.json", checks)
     lines = ["# AgentOps Doctor Report", "", f"- Generated: {checks['timestamp']}", f"- ChromeDriver found: `{found or 'NOT FOUND'}`", f"- Chrome 9222 OK: `{checks['chrome_9222'].get('ok')}`", f"- UTF-8 roundtrip OK: `{checks['encoding']['roundtrip_ok']}`", "", "## Raw", "```json", json.dumps(checks, ensure_ascii=False, indent=2), "```"]
     atomic_write_text(REPORTS / "DOCTOR_REPORT.md", "\n".join(lines))

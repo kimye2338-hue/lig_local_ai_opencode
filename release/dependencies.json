@@ -77,6 +77,42 @@
       "fallback": "n/a if OpenCode ships self-contained"
     },
     {
+      "name": "office-doc-wheels",
+      "version": "PENDING_DECISION (python-pptx, openpyxl latest stable at prefetch)",
+      "source": "pip download python-pptx openpyxl -d release/vendor/wheels-office/",
+      "why": "Direct .pptx/.xlsx generation without Office COM. Capability framework currently ships stdlib-only scaffolds (slide_outline.md/slide_spec.json/.csv/.bas); these wheels upgrade that to real files.",
+      "status": "optional",
+      "bundle_path": "release/vendor/wheels-office/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "py -3.11 -m pip install --no-index --find-links release/vendor/wheels-office python-pptx openpyxl",
+      "offline_verify": "py -3.11 -c \"import pptx, openpyxl\"",
+      "fallback": "stdlib scaffolds + manual transfer into PowerPoint/Excel (already validated locally)"
+    },
+    {
+      "name": "pywin32",
+      "version": "PENDING_DECISION",
+      "source": "pip download pywin32 -d release/vendor/wheels-com/",
+      "why": "COM control of Excel/Word/PowerPoint/SolidWorks/HWP, only if direct app automation is adopted. VBA macro scaffolds work without it.",
+      "status": "optional",
+      "bundle_path": "release/vendor/wheels-com/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "py -3.11 -m pip install --no-index --find-links release/vendor/wheels-com pywin32",
+      "offline_verify": "py -3.11 -c \"import win32com.client\"",
+      "fallback": "generated .bas macros imported/run inside the app manually (app validation pending)"
+    },
+    {
+      "name": "browser-automation-wheels",
+      "version": "PENDING_DECISION (selenium or playwright — pick one after company policy check)",
+      "source": "pip download selenium -d release/vendor/wheels-browser/",
+      "why": "Real browser control for web/mail assistant workflows. Current browser_script scaffolds run on stdlib urllib only.",
+      "status": "optional",
+      "bundle_path": "release/vendor/wheels-browser/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "py -3.11 -m pip install --no-index --find-links release/vendor/wheels-browser selenium",
+      "offline_verify": "py -3.11 -c \"import selenium\"",
+      "fallback": "Chrome CDP via --remote-debugging-port=9222 (no wheel needed), or procedure documents"
+    },
+    {
       "name": "7zip-portable",
       "version": "latest stable at prefetch",
       "source": "https://www.7-zip.org/",

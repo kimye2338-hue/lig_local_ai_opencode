@@ -38,6 +38,18 @@ run-agent.bat --mode real --task "작업 설명"
 
 - 설정이 비어 있으면 무엇이 빠졌는지 알려주고 종료한다 (exit 2).
 
+## 3-1. 업무 계획/산출물 scaffold (API 불필요)
+
+```bat
+py -3.11 ..\agent_ops\agentops.py plan --task "Excel 매크로 만들어줘" --make-artifacts
+```
+
+- 요청이 어떤 capability(문서/매크로/PPT/브라우저/메일 등)로 처리되는지와
+  app/company validation pending 항목을 보여준다.
+- `--make-artifacts`를 붙이면 `agent_ops\results\artifacts\<실행시각>\`에
+  열어서 바로 쓸 수 있는 scaffold(.bas/.md/slide_spec.json/.py)를 생성한다.
+- 현재 가능한 capability 전체 목록은 `diag.bat` 출력의 `capabilities` 섹션 참고.
+
 ## 4. 문제 발생 시
 
 ```bat
