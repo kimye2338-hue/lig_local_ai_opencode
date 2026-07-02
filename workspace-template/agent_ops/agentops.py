@@ -266,21 +266,30 @@ def cmd_plan(args):
     plan = plan_task(task)
     print(json.dumps(plan, ensure_ascii=False, indent=2))
     if not args.make_artifacts:
+        print(f"\n다음 명령: {plan['next_exact_command']}")
         return 0
     if not plan["artifact_kinds"]:
         print("생성할 산출물 종류가 없습니다 (file_ops 계열 작업은 agent 명령을 사용하세요).")
+        print(f"다음 명령: {plan['next_exact_command']}")
         return 0
     result = generate_artifacts(task, plan["artifact_kinds"])
     print(f"산출물 폴더: {result['out_dir']}")
     for f in result["files"]:
         print(f"  - {f}")
+    for kind, verdict in result.get("quality", {}).items():
+        mark = "OK" if verdict["ok"] else "FAIL"
+        print(f"품질 검사 [{kind}]: {mark} ({verdict['checked_rules']} rules)")
+        for v in verdict["violations"]:
+            print(f"    - {v['rule']}: {v['why']}")
     if plan["pending"]:
         print("검증 pending:")
         for item in plan["pending"]:
             print(f"  - {item}")
+    print("다음: 생성된 파일을 열어 TODO를 확정하세요. "
+          "LLM 자동 채움(enrich)의 실제 gateway 연동은 company validation pending.")
     for err in result["errors"]:
         print(f"[ERROR] {err}", file=sys.stderr)
-    return 0 if result["ok"] else 1
+    return 0 if (result["ok"] and result.get("quality_ok", True)) else 1
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="OpenCode AgentOps v3.1 Co-Growth Runtime")

@@ -55,8 +55,18 @@ py -3.11 ..\agent_ops\agentops.py plan --task "Excel 매크로 만들어줘" --m
 
 - `--make-artifacts`를 붙이면 `agent_ops\results\artifacts\<실행시각>\`에
   열어서 바로 쓸 수 있는 scaffold(.bas/.md/slide_spec.json/.py)를 생성한다.
+  - 생성 직후 품질 검사(artifact quality validator)가 자동 실행되어
+    "품질 검사 [kind]: OK (n rules)" 형태로 결과를 보여준다.
+  - 한 요청에서 나온 보고서/슬라이드/매크로는 같은 실행 ID와 작업 요약을
+    공유한다 (파일 상단 "작업 컨텍스트" 참고).
+- plan 출력에는 계획 근거(matched_keywords/confidence) 외에
+  `task_summary`/`artifact_plan`/`validation_plan`/`next_exact_command`와
+  app/company pending 구분이 포함된다.
+- LLM이 scaffold의 TODO를 채우는 enrich 경로는 mock으로 검증되어 있고,
+  실제 gateway 연동은 company validation pending이다.
 - 현재 가능한 capability 전체 목록은 `diag.bat` 출력의 `capabilities` 섹션,
-  앱 실행 연동 상태는 `app_adapters` 섹션 참고 (실제 앱 실행은 아직 전부 pending).
+  앱 실행 연동 상태는 `app_adapters` 섹션, 계획/품질/enrich 상태는
+  `artifact_pipeline` 섹션 참고 (실제 앱 실행은 아직 전부 pending).
 
 ## 4. 문제 발생 시
 

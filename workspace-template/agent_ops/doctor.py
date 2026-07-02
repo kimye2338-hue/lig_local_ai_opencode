@@ -82,6 +82,29 @@ def run_doctor() -> dict:
         checks["app_adapters"] = adapter_summary()
     except Exception as exc:
         checks["app_adapters"] = {"error": repr(exc)}
+    # Planning/generation pipeline: how plans are made, whether the artifact
+    # quality validator is importable, and where LLM enrichment stands.
+    try:
+        try:
+            from .artifact_quality import validate_artifact_set  # noqa: F401
+            quality_available = True
+        except Exception:
+            quality_available = False
+        from .lig_providers import DIAG_DIR as _diag_dir
+        checks["artifact_pipeline"] = {
+            "planner_mode": "deterministic_keyword",
+            "semantic_planner": "pending — plan_task(task, planner=...) hook ready",
+            "quality_validator_available": quality_available,
+            "llm_enrichment": ("mock available via generate_artifacts(enrich=True, llm_client=...); "
+                               "real LLM fill: company validation pending"),
+            "enrich_diagnostics": str(_diag_dir / "artifact-enrich-last.json"),
+            "next_commands": [
+                'py -3.11 agent_ops\\agentops.py plan --task "작업 설명" --make-artifacts',
+                'py -3.11 tests\\test_capability_bench.py',
+            ],
+        }
+    except Exception as exc:
+        checks["artifact_pipeline"] = {"error": repr(exc)}
     atomic_write_json(RESULTS / "environment_check.json", checks)
     lines = ["# AgentOps Doctor Report", "", f"- Generated: {checks['timestamp']}", f"- ChromeDriver found: `{found or 'NOT FOUND'}`", f"- Chrome 9222 OK: `{checks['chrome_9222'].get('ok')}`", f"- UTF-8 roundtrip OK: `{checks['encoding']['roundtrip_ok']}`", "", "## Raw", "```json", json.dumps(checks, ensure_ascii=False, indent=2), "```"]
     atomic_write_text(REPORTS / "DOCTOR_REPORT.md", "\n".join(lines))

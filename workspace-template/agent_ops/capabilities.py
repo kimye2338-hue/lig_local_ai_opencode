@@ -15,7 +15,7 @@ Status vocabulary (keep consistent with reports):
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 # capability id -> spec. keywords are matched case-insensitively as substrings
 # of the task text; they route work, they do not implement it.
@@ -102,6 +102,31 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
 # produce a document, so route unknown office tasks there.
 DEFAULT_CAPABILITIES = ["file_ops", "document_generation"]
 
+# Planning metadata per artifact kind: which file(s) the kind yields and what
+# the user gets from it. Actual filenames are owned by artifact_generators.py.
+ARTIFACT_KIND_INFO: Dict[str, Dict[str, str]] = {
+    "vba_macro": {
+        "files": "macro_<app>.bas",
+        "purpose": "대상 앱(SolidWorks/Excel/Word/PowerPoint)에서 import해 실행하는 VBA 매크로 scaffold",
+    },
+    "document": {
+        "files": "문서.md",
+        "purpose": "개요/목적/본문/결론/액션아이템 구조의 보고서 초안",
+    },
+    "slide_outline": {
+        "files": "slide_outline.md, slide_spec.json",
+        "purpose": "발표 흐름과 장별 핵심 메시지가 담긴 슬라이드 구성안",
+    },
+    "browser_script": {
+        "files": "browser_macro.py",
+        "purpose": "CDP/selenium/playwright 선택 기준이 담긴 브라우저 자동화 scaffold",
+    },
+    "mail_report": {
+        "files": "메일_분류_보고서.md, 액션아이템.md",
+        "purpose": "메일 분류/요약 보고서와 오늘 처리할 액션아이템 목록",
+    },
+}
+
 
 def _match_capabilities(task: str) -> List[Dict[str, Any]]:
     """Keyword scoring per capability, best match first, with evidence.
@@ -133,14 +158,43 @@ def classify_task(task: str) -> List[str]:
     return [m["id"] for m in matches] or list(DEFAULT_CAPABILITIES)
 
 
-def plan_task(task: str) -> Dict[str, Any]:
-    """task -> capabilities -> artifact kinds -> pending items (no execution).
+# A semantic planner receives (task, keyword_matches) and may return a
+# replacement match list in the same shape as _match_capabilities() output.
+SemanticPlanner = Callable[[str, List[Dict[str, Any]]], List[Dict[str, Any]]]
+
+
+def plan_task(task: str, planner: Optional[SemanticPlanner] = None) -> Dict[str, Any]:
+    """task -> capabilities -> artifact plan -> validation plan (no execution).
 
     Each capability entry carries its routing evidence (matched_keywords) and
     a confidence tag so a misrouted request is diagnosable, not silent.
+
+    `planner` is the hook for a future semantic (LLM) planner: anything it
+    returns that is invalid — unknown capability ids, empty list, exception —
+    falls back to keyword routing, so routing never breaks because a smarter
+    planner misbehaved. Real LLM planning stays company validation pending;
+    the resulting mode is recorded in plan["planner_mode"].
     """
     matches = _match_capabilities(task)
     routing = "keyword_match"
+    planner_mode = "deterministic_keyword"
+    if planner is not None:
+        try:
+            proposed = planner(task, list(matches))
+            valid = [m for m in (proposed or []) if m.get("id") in CAPABILITIES]
+        except Exception as exc:
+            valid = []
+            planner_mode = f"deterministic_keyword (semantic planner failed: {type(exc).__name__})"
+        else:
+            if valid:
+                matches = [{"id": m["id"],
+                            "matched_keywords": list(m.get("matched_keywords", [])),
+                            "confidence": m.get("confidence", "medium")}
+                           for m in valid]
+                routing = "semantic"
+                planner_mode = "semantic"
+            else:
+                planner_mode = "deterministic_keyword (semantic planner returned nothing usable)"
     if not matches:
         routing = "default_fallback"
         matches = [{"id": c, "matched_keywords": [], "confidence": "low"}
@@ -156,9 +210,40 @@ def plan_task(task: str) -> Dict[str, Any]:
         for item in spec["pending"]:
             if item not in pending:
                 pending.append(item)
+    # Split what the user can finish on this PC from what needs the company
+    # network — the two blockers are different people/actions.
+    company_pending = [p for p in pending if "company" in p]
+    app_pending = [p for p in pending if "company" not in p]
+    if routing == "default_fallback":
+        task_summary = (f"'{task}' 요청이 알려진 업무 유형과 매칭되지 않았습니다. "
+                        "기본 파일/문서 처리로 안전하게 계획합니다 (low confidence — 추정일 수 있음).")
+    else:
+        task_summary = (f"요청을 {len(cap_ids)}개 업무 영역({', '.join(cap_ids)})으로 분해, "
+                        f"산출물 {len(artifact_kinds)}종 생성 계획.")
+    artifact_plan = [
+        {"kind": kind,
+         "files": ARTIFACT_KIND_INFO.get(kind, {}).get("files", ""),
+         "purpose": ARTIFACT_KIND_INFO.get(kind, {}).get("purpose", ""),
+         "from_capabilities": [c for c in cap_ids
+                               if kind in CAPABILITIES[c]["artifact_kinds"]]}
+        for kind in artifact_kinds
+    ]
+    safe_task = task.replace('"', "'")
+    if artifact_kinds:
+        next_cmd = f'py -3.11 agent_ops\\agentops.py plan --task "{safe_task}" --make-artifacts'
+    else:
+        next_cmd = f'py -3.11 agent_ops\\agentops.py agent --mode mock --task "{safe_task}"'
+    validation_plan = (
+        ["local: 산출물 생성 + artifact quality validator 통과 (자동)",
+         "user: 생성 파일을 열어 TODO를 확정하고 내용 검토"]
+        + [f"app: {p}" for p in app_pending]
+        + [f"company: {p}" for p in company_pending]
+    )
     return {
         "task": task,
+        "task_summary": task_summary,
         "routing": routing,
+        "planner_mode": planner_mode,
         "capabilities": [
             {"id": m["id"], "status": CAPABILITIES[m["id"]]["status"],
              "description": CAPABILITIES[m["id"]]["description"],
@@ -167,7 +252,12 @@ def plan_task(task: str) -> Dict[str, Any]:
             for m in matches
         ],
         "artifact_kinds": artifact_kinds,
+        "artifact_plan": artifact_plan,
+        "validation_plan": validation_plan,
         "pending": pending,
+        "app_pending": app_pending,
+        "company_pending": company_pending,
+        "next_exact_command": next_cmd,
         "note": "산출물 생성은 로컬에서 수행되며, 앱/회사망이 필요한 검증은 pending으로 표시됩니다."
                 + (" (keyword 미매칭: 기본 파일/문서 처리로 진행 — 요청을 더 구체적으로 쓰면 라우팅이 좋아집니다.)"
                    if routing == "default_fallback" else ""),

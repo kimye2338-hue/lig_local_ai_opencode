@@ -5,8 +5,18 @@ Each generator produces a scaffold the user can open, understand, and apply:
 what it is for, how to run/import it, and which validation is still pending.
 Generators are generic per artifact *kind* (macro, document, slide outline,
 browser script, mail report) — the task text is embedded as context/TODO, not
-pattern-matched into bespoke behavior. Real content comes from the LLM in
-real mode; these scaffolds keep the pipeline working without any dependency.
+pattern-matched into bespoke behavior.
+
+All artifacts of one run share one ArtifactContext (run id, task summary,
+sibling artifacts, pending items), so a report and its slide outline read as
+parts of the same job, not unrelated files. Every generated set is checked by
+artifact_quality before being reported OK.
+
+Content filling: scaffolds are deterministic; generate_artifacts(enrich=True,
+llm_client=...) lets an LLM fill the TODOs, but the filled file replaces the
+scaffold only if it still passes the quality validator — otherwise the
+scaffold is kept and the fallback is recorded. Real LLM fill via the company
+gateway stays company validation pending; mock clients validate the path.
 
 Output locations:
   results/artifacts/<run>/          user-facing outputs (default)
@@ -17,14 +27,58 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .core import RESULTS, atomic_write_text
+from .artifact_quality import validate_artifact_set, validate_files
 
 ARTIFACTS_DIR = RESULTS / "artifacts"
 BENCH_DIR = RESULTS / "capability_bench"
 
 _PENDING_APP = "app validation pending: 실제 앱에서 실행/적용 후 결과를 확인하세요."
+
+
+def build_artifact_context(task: str, plan: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """One shared context for every artifact of one run (dict-based on purpose).
+
+    Generators embed it so sibling artifacts (report, slides, macro, ...)
+    visibly belong to the same job: same run id, same task summary, same
+    pending items. Callers may pass a precomputed plan to avoid re-planning.
+    """
+    if plan is None:
+        from .capabilities import plan_task
+        plan = plan_task(task)
+    return {
+        "task": task,
+        "run_id": time.strftime("%Y%m%d_%H%M%S"),
+        "task_summary": plan.get("task_summary", task),
+        "capabilities": [c["id"] for c in plan.get("capabilities", [])],
+        "artifact_kinds": list(plan.get("artifact_kinds", [])),
+        "assumptions": ["산출물은 scaffold이며 사용자가 내용을 확정해야 합니다."],
+        "validation_status": "locally generated + quality validator 적용",
+        "pending": list(plan.get("pending", [])),
+    }
+
+
+def _context_block(ctx: Dict[str, Any]) -> str:
+    """Markdown block shared verbatim across a run's artifacts."""
+    siblings = ", ".join(ctx.get("artifact_kinds", [])) or "-"
+    lines = [
+        "## 작업 컨텍스트 (이 작업의 모든 산출물이 공유)",
+        "",
+        f"- 실행 ID: {ctx['run_id']}",
+        f"- 작업 요약: {ctx['task_summary']}",
+        f"- 함께 생성되는 산출물: {siblings}",
+        f"- 검증 상태: {ctx['validation_status']}",
+    ]
+    pending = ctx.get("pending") or []
+    if pending:
+        lines.append(f"- pending: {'; '.join(pending[:4])}")
+    return "\n".join(lines)
+
+
+def _ensure_context(task: str, ctx: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    return ctx if ctx else build_artifact_context(task)
 
 
 def _detect_target_app(task: str) -> str:
@@ -171,13 +225,17 @@ End Sub
 }
 
 
-def gen_vba_macro(task: str, out_dir: Path) -> List[Path]:
+def gen_vba_macro(task: str, out_dir: Path,
+                  ctx: Optional[Dict[str, Any]] = None) -> List[Path]:
+    ctx = _ensure_context(task, ctx)
     app = _detect_target_app(task)
     app_name, how_to_run, caution = _VBA_HOST_NOTES[app]
     body = f"""Attribute VB_Name = "OpenCodeLIG_Macro"
 ' =====================================================================
 ' OpenCodeLIG 생성 매크로 scaffold
 ' 요청 작업: {task}
+' 작업 요약: {ctx['task_summary']}
+' 실행 ID  : {ctx['run_id']} (같은 ID의 문서/슬라이드와 한 작업 세트)
 ' 대상 앱  : {app_name}
 ' 실행 방법: {how_to_run}
 ' 주의     : {caution}
@@ -189,12 +247,16 @@ def gen_vba_macro(task: str, out_dir: Path) -> List[Path]:
     return [path]
 
 
-def gen_document(task: str, out_dir: Path) -> List[Path]:
+def gen_document(task: str, out_dir: Path,
+                 ctx: Optional[Dict[str, Any]] = None) -> List[Path]:
+    ctx = _ensure_context(task, ctx)
     body = f"""# 작업 문서
 
 - 요청: {task}
 - 생성: {time.strftime('%Y-%m-%d %H:%M:%S')} (OpenCodeLIG)
 - 상태: locally generated — 내용 확정 후 그대로 사용하거나 편집하세요.
+
+{_context_block(ctx)}
 
 ## 1. 개요
 
@@ -234,12 +296,16 @@ def gen_document(task: str, out_dir: Path) -> List[Path]:
     return [path]
 
 
-def gen_slide_outline(task: str, out_dir: Path) -> List[Path]:
+def gen_slide_outline(task: str, out_dir: Path,
+                      ctx: Optional[Dict[str, Any]] = None) -> List[Path]:
+    ctx = _ensure_context(task, ctx)
     outline = f"""# 슬라이드 구성안
 
 - 요청: {task}
 - 상태: locally generated. .pptx 자동 생성은 dependency_or_app_pending
   (python-pptx 설치 또는 PowerPoint COM — release/dependencies.json 참고)
+
+{_context_block(ctx)}
 
 ## 사용 방법
 
@@ -263,6 +329,8 @@ python-pptx 확보 후 자동 변환하세요.
         "task": task,
         "status": "outline_only",
         "pptx_generation": "dependency_or_app_pending",
+        "context": {"run_id": ctx["run_id"], "task_summary": ctx["task_summary"],
+                    "related_artifacts": ctx.get("artifact_kinds", [])},
         "flow": ["도입", "본론", "결론"],
         "slides": [
             {"n": 1, "title": "표지", "message": "발표 주제 소개",
@@ -284,11 +352,15 @@ python-pptx 확보 후 자동 변환하세요.
     return [p1, p2]
 
 
-def gen_browser_script(task: str, out_dir: Path) -> List[Path]:
+def gen_browser_script(task: str, out_dir: Path,
+                       ctx: Optional[Dict[str, Any]] = None) -> List[Path]:
+    ctx = _ensure_context(task, ctx)
     body = f'''# -*- coding: utf-8 -*-
 """브라우저 자동화 scaffold (OpenCodeLIG 생성)
 
 요청: {task}
+작업 요약: {ctx['task_summary']}
+실행 ID: {ctx['run_id']} (같은 ID의 산출물과 한 작업 세트)
 
 실행 방법:
   py -3.11 browser_macro.py
@@ -359,7 +431,9 @@ _ACTIONABLE = ["결재/승인", "보고/제출", "검토 요청", "회의/일정
 
 
 def gen_mail_report(task: str, out_dir: Path,
+                    ctx: Optional[Dict[str, Any]] = None,
                     inbox: Optional[List[Dict[str, str]]] = None) -> List[Path]:
+    ctx = _ensure_context(task, ctx)
     items = inbox if inbox is not None else SAMPLE_INBOX
     rows = []
     counts: Dict[str, int] = {}
@@ -377,6 +451,8 @@ def gen_mail_report(task: str, out_dir: Path,
 - 상태: locally validated with mock inbox.
   실제 웹메일 연동은 company validation pending (로그인/세션/사내망),
   브라우저 제어는 real browser validation pending.
+
+{_context_block(ctx)}
 
 | 분류 | 발신 | 제목 | 요약 |
 |------|------|------|------|
@@ -397,6 +473,7 @@ def gen_mail_report(task: str, out_dir: Path,
     actions = f"""# 오늘 처리할 액션 아이템
 
 - 요청: {task}
+- 실행 ID: {ctx['run_id']} (`메일_분류_보고서.md`와 한 작업 세트)
 - 기준: 메일 분류 결과 중 조치가 필요한 분류({', '.join(_ACTIONABLE)})만 우선순위 순으로 추출.
 - 상태: locally validated with mock inbox — 실제 메일함 기준 목록은 company validation pending.
 
@@ -422,24 +499,114 @@ GENERATORS = {
 }
 
 
+# Only text artifacts the user edits are enrichable; specs (json) stay exact.
+_ENRICHABLE_SUFFIXES = (".md", ".bas", ".py")
+
+
+def _enrich_prompt(kind: str, task: str, scaffold: str) -> str:
+    return (f"다음은 '{task}' 요청으로 생성된 {kind} scaffold입니다.\n"
+            "TODO 항목을 요청에 맞는 실제 내용으로 채우세요.\n"
+            "문서 구조(섹션/코드 골격), 안전 안내, 검증 상태/pending 표시는 그대로 유지해야 합니다.\n"
+            "파일 전체를 다시 출력하세요.\n\n" + scaffold)
+
+
+def _maybe_enrich(task: str, files_by_kind: Dict[str, List[str]], enrich: bool,
+                  llm_client: Optional[Callable[[str], str]]) -> Dict[str, Any]:
+    """Optionally let an LLM fill scaffold TODOs — quality-gated, never lossy.
+
+    A filled file replaces its scaffold only if the whole artifact set still
+    passes the quality validator with the candidate swapped in; any failure
+    (bad output, exception, missing client) keeps the scaffold and is recorded.
+    """
+    result: Dict[str, Any] = {"requested": bool(enrich), "applied": [],
+                              "fallback": [], "status": ""}
+    if not enrich:
+        result["status"] = "not requested — deterministic scaffold 그대로 사용"
+        return result
+    if llm_client is None:
+        result["status"] = ("skipped: llm_client 없음 — real LLM fill은 "
+                            "company validation pending (LIG gateway)")
+        return result
+    for kind, paths in files_by_kind.items():
+        names = [Path(p).name for p in paths]
+        originals = {p: Path(p).read_text(encoding="utf-8") for p in paths}
+        for p in paths:
+            path = Path(p)
+            if path.suffix not in _ENRICHABLE_SUFFIXES:
+                continue
+            try:
+                candidate = llm_client(_enrich_prompt(kind, task, originals[p]))
+            except Exception as exc:
+                result["fallback"].append(
+                    {"file": path.name, "reason": f"llm error: {exc!r}"[:200]})
+                continue
+            texts = [candidate if q == p else originals[q] for q in paths]
+            verdict = validate_artifact_set(kind, [t or "" for t in texts], task, names)
+            if verdict["ok"]:
+                atomic_write_text(path, candidate)
+                result["applied"].append(path.name)
+            else:
+                failed = ", ".join(v["rule"] for v in verdict["violations"][:5])
+                result["fallback"].append(
+                    {"file": path.name,
+                     "reason": f"quality validator rejected: {failed}"})
+    result["status"] = (f"applied {len(result['applied'])} file(s), "
+                        f"fallback {len(result['fallback'])} file(s) — "
+                        "실패한 파일은 scaffold 유지")
+    return result
+
+
+def _record_enrich_diag(task: str, enrichment: Dict[str, Any]) -> None:
+    """Secret-free enrichment trace for diagnostics; never fails the caller."""
+    try:
+        from .lig_providers import DIAG_DIR
+        DIAG_DIR.mkdir(parents=True, exist_ok=True)
+        payload = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                   "task": task, **enrichment}
+        (DIAG_DIR / "artifact-enrich-last.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def generate_artifacts(task: str, kinds: List[str],
-                       out_dir: Optional[Path] = None) -> Dict[str, Any]:
+                       out_dir: Optional[Path] = None,
+                       context: Optional[Dict[str, Any]] = None,
+                       enrich: bool = False,
+                       llm_client: Optional[Callable[[str], str]] = None) -> Dict[str, Any]:
     """Generate scaffolds for the given kinds; never raises per-kind.
 
     Default out_dir is a per-run folder under results/artifacts/ so user
-    outputs never mix with test/bench outputs.
+    outputs never mix with test/bench outputs. All kinds share one
+    ArtifactContext; every generated set is quality-validated ("quality"),
+    and enrich=True routes files through the LLM fill path ("enrichment").
     """
     target = Path(out_dir) if out_dir else ARTIFACTS_DIR / time.strftime("%Y%m%d_%H%M%S")
     target.mkdir(parents=True, exist_ok=True)
+    ctx = dict(context) if context else build_artifact_context(task)
+    ctx.setdefault("run_id", time.strftime("%Y%m%d_%H%M%S"))
     files: List[str] = []
     errors: List[str] = []
+    files_by_kind: Dict[str, List[str]] = {}
     for kind in kinds:
         fn = GENERATORS.get(kind)
         if fn is None:
             errors.append(f"unknown artifact kind: {kind}")
             continue
         try:
-            files.extend(str(p) for p in fn(task, target))
+            made = [str(p) for p in fn(task, target, ctx)]
+            files.extend(made)
+            files_by_kind[kind] = made
         except Exception as exc:
             errors.append(f"{kind}: {exc!r}"[:300])
-    return {"ok": not errors, "out_dir": str(target), "files": files, "errors": errors}
+    quality = {kind: validate_files(kind, paths, task)
+               for kind, paths in files_by_kind.items()}
+    quality_ok = all(v["ok"] for v in quality.values()) if quality else True
+    enrichment = _maybe_enrich(task, files_by_kind, enrich, llm_client)
+    if enrichment["requested"]:
+        _record_enrich_diag(task, enrichment)
+    return {"ok": not errors, "out_dir": str(target), "files": files,
+            "errors": errors, "quality": quality, "quality_ok": quality_ok,
+            "enrichment": enrichment,
+            "context": {"run_id": ctx["run_id"],
+                        "task_summary": ctx.get("task_summary", task)}}
