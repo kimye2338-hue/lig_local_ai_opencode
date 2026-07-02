@@ -1,0 +1,49 @@
+# OpenCodeLIG 실행 순서 (회사 PC 기준)
+
+모든 명령은 이 `launch` 폴더에서 실행한다. 더블클릭 대신 CMD에서 실행해야 메시지를 볼 수 있다.
+
+## 1. 환경 점검
+
+```bat
+diag.bat
+```
+
+- Python 3.11 / provider 설정(lig-api.env) / 사용 가능한 도구 목록을 한 번에 보여준다.
+- secret 값은 출력되지 않는다 (presence flag만).
+
+## 2. mock 모드로 파이프라인 검증 (회사 API 불필요)
+
+```bat
+run-agent.bat --mode mock --task "한글 문서를 읽고 요약 파일을 만들어줘"
+```
+
+- mock LLM이 write → read → 최종 응답 흐름을 실제 파일 작업으로 수행한다.
+- 결과: `모의_결과\작업_요약.md` 생성, 응답은 `agent_ops\results\llm_responses\agent_cli_last.md`.
+- mock 모드는 파이프라인 검증용이며 실제 모델 응답이 아니다.
+
+## 3. real 모드 (회사 gateway 필요 — company validation pending)
+
+먼저 secret 파일을 채운다 (repo 밖, 로컬 전용):
+
+```text
+%USERPROFILE%\OpenCodeLIG_USERDATA\secrets\lig-api.env
+(템플릿: workspace-template\config\lig-api.env.example)
+```
+
+그 다음:
+
+```bat
+run-agent.bat --mode real --task "작업 설명"
+```
+
+- 설정이 비어 있으면 무엇이 빠졌는지 알려주고 종료한다 (exit 2).
+
+## 4. 문제 발생 시
+
+```bat
+diag.bat
+resume.bat
+```
+
+- 진단 파일: `%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\`
+  (`agent-loop-last.json`, `tool-dispatch-history.jsonl`, `runtime-last.json` 등, secret-free)

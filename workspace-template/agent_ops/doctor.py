@@ -50,6 +50,25 @@ def run_doctor() -> dict:
         checks["lig_api_config"] = validate_lig_config()  # presence flags only, never secret values
     except Exception as exc:
         checks["lig_api_config"] = {"ready": False, "error": repr(exc)}
+    # User-facing agent runtime readiness (secret-free: paths + flags only).
+    try:
+        from .tool_dispatch import REGISTRY
+        from .lig_providers import DIAG_DIR
+        try:
+            from . import mock_transport  # noqa: F401
+            mock_ready = True
+        except Exception:
+            mock_ready = False
+        checks["agent_runtime"] = {
+            "py311": run_cmd(["py", "-3.11", "--version"], timeout=10),
+            "tools": sorted(REGISTRY.keys()),
+            "diagnostics_dir": str(DIAG_DIR),
+            "mock_smoke_ready": mock_ready,
+            "real_provider_ready": bool(checks["lig_api_config"].get("ready")),
+            "company_validation": "pending",
+        }
+    except Exception as exc:
+        checks["agent_runtime"] = {"error": repr(exc)}
     atomic_write_json(RESULTS / "environment_check.json", checks)
     lines = ["# AgentOps Doctor Report", "", f"- Generated: {checks['timestamp']}", f"- ChromeDriver found: `{found or 'NOT FOUND'}`", f"- Chrome 9222 OK: `{checks['chrome_9222'].get('ok')}`", f"- UTF-8 roundtrip OK: `{checks['encoding']['roundtrip_ok']}`", "", "## Raw", "```json", json.dumps(checks, ensure_ascii=False, indent=2), "```"]
     atomic_write_text(REPORTS / "DOCTOR_REPORT.md", "\n".join(lines))

@@ -205,6 +205,51 @@ def cmd_safe_write(args):
     print(json.dumps({"ok": True, "validation": validation}, ensure_ascii=False, indent=2))
     return 0
 
+def cmd_agent(args):
+    """User-facing tool-use agent run. --mode mock validates the whole
+    pipeline offline; --mode real needs lig-api.env (company validation
+    pending on non-company machines)."""
+    from agent_ops.core import ROOT as WS_ROOT
+    from agent_ops.tool_dispatch import run_agent_loop
+    from agent_ops.lig_providers import DIAG_DIR, SECRET_ENV_PATH, validate_config
+
+    task = (args.task or "").strip()
+    if not task:
+        print("작업 내용이 없습니다. --task \"작업 설명\" 을 지정하세요.", file=sys.stderr)
+        return 2
+
+    if args.mode == "mock":
+        from agent_ops.mock_transport import MOCK_ENV, make_mock_transport
+        print("[mock 모드] 회사 API 없이 파이프라인만 검증합니다 (실제 모델 응답 아님).")
+        result = run_agent_loop(task, WS_ROOT, env=MOCK_ENV,
+                                transport=make_mock_transport(),
+                                max_turns=args.max_turns)
+    else:
+        cfg = validate_config()
+        if not cfg.get("ready"):
+            print("[real 모드] LIG provider 설정이 준비되지 않았습니다.", file=sys.stderr)
+            for item in cfg.get("missing", []):
+                print(f"  - {item}", file=sys.stderr)
+            print(f"  설정 파일 위치: {SECRET_ENV_PATH}", file=sys.stderr)
+            print("  회사 PC에서 lig-api.env를 채운 뒤 다시 실행하세요 (company validation pending).", file=sys.stderr)
+            return 2
+        print("[real 모드] LIG gateway로 실제 요청을 보냅니다.")
+        result = run_agent_loop(task, WS_ROOT, max_turns=args.max_turns)
+
+    out = RESULTS / "llm_responses" / "agent_cli_last.md"
+    atomic_write_text(out, result.get("final_content", ""))
+    print(f"결과: {result['outcome']}  (턴 {result['turns']}, 도구 실행 {len(result['tool_results'])}회)")
+    failed = [r for r in result["tool_results"] if not r.get("ok")]
+    if failed:
+        print(f"실패한 도구 호출 {len(failed)}건: " + ", ".join(
+            f"{r.get('tool')}({r.get('root_cause_category')})" for r in failed))
+    print("--- 최종 응답 ---")
+    print(result.get("final_content", ""))
+    print("-----------------")
+    print(f"응답 저장: {out}")
+    print(f"진단 위치: {DIAG_DIR}")
+    return 0 if result["ok"] else 1
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="OpenCode AgentOps v3.1 Co-Growth Runtime")
     sub = parser.add_subparsers(dest="cmd")
@@ -227,6 +272,7 @@ def main(argv=None):
     p = sub.add_parser("orchestrator"); p.add_argument("--interval", type=int, default=60); p.add_argument("--parallel", action="store_true"); p.add_argument("--workers", type=int, default=3); p.set_defaults(func=cmd_orchestrator)
     sub.add_parser("stop").set_defaults(func=cmd_agentstop)
     sub.add_parser("unstop").set_defaults(func=cmd_unstop)
+    p = sub.add_parser("agent"); p.add_argument("--mode", choices=["mock", "real"], required=True); p.add_argument("--task", default=""); p.add_argument("--max-turns", type=int, default=10); p.set_defaults(func=cmd_agent)
     p = sub.add_parser("safety-check"); p.add_argument("text", nargs="*"); p.set_defaults(func=cmd_safety_check)
     p = sub.add_parser("safe-write"); p.add_argument("target"); p.add_argument("content_file"); p.set_defaults(func=cmd_safe_write)
     args = parser.parse_args(argv)
