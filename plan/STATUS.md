@@ -14,7 +14,7 @@
 | P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | APPROVED | plan/reports/P09-03-r3.md | plan/reviews/P09-03-r3.md |
 | P10-01 | git 히스토리 내부 hostname purge | fable | — | FABLE-ONLY | READY | | |
 | P11-A | lig_runtime native function calling(tools) 경로 | codex | P09-02 | ANY | APPROVED | plan/reports/P11-A-r1.md | plan/reviews/P11-A-r1.md |
-| P11-01 | weak-model capability-floor 하네스 | codex | P09-03, P11-A | ANY | READY | | |
+| P11-01 | weak-model capability-floor 하네스 | codex | P09-03, P11-A | ANY | IN-PROGRESS | | |
 | P11-02 | floor 실측 + 파서/프롬프트 보강 | codex | P11-01 | LOCAL-LLM | BLOCKED | | |
 | P12-01 | stdlib WebSocket 미니 클라이언트 | codex | — | ANY | APPROVED | plan/reports/P12-01-r1.md | plan/reviews/P12-01-r1.md |
 | P12-02 | 브라우저 CDP 어댑터 + chrome-debug.bat | codex | P12-01 | ANY | APPROVED | plan/reports/P12-02-r1.md | plan/reviews/P12-02-r1.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-03 P11-01 IN-PROGRESS (Codex). 시작 HEAD: 6d8a35f.
 
 - 2026-07-03 Fable 배치 리뷰 4차: **P09-03 r3 APPROVED**(Ollama qwen2.5:7b real smoke 3종 리뷰 환경에서 독립 재현 — 12 checks 실통과, `_chat_completions_url` 정규화는 회사 probe URL 형식과 정합 확인 = 회사 real-mode 잠재 404 버그 동시 수정), **P11-A r1 APPROVED**(id 자체발급/N/A 정규화/tool_call_mode 진단 델타 5종 전부 확인, payload 캡처 테스트로 id 대응 실검증). 전체 17개 테스트 파일 exit 0 재현. **P11-01 → READY** (선행 P09-03·P11-A 충족). Codex 다음 권고 순서: **P11-01 → P14-02 → P15-02 → P16-01 → P18-02**. 보드 정정: P09-03 행 보고서 링크 r2→r3 (Codex 갱신 누락분).
 
