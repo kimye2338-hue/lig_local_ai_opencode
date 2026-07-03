@@ -86,6 +86,15 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
                     "real browser validation pending"],
         "keywords": ["메일", "mail", "이메일", "email", "inbox", "받은편지함", "수신함"],
     },
+    "schedule_management": {
+        "description": "일정/마감/약속 등록·조회·완료 처리",
+        "status": "locally_validated",
+        "artifact_kinds": [],
+        "outputs": ["agent_ops/state schedule store"],
+        "pending": [],
+        "keywords": ["일정", "약속", "마감", "리마인드", "캘린더", "스케줄", "미루", "연기",
+                     "schedule", "deadline"],
+    },
     "office_cad_automation": {
         "description": "Office/CAD 앱 자동화 (SolidWorks/Excel/Word/PowerPoint/HWP) — 매크로/절차 산출물",
         "status": "scaffold_available",
@@ -199,6 +208,9 @@ def plan_task(task: str, planner: Optional[SemanticPlanner] = None) -> Dict[str,
         routing = "default_fallback"
         matches = [{"id": c, "matched_keywords": [], "confidence": "low"}
                    for c in DEFAULT_CAPABILITIES]
+    if (matches and matches[0]["id"] == "schedule_management"
+            and matches[0].get("confidence") == "high"):
+        matches = [matches[0]]
     cap_ids = [m["id"] for m in matches]
     artifact_kinds: List[str] = []
     pending: List[str] = []
@@ -229,7 +241,9 @@ def plan_task(task: str, planner: Optional[SemanticPlanner] = None) -> Dict[str,
         for kind in artifact_kinds
     ]
     safe_task = task.replace('"', "'")
-    if artifact_kinds:
+    if cap_ids == ["schedule_management"]:
+        next_cmd = f'py -3.11 agent_ops\\agentops.py schedule add "{safe_task}"'
+    elif artifact_kinds:
         next_cmd = f'py -3.11 agent_ops\\agentops.py plan --task "{safe_task}" --make-artifacts'
     else:
         next_cmd = f'py -3.11 agent_ops\\agentops.py agent --mode mock --task "{safe_task}"'

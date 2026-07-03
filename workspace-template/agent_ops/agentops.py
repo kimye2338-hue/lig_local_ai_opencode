@@ -23,6 +23,10 @@ from agent_ops.orchestrator import run_once, run_loop, run_loop_parallel
 from agent_ops.render_ko import write_status_ko
 
 
+SCHEDULE_DUE_HINT = ('기한을 인식하지 못했습니다. 날짜를 포함해 다시 입력하세요. '
+                     '예: "7월 4일까지 진동시험 보고서"')
+
+
 def _load_task_arg(args) -> str:
     task = (getattr(args, "task", "") or "").strip()
     task_file = (getattr(args, "task_file", "") or "").strip()
@@ -554,6 +558,122 @@ def cmd_plan(args):
         print(f"[ERROR] {err}", file=sys.stderr)
     return 0 if (result["ok"] and result.get("quality_ok", True)) else 1
 
+
+def _schedule_display_id(value: object) -> str:
+    try:
+        return "sch_%04d" % int(value)
+    except Exception:
+        return "sch_0000"
+
+
+def _schedule_parse_id(raw: str) -> int:
+    text = str(raw or "").strip()
+    if text.startswith("sch_"):
+        text = text[4:]
+    try:
+        return int(text)
+    except ValueError:
+        return -1
+
+
+def _schedule_due_label(due: str) -> str:
+    from datetime import datetime
+    text = str(due or "")
+    fmt = "%Y-%m-%d %H:%M" if " " in text else "%Y-%m-%d"
+    try:
+        day = datetime.strptime(text, fmt)
+    except ValueError:
+        return text
+    weekdays = ["월", "화", "수", "목", "금", "토", "일"]
+    label = day.strftime("%Y-%m-%d") + f"({weekdays[day.weekday()]})"
+    if " " in text:
+        label += day.strftime(" %H:%M")
+    return label
+
+
+def _schedule_clean_title(text: str) -> str:
+    import re
+    title = str(text or "")
+    patterns = [
+        r"\d{4}-\d{1,2}-\d{1,2}(?:\s+\d{1,2}:\d{2})?",
+        r"\d{1,2}월\s*\d{1,2}일(?:\s*(?:오전|오후)?\s*\d{1,2}(?::\d{2})?\s*시?)?",
+        r"\d{1,2}/\d{1,2}",
+        r"(?:오늘|내일|모레|글피|이번주|다음주|다음 주)?\s*(?:월요일|화요일|수요일|목요일|금요일|토요일|일요일|월|화|수|목|금|토|일)(?:\s*(?:오전|오후)?\s*\d{1,2}(?::\d{2})?\s*시?)?",
+        r"\d+\s*(?:일|주|주일)\s*후",
+        r"(?:오전|오후)?\s*\d{1,2}(?::\d{2})?\s*시",
+    ]
+    for pat in patterns:
+        title = re.sub(pat, " ", title)
+    title = re.sub(r"\b(schedule|deadline)\b", " ", title, flags=re.IGNORECASE)
+    title = re.sub(r"(까지|일정|약속|스케줄|캘린더|등록해줘|등록|추가해줘|추가)", " ", title)
+    title = re.sub(r"\s+", " ", title).strip(" .'\"")
+    return title or str(text or "").strip()
+
+
+def _schedule_print_items(items: list[dict]) -> None:
+    if not items:
+        print("등록된 일정이 없습니다.")
+        return
+    print("%-9s %-16s %-4s %-4s %s" % ("ID", "기한", "분류", "상태", "제목"))
+    for item in items:
+        print("%-9s %-16s %-4s %-4s %s" % (
+            _schedule_display_id(item.get("id")),
+            _schedule_due_label(str(item.get("due", ""))),
+            str(item.get("category", "")),
+            str(item.get("status", "")),
+            str(item.get("title", "")),
+        ))
+
+
+def cmd_schedule(args):
+    from agent_ops import schedule_store
+    from agent_ops.approval import classify_risk
+    from agent_ops.core import ROOT
+
+    action = args.schedule_cmd
+    if action == "add":
+        text = " ".join(args.text).strip()
+        parsed = schedule_store.parse_due(text)
+        if not parsed.get("ok"):
+            print(SCHEDULE_DUE_HINT, file=sys.stderr)
+            return 2
+        title = _schedule_clean_title(text)
+        result = schedule_store.add(title, text)
+        if not result.get("ok"):
+            print(SCHEDULE_DUE_HINT, file=sys.stderr)
+            return 2
+        item = result["item"]
+        print("등록됨: %s %s %s" % (_schedule_display_id(item["id"]), _schedule_due_label(item["due"]), item["title"]))
+        return 0
+    if action in {"list", "today"}:
+        when = "today" if action == "today" else args.when
+        _schedule_print_items(schedule_store.list_items(when))
+        return 0
+    if action == "done":
+        item_id = _schedule_parse_id(args.id)
+        result = schedule_store.mark_done(item_id)
+        if not result.get("ok"):
+            print("일정을 찾지 못했습니다.", file=sys.stderr)
+            return 2
+        print("완료됨: %s" % _schedule_display_id(item_id))
+        return 0
+    if action == "remove":
+        item_id = _schedule_parse_id(args.id)
+        risk = classify_risk("schedule.remove", str(item_id), ROOT)
+        if risk == "dangerous" and not args.yes:
+            answer = (input("삭제할까요? [y/N] ") or "").strip().lower()
+            if answer != "y":
+                print("삭제를 취소했습니다.")
+                return 3
+        result = schedule_store.remove(item_id)
+        if not result.get("ok"):
+            print("일정을 찾지 못했습니다.", file=sys.stderr)
+            return 2
+        print("삭제됨: %s" % _schedule_display_id(item_id))
+        return 0
+    return 2
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="OpenCode AgentOps v3.1 Co-Growth Runtime")
     sub = parser.add_subparsers(dest="cmd")
@@ -579,6 +699,13 @@ def main(argv=None):
     p = sub.add_parser("agent"); p.add_argument("--mode", choices=["mock", "real"], required=True); p.add_argument("--task", default=""); p.add_argument("--max-turns", type=int, default=10); p.set_defaults(func=cmd_agent)
     p = sub.add_parser("plan"); p.add_argument("--task", default=""); p.add_argument("--input", action="append", default=[], help="입력 파일/폴더 (반복 지정 가능)"); p.add_argument("--make-artifacts", action="store_true"); p.set_defaults(func=cmd_plan)
     p = sub.add_parser("work"); p.add_argument("--task", default=""); p.add_argument("--task-file", default=""); p.add_argument("--input", action="append", default=[], help="입력 파일/폴더 (반복 지정 가능)"); p.add_argument("--mode", choices=["mock", "real"], default="mock"); p.add_argument("--execute", action="store_true"); p.add_argument("--yes", action="store_true"); p.set_defaults(func=cmd_work)
+    p = sub.add_parser("schedule")
+    sched = p.add_subparsers(dest="schedule_cmd", required=True)
+    sp = sched.add_parser("add"); sp.add_argument("text", nargs="+"); sp.set_defaults(func=cmd_schedule)
+    sp = sched.add_parser("list"); sp.add_argument("--when", choices=["today", "week", "all", "overdue"], default="all"); sp.set_defaults(func=cmd_schedule)
+    sp = sched.add_parser("today"); sp.set_defaults(func=cmd_schedule)
+    sp = sched.add_parser("done"); sp.add_argument("id"); sp.set_defaults(func=cmd_schedule)
+    sp = sched.add_parser("remove"); sp.add_argument("id"); sp.add_argument("--yes", action="store_true"); sp.set_defaults(func=cmd_schedule)
     p = sub.add_parser("safety-check"); p.add_argument("text", nargs="*"); p.set_defaults(func=cmd_safety_check)
     p = sub.add_parser("safe-write"); p.add_argument("target"); p.add_argument("content_file"); p.set_defaults(func=cmd_safe_write)
     args = parser.parse_args(argv)

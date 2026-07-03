@@ -204,6 +204,14 @@ def main() -> None:
           "agentops.py" in fb["next_exact_command"]
           and "document" in fb["artifact_kinds"], str(fb["artifact_kinds"]))
 
+    schedule_plan = plan_task("금요일까지 진동시험 보고서 마감 일정 등록해줘")
+    check("schedule request routes to schedule_management",
+          [c["id"] for c in schedule_plan["capabilities"]] == ["schedule_management"],
+          str(schedule_plan["capabilities"]))
+    check("schedule plan points to schedule add command",
+          "agentops.py schedule add" in schedule_plan["next_exact_command"],
+          schedule_plan["next_exact_command"])
+
     # --- artifact quality spot checks (not per-task hardcoding: generic kinds) ---
     sw = (tmp / "office_cad_automation" / "macro_solidworks.bas").read_text(encoding="utf-8")
     check("SolidWorks macro says how to run it", "매크로" in sw and "SolidWorks" in sw)

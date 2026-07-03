@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from datetime import datetime
@@ -92,6 +93,43 @@ def main() -> None:
     check("missing item returns ok false", not store.mark_done(999).get("ok") and not store.remove(999).get("ok"))
     check("invalid due add asks question and does not save", not store.add("애매한 일정", "다음에", now=NOW).get("ok"))
     check("no external date parser dependency", "dateutil" not in sys.modules)
+
+    cli_tmp = Path(tempfile.mkdtemp(prefix="schedule_cli_test_"))
+    cli_env = dict(os.environ)
+    cli_env["PYTHONUTF8"] = "1"
+    cli_env["PYTHONIOENCODING"] = "utf-8"
+    cli_env["LIG_SCHEDULE_DIR"] = str(cli_tmp / "schedule")
+    cmd = ["py", "-3.11", str(Path(__file__).resolve().parents[1] / "agent_ops" / "agentops.py"), "schedule"]
+
+    add = subprocess.run(cmd + ["add", "금요일 14시 진동시험 보고서 마감"],
+                         cwd=str(Path(__file__).resolve().parents[1]), env=cli_env,
+                         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    check("CLI add exits 0", add.returncode == 0 and "등록됨:" in add.stdout, add.stdout + add.stderr)
+    today_cli = subprocess.run(cmd + ["today"], cwd=str(Path(__file__).resolve().parents[1]), env=cli_env,
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    check("CLI today shows fixed columns and item",
+          today_cli.returncode == 0 and "ID" in today_cli.stdout and "진동시험 보고서 마감" in today_cli.stdout,
+          today_cli.stdout + today_cli.stderr)
+    check("CLI today uses displayed schedule id", "sch_0001" in today_cli.stdout, today_cli.stdout)
+    done_cli = subprocess.run(cmd + ["done", "sch_0001"], cwd=str(Path(__file__).resolve().parents[1]), env=cli_env,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    check("CLI done marks item", done_cli.returncode == 0 and "완료됨: sch_0001" in done_cli.stdout,
+          done_cli.stdout + done_cli.stderr)
+    bad_cli = subprocess.run(cmd + ["add", "언젠가 진동시험 보고서"], cwd=str(Path(__file__).resolve().parents[1]), env=cli_env,
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    check("CLI ambiguous add exits 2 with guidance",
+          bad_cli.returncode == 2 and "기한을 인식하지 못했습니다" in (bad_cli.stdout + bad_cli.stderr),
+          bad_cli.stdout + bad_cli.stderr)
+    denied = subprocess.run(cmd + ["remove", "sch_0001"], input="n\n",
+                            cwd=str(Path(__file__).resolve().parents[1]), env=cli_env,
+                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    check("CLI remove denial exits 3", denied.returncode == 3 and "삭제할까요? [y/N]" in denied.stdout,
+          denied.stdout + denied.stderr)
+    removed = subprocess.run(cmd + ["remove", "sch_0001", "--yes"],
+                             cwd=str(Path(__file__).resolve().parents[1]), env=cli_env,
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    check("CLI remove --yes deletes item", removed.returncode == 0 and "삭제됨: sch_0001" in removed.stdout,
+          removed.stdout + removed.stderr)
 
     print(f"\nALL {PASS} CHECKS PASSED (schedule store)")
 
