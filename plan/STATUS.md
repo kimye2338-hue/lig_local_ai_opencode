@@ -6,6 +6,8 @@
 
 | ID | 제목 | 담당 | 선행 | 환경 | 상태 | 보고서 | 리뷰 |
 |----|------|------|------|------|------|--------|------|
+| P00-01 | 환경 probe 실행/업로드 (probe/README.md) | **human** | — | 집+회사 | READY | | |
+| P00-02 | OpenCode 공식 문서 연동 조사 | **fable** | — | INTERNET | READY | | |
 | P09-01 | LLM provider 프로필/env 완전 오버라이드 | codex | — | ANY | READY | | |
 | P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | BLOCKED | | |
 | P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | BLOCKED | | |
