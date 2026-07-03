@@ -1,0 +1,39 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "_comment_usage": "AUTO-HIGH-TRUST permission profile. Copy to %USERPROFILE%\\OpenCodeLIG_USERDATA\\opencode_config\\opencode.json and merge with your real 'provider' block (LIG OpenAI-compatible endpoint). Safe work runs without prompts; destructive/outbound actions are denied or asked. Explicit 'deny' is always enforced even under `opencode --auto`.",
+  "_comment_write": "Per OpenCode docs the 'write' and 'apply_patch' tools are governed by the 'edit' permission; setting 'edit' to allow lets the agent create/modify project files silently.",
+  "permission": {
+    "read": "allow",
+    "grep": "allow",
+    "glob": "allow",
+    "lsp": "allow",
+    "todowrite": "allow",
+    "webfetch": "allow",
+    "websearch": "allow",
+    "skill": "allow",
+    "edit": "allow",
+    "question": "ask",
+    "external_directory": "ask",
+    "bash": {
+      "*": "allow",
+      "rm -rf *": "deny",
+      "rm -fr *": "deny",
+      "rm -r *": "deny",
+      "del /f *": "deny",
+      "del /q *": "deny",
+      "del /s *": "deny",
+      "rmdir /s *": "deny",
+      "rd /s *": "deny",
+      "format *": "deny",
+      "*EncodedCommand*": "deny",
+      "*Invoke-Expression*": "deny",
+      "* | iex": "deny",
+      "* | powershell*": "deny",
+      "curl * | *": "deny",
+      "wget * | *": "deny",
+      "iwr * | *": "deny",
+      "git push *": "ask",
+      "git reset --hard *": "ask"
+    }
+  }
+}

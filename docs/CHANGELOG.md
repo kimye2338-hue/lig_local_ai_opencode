@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-07-01 - UX/quality hardening (launcher, guard soft-block, AUTO-HIGH-TRUST, collector)
+
+Verified the diagnosis against OpenCode official docs (permissions, tools,
+custom-tools, providers) and shipped concrete, offline-safe artifacts:
+
+- `workspace-template/RUN_OPENCODE_LIG.bat.txt`: new hardened launcher. Forces
+  `chcp 65001` on the child console (fixes Korean/mojibake, P1), opens maximized
+  (`start /max`, P5), and points `OPENCODE_CONFIG`/`XDG_*` at
+  `OpenCodeLIG_USERDATA` so memory/settings survive reinstall (P7). Defaults to
+  `opencode --auto` (native auto-approve).
+- `workspace-template/.opencode/plugins/command-guard.ts`: rewritten as a
+  soft-block. Blocks only corrupted/leaked tool-call text, genuinely destructive
+  commands, and malformed heredocs — each with a single-line message (no more
+  multi-line English dump flooding the chat). No longer blocks legitimate shell
+  file-writes (`echo>`, `python -c`, well-formed heredocs), which the agent needs
+  as a fallback while native tool_calls are unreliable (P2/P4).
+- `workspace-template/agent_ops/config/opencode.permission.example.json`:
+  AUTO-HIGH-TRUST native permission profile. Destructive-command defense moves
+  from the throwing plugin to native `permission.bash` deny patterns; safe tools
+  allow; `question`/`external_directory`/`git push` gated.
+- `workspace-template/COLLECT_LIG_PROXY_FILES.bat.txt`: read-only collector for
+  the missing proxy/provider/model files needed to close the tool-call gap (P3).
+- `docs/OPUS_UX_QUALITY_REVIEW_V2.md`: doc-verified review with model examples,
+  30-min test checklist, PR sequence plan, and test plan. Supersedes v1.
+
+Key doc facts confirmed: `--auto` is a native flag that auto-approves any
+permission request not explicitly denied; `question` is a built-in,
+permission-gated tool; `bash`/`edit` support native deny patterns; `websearch`
+needs the OpenCode provider or `OPENCODE_ENABLE_EXA=1`. Not "complete": the
+tool-call proxy files and Windows validation are still prerequisites for P3.
+
 ## 2026-07-01 - Repository cleanup and source-of-truth reset
 
 - Merged PR #4 into `main`.

@@ -1,61 +1,69 @@
-// AgentOps command guard — runs in OpenCode's tool execution path.
-// No external imports (offline / 망분리 safe).
+// AgentOps command guard - runs in OpenCode's tool.execute.before path.
+// No external imports (offline / mangbunri safe).
+//
+// Design (v2, soft-block):
+//   * Primary destructive-command defense now lives in native opencode.json
+//     `permission.bash` deny patterns (see agent_ops/config/opencode.permission.example.json).
+//     This plugin is a SECOND layer that catches things native permissions cannot
+//     see: corrupted/leaked tool-call text and malformed heredocs.
+//   * It NO LONGER blocks legitimate shell file-writes (echo>, printf>, cat<<EOF,
+//     python -c). When the LIG model cannot emit native tool_calls, shell is the
+//     agent's only fallback for writing files; blocking it caused AUTO to stall.
+//   * When it must block, it throws ONE short line (not a multi-reason English
+//     dump) so nothing floods the chat. The message tells the model the exact
+//     recovery path; it is not shown as a final answer.
 
-const PROSE_MARKERS = [
-  "the content contains", "let's write", "let's create", "better to use",
-  "actually the content", "json error", "manual formatting",
-  "use echo for each part", "생략", "하려고", "설명", "대안", "생각",
+// Corruption: the "command" is actually leaked tool-call JSON / reasoning text,
+// not a runnable command. Running it always fails, so block with a short hint.
+const CORRUPTION_MARKERS = [
+  'functions.bash(', "functions.write(", "<tool_call>", "</tool_call>",
+  '"name":"bash"', '"name": "bash"', '"tool":"write"', '"tool": "write"',
+  "the content contains", "let's write the file", "better to use write",
+  "olbareun json",            // romanized "correct JSON" leak marker
 ]
 
-const FAKE_TOOL_MARKERS = [
-  'bash {"command"', "functions.bash(", "<tool_call>", '"name":"bash"', '"name": "bash"',
+// Genuinely destructive. Native permission deny is primary; this is defense-in-depth.
+const DESTRUCTIVE = [
+  /\brm\s+-[rf]{1,2}\b/i, /\bdel\s+\/[qsf]\b/i, /\brmdir\s+\/s\b/i, /\brd\s+\/s\b/i,
+  /\bformat\s+[A-Za-z]:/i, /\bpowershell\b[^\n]*encodedcommand/i,
+  /\b(curl|wget|iwr)\b[^\n]*\|\s*(bash|sh|python|iex|powershell)/i,
+  /\bInvoke-Expression\b/i,
 ]
 
-const WRITE_CODE = [
-  /\bcat\s*>\s*[^&|;]+?\.(py|js|ts|tsx|jsx|bat|cmd|ps1|json|yaml|yml|md)\b/i,
-  /\bcat\s+<<\s*['"]?[A-Za-z0-9_]+['"]?/i,
-  /<<\s*['"]?EOF['"]?/i,
-  /\becho\b.+>\s*[^&|;]+?\.(py|js|ts|tsx|jsx|bat|cmd|ps1|json|yaml|yml|md)\b/i,
-  /\bprintf\b.+>\s*[^&|;]+?\.(py|js|ts|tsx|jsx|bat|cmd|ps1|json|yaml|yml|md)\b/i,
-  /\bpython(?:3)?\s+-c\b/i,
-  /\bpy\s+-3(?:\.\d+)?\s+-c\b/i,
-]
+type Block = { kind: "corruption" | "destructive" | "malformed"; hint: string }
 
-const DANGEROUS = [
-  /\brm\s+-rf\b/i, /\bdel\s+\/[qsf]\b/i, /\brmdir\s+\/s\b/i,
-  /\bformat\s+[A-Za-z]:/i, /\bpowershell\b.+encodedcommand/i,
-  /\bcurl\b.+\|\s*(bash|sh|python)/i, /\biwr\b.+\|\s*(iex|powershell)/i,
-]
-
-function reasonsFor(cmd: string): string[] {
+function inspect(cmd: string): Block | null {
   const lower = cmd.toLowerCase()
-  const reasons: string[] = []
-  for (const m of PROSE_MARKERS) if (lower.includes(m)) reasons.push(`prose/reasoning in command: ${m}`)
-  for (const m of FAKE_TOOL_MARKERS) if (lower.includes(m.toLowerCase())) reasons.push(`fake tool-call text: ${m}`)
-  for (const re of WRITE_CODE) if (re.test(cmd)) reasons.push("heredoc/cat/echo/printf/python -c writes a file; use write/apply_patch/safe_file_writer")
-  for (const re of DANGEROUS) if (re.test(cmd)) reasons.push("dangerous destructive shell pattern")
-  // unclosed heredoc: delimiter never appears alone on its own line
-  const delims = [...cmd.matchAll(/<<\s*['"]?([A-Za-z0-9_]+)['"]?/g)].map(m => m[1])
-  for (const d of delims) {
-    const own = new RegExp(`(?:^|\\n)${d}\\s*(?:\\n|$)`)
-    if (!own.test(cmd)) reasons.push(`heredoc delimiter ${d} not closed on its own line`)
+
+  for (const m of CORRUPTION_MARKERS) {
+    if (lower.includes(m.toLowerCase()))
+      return { kind: "corruption", hint: "This looks like leaked tool-call/JSON text, not a shell command. Call the write/edit tool directly, or run agent_ops/safe_file_writer.py." }
   }
-  if ((cmd.match(/"/g)?.length ?? 0) >= 6 && cmd.includes("<<")) reasons.push("many quotes inside heredoc; high escaping-failure risk")
-  if (cmd.length > 4000) reasons.push("command too long; split into a real file + verification")
-  return reasons
+
+  for (const re of DESTRUCTIVE) {
+    if (re.test(cmd))
+      return { kind: "destructive", hint: "Destructive command blocked by policy. If truly required, ask the user in one sentence." }
+  }
+
+  // Malformed heredoc: delimiter opened but never closed on its own line -> will hang/fail.
+  const delims = [...cmd.matchAll(/<<\s*['"]?([A-Za-z0-9_]+)['"]?/g)].map((m) => m[1])
+  for (const d of delims) {
+    if (!new RegExp(`(?:^|\\n)${d}\\s*(?:\\n|$)`).test(cmd))
+      return { kind: "malformed", hint: `Heredoc '${d}' is not closed on its own line. Use the write tool or agent_ops/safe_file_writer.py instead.` }
+  }
+
+  if (cmd.length > 8000)
+    return { kind: "malformed", hint: "Command too long to run reliably; write a file with the write tool, then execute it." }
+
+  return null
 }
 
 export const AgentOpsCommandGuard = async (_ctx: any) => ({
   "tool.execute.before": async (input: any, output: any) => {
     if (input?.tool !== "bash") return
     const cmd = String(output?.args?.command ?? "")
-    const reasons = reasonsFor(cmd)
-    if (reasons.length > 0) {
-      throw new Error(
-        "AgentOps command guard BLOCKED this command (corrupted/unsafe).\n- " +
-        reasons.join("\n- ") +
-        "\nUse OpenCode write / apply_patch, or: python agent_ops/safe_file_writer.py <target> --content-file <staging>."
-      )
-    }
+    if (!cmd.trim()) return
+    const block = inspect(cmd)
+    if (block) throw new Error(`AgentOps guard [${block.kind}]: ${block.hint}`)
   },
 })

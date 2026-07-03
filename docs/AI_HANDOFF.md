@@ -13,6 +13,29 @@ The repository builds one current offline Windows package through one workflow:
 
 PR #4 was merged into `main` on 2026-07-01.
 
+## UX/quality hardening (in review, branch claude/opencodelig-quality-review-*)
+
+Doc-verified against opencode.ai (permissions/tools/custom-tools/providers) and
+shipped as offline-safe workspace-template artifacts. See
+`docs/OPUS_UX_QUALITY_REVIEW_V2.md` (supersedes v1) for the full A–K report.
+
+- `workspace-template/RUN_OPENCODE_LIG.bat.txt` — hardened launcher: `chcp 65001`
+  on child console (P1), `start /max` (P5), `OPENCODE_CONFIG`/`XDG_*` → USERDATA
+  (P7), defaults to `opencode --auto` (native auto-approve).
+- `workspace-template/.opencode/plugins/command-guard.ts` — soft-block rewrite:
+  one-line messages, allows legitimate shell file-writes, blocks only corrupted
+  tool-call text / destructive commands / malformed heredocs. `bun build` passes.
+- `workspace-template/agent_ops/config/opencode.permission.example.json` —
+  AUTO-HIGH-TRUST native permission profile (destructive defense via native
+  `permission.bash` deny, not plugin throw).
+- `workspace-template/COLLECT_LIG_PROXY_FILES.bat.txt` — collects the missing
+  proxy/provider/model files required to close the tool-call gap (P3).
+
+Note: the offline installer that GENERATES `RUN_OPENCODE_LIG.bat` (in the built
+package's `INSTALL_OFFLINE_LIG_OPENCODE.bat`) should be updated to emit the same
+hardened launcher; the workspace-template copy is the reference. P3 (tool-call
+conversion) remains open pending the proxy files and Windows validation.
+
 Important commits:
 
 - PR #4 merge: `bde4cc036d091bb35971999faf7a4394b8865ddf`
