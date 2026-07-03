@@ -46,6 +46,8 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-04 리뷰 프로세스 개정 (사용자 피드백 반영, Fable): 리뷰는 "안 되는 것"만 잡지 말고 **되는 방법(검증된 수정 코드)+피드백+작업계획 수정내용**을 항상 포함한다. review-template.md에 3개 섹션 신설, delegate-to-codex 스킬에 규칙 5 추가. P14-04-r1 소급 보강(검증된 `_extract_owner`/키워드 경계화 코드 + 피드백 + P14-04 task "리뷰 반영" 절).
+
 - 2026-07-04 Fable 리뷰 8차: **P14-03 r1 APPROVED**(briefing E2E 실측 — 일정/마감 OVERDUE/액션아이템 대기필터·출처/audit 전일요약 정확, reminder BAT y-only 게이트 — reviews/P14-03-r1.md). **P14-04 r1 CHANGES-REQUESTED**(① 영어 키워드 `minutes` bare substring이 `5 minutes 후에 알려줘` 오라우팅→회의록 스퓨리어스 생성, P16-01 `.m`과 동류 ② `_meeting_actions` owner 추출이 `김대리 담당: 7월…` 패턴에서 날짜 `7월`을 담당으로 채움=그럴듯한 오값, bench substring만 봐서 누락 — reviews/P14-04-r1.md). 재검증: 19개 중 16개 exit 0(+secretary 20, bench 182=184−openpyxl 2), Windows 전용 3개 diff 무접촉. Codex 다음: **P14-04 r2 → P18-02 → 신규 READY들**.
 
 - 2026-07-04 Fable 리뷰 7차: **P16-01 r2 APPROVED**(키워드 `.m`→`.m 스크립트`/`.m 파일` 경계화, `.md`/`.m` 7개 케이스 실측으로 오라우팅 재발 없음 + 양성 라우팅 유지, negative check 2개 회귀화 — reviews/P16-01-r2.md) → P16-02/P16-03 READY. 재검증: 19개 중 16개 exit 0(bench 171=173−openpyxl 2), Windows 전용 3개 diff 무접촉. 현재 AWAITING-REVIEW 없음. Codex 다음 READY: P18-02, P14-03~05, P15-03/04, P16-02~04.

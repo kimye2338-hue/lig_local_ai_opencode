@@ -10,6 +10,21 @@
 ## 목표
 회의 메모/녹취 텍스트(--input) → 구조화된 회의록.md + 액션아이템의 일정 등록 제안.
 
+## 리뷰 반영 (r1→r2) — reviews/P14-04-r1.md 필수 수정 2건 (이 절이 r2의 단일 진실 소스)
+
+1. **키워드 경계화**: `capabilities.py`의 `meeting_minutes.keywords`에서 bare `"minutes"`를
+   제거하고 `"meeting minutes"`(공백 포함)로 교체. `5 minutes`/`10 minutes` 시간 표현에
+   오라우팅되지 않아야 함. bench negative check 추가:
+   `plan_task("5 minutes 후에 알려줘")`가 meeting_minutes capability/artifact를 만들지 않음.
+2. **owner 추출 순서 고정** (`artifact_generators.py:_meeting_actions`): 후행(`담당: 이름`)
+   우선 → 그 토큰이 날짜형(`^\d|^\D*\d|[월일주후시]$`)이면 거부 → 선행(`이름 담당`)
+   fallback → 없으면 `확인 필요`. reviews/P14-04-r1.md "되는 방법"의 `_extract_owner`
+   코드를 그대로 사용. todo에서 owner 토큰과 due 구절을 함께 제거해 잔여 조각 제거.
+   bench 정확성 check 추가: 표준 fixture의 담당 칸이 `김대리`이고 `7월` 같은 날짜 조각이
+   **아님**을 검증(`"| 7월 |" not in minutes`).
+
+> 나머지(생성기 골격/결정 추출/일정 제안 자동등록 없음/품질 규칙)는 r1에서 확인됨 — 유지.
+
 ## 작업 항목
 1. `capabilities.py`에 `meeting_minutes` 등록 (§5 승인 목록): keywords 회의록, 회의 정리,
    미팅 정리, 회의 내용, minutes. artifact_kinds: ["meeting_minutes"].
