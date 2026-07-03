@@ -4,6 +4,13 @@ This repository builds and documents the LIG patched OpenCode offline package fo
 
 Current focus: a patched OpenCode TUI where permission approval mode is separate from agent/persona/workflow/model selection.
 
+## agent_ops 구축 프로그램 (작업 관리)
+
+`workspace-template/agent_ops/` 런타임(비서/일정/매크로 자동화)의 구축 작업은
+**`plan/`** 폴더에서 관리된다 — 작업 보드(`plan/STATUS.md`), 지시서(`plan/tasks/`),
+보고서(`plan/reports/`), 리뷰(`plan/reviews/`). AI 구현 워커는 `plan/README.md`부터 읽을 것.
+전략 문서: `workspace-template/docs/MASTER_PLAN.md`.
+
 ## Latest validated package
 
 Use the latest successful `LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE` artifact from GitHub Actions. The verified cleanup baseline is:
