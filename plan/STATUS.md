@@ -9,7 +9,7 @@
 | P00-01 | 환경 probe 실행/업로드 (probe/README.md) | **human** | — | 집+회사 | READY | | |
 | P00-02 | OpenCode 공식 문서 연동 조사 | **fable** | — | INTERNET | READY | | |
 | P09-01 | LLM provider 프로필/env 완전 오버라이드 | codex | — | ANY | APPROVED | plan/reports/P09-01-r2.md | plan/reviews/P09-01-r2.md |
-| P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | IN-PROGRESS | | |
+| P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | AWAITING-REVIEW | plan/reports/P09-02-r1.md | |
 | P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | BLOCKED | | |
 | P10-01 | git 히스토리 내부 hostname purge | fable | — | FABLE-ONLY | READY | | |
 | P11-01 | weak-model capability-floor 하네스 | codex | P09-03 | ANY | BLOCKED | | |
@@ -44,6 +44,7 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-03 P09-02 AWAITING-REVIEW (Codex). 보고서: plan/reports/P09-02-r1.md. 전체 12파일 339 checks 통과.
 - 2026-07-03 P09-02 IN-PROGRESS (Codex). 시작 HEAD: e8ea04e.
 - 2026-07-03 Fable 리뷰: P09-01 r2 APPROVED (셸 오버라이드 검증, 20 checks) → P09-02 READY. 보고서 템플릿에 "1.5 사용자 체감 변화" 선택 섹션 정식화.
 - 2026-07-03 P09-01 r2 AWAITING-REVIEW (Codex). 보고서: plan/reports/P09-01-r2.md. env shell override 필수 수정 반영.
