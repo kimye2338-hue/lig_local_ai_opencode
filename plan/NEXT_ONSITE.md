@@ -45,13 +45,14 @@ OpenCode 기동 시간 / 앱·정책 전수). 사용법은 `probe/COMPANY_CHECK.
 - 4·5번이 실패하면 그 diagnostics가 바로 P11-02(파서 보강)의 실측 입력이다 —
   실패 로그가 성공만큼 중요하니 그대로 반출.
 
-## 남은 회사 실측 (company_check로 대부분 해소됨 — 이제 이것만)
+## 남은 회사 실측 (시나리오 실증으로 대부분 종결 — 이제 사실상 1개)
 
-1. **강화 런처 기동 시간**: 새 아티팩트(PR #8 브랜치) 재설치 → RUN_OPENCODE_LIG.bat로
-   TUI를 띄워 체감 속도 확인 (현재 구 런처라 느림 추정). company_check로 env 적용 여부 재확인.
-2. **real agent E2E 1건**: `run-agent.bat --mode real --task "메모.txt 읽고 요약 저장"`
-   (native tools 경로가 P11-A로 붙은 뒤면 그 실동작까지). 성공/실패 로그 반출.
-3. **work 한 명령 E2E 1건**: `work --task "..." --input 메모.txt --mode real --yes`.
+1. **새 아티팩트 재설치** (PR #8 브랜치 CI): 강화 런처 적용 → TUI 체감 속도 확인 +
+   company_check 재실행으로 env 적용(PURE 등 True)과 기동 시간 판정. **이게 마지막 큰 항목.**
+2. (P11-A 머지 후) real `work` E2E 1건: `work --task "..." --input 메모.txt --mode real --yes`
+   — 시나리오 ①로 회로는 이미 실증됐으므로 제품 경로 확인용.
+3. Outlook/AutoCAD 재검은 어댑터(P15-03/P16-02)가 수정 접근법으로 구현된 뒤 company_check
+   재실행으로 자동 커버 (별도 준비 불필요).
 
 ## 이력
 

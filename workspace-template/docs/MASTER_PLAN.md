@@ -503,9 +503,11 @@ Security cleanup status: / New HEAD commit: / Next exact command:
 |--------|--------|-----------------|
 | gateway 스펙 변경 | 중 | env 완전 오버라이드(P9) — 코드 수정 없이 흡수 |
 | **gateway 라우트 404** | **해소 — 3라우트 200** | `/gateway/` 접두 반영 후 전부 200 (company_check 2026-07-03) |
-| **EXAONE tool-call 신뢰성** | ~~최대 미지수~~ **해소(실측)** | gateway가 **OpenAI native function calling 완전 지원** (tool_calls_present=True) → 텍스트 파싱 의존 제거, P11-A native 경로 1차. 파서 리스크 소멸 |
-| VBProject COM 차단 | ~~높음~~ **해소(실측)** | Excel VBProject 접근 실동작 성공 (company_check) → P15-02 자동 주입 확정 |
-| 앱 COM 실동작 (Office/HWP/SW) | ~~app validation pending~~ **연결 확인(실측)** | Outlook/HWP/SolidWorks COM 접속 + MATLAB -batch 실행(22s) + Chrome CDP 전부 성공. 실기 작업 로직만 남음 |
+| **EXAONE tool-call 신뢰성** | ~~최대 미지수~~ **E2E 실증(1회)** | native tool **왕복 전체**가 회사 실기 성공 — 파일 읽기 요청→tool_calls→실행→최종 답변이 내용 정확 반영 (scenarios ①). 파서 리스크 소멸, P11-A는 실증 형식 이식만 |
+| Excel 매크로 자동 주입 | ~~높음~~ **E2E 실증(1회)** | 주입+실행+결과 확인(A1=42) 성공 (scenarios ②) |
+| MATLAB/HWP 실기 | **E2E 실증(1회)** | -batch 실계산(mean/max)·HWP 문서 생성+저장 성공 (scenarios ③④) |
+| Outlook MAPI 접근 | 원인 특정 | DispatchEx 새 인스턴스가 폴더 접근에서 hang(프롬프트 대기) → P15-03은 GetActiveObject 우선 + 격리/타임아웃 |
+| AutoCAD 배치 | 원인 특정 | accoreconsole 구동됨, 빈 세션 SAVEAS가 exit 53 → /i 시작 도면 필수 + UTF-16 출력 디코딩 (P16-02 반영) |
 | AutoCAD accoreconsole | **해소(실측)** | `C:\AutoCAD 2019\accoreconsole.exe` 확인 (Mechanical 2019) |
 | OpenCode 느린 창 | 추적 중 | exe는 빠름(cold 1.3s) — 원인은 TUI 초기화. 현재 구 런처 사용 중(PURE/플러그인차단 env 미적용) → 강화 런처 재설치 후 재측정 |
 | EXAONE tool-call 형식 특이 | 중 | P19 1일차 실측+파서 보강 절차, Qwen3.6 fallback 자동 |

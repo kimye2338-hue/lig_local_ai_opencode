@@ -9,9 +9,12 @@
 | 산출 규모 | lig_runtime 확장 ~80줄 + 테스트 |
 
 ## 목표
-회사 gateway가 OpenAI native function calling을 완전 지원함이 실측됨
-(probe/results/company_check_20260703.md: tool_calls_present=True, finish_reason=
-"tool_calls"). 취약한 텍스트 파싱 대신 **native tools 경로를 1차**로 만든다.
+회사 gateway가 OpenAI native function calling을 완전 지원함이 실측됨. 나아가 **전체
+왕복(tool_calls 수신 → 도구 실행 → role:"tool" 반환 → 최종 답변)이 회사 실기에서 1회
+실증됨** — 최종 답변이 파일 내용("불합격 항목")을 정확히 반영
+(probe/results/company_check_20260703_r2_scenarios.md ①). 이 실증된 메시지 형식
+그대로 lig_runtime에 **native tools 경로를 1차**로 구현한다. 왕복 코드 원형은
+`probe/company_check.py`의 `scn_gateway_agent()` 참조 (id "N/A" → 자체 발급 포함).
 
 ## 먼저 읽기
 - `skills/repo-conventions`

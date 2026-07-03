@@ -46,11 +46,10 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-03 company_check v2 시나리오 실측 (사용자): **① LLM native tool 왕복 E2E 성공(최종 답변이 파일 내용 정확 반영)** + ② Excel 매크로 주입·실행 + ③ MATLAB 계산 + ④ HWP 생성·저장 성공. ⑤ Outlook(새 인스턴스 hang→GetActiveObject로 지침 반영) ⑥ AutoCAD(/i 필요·UTF-16 출력, 지침 반영) 원인 특정. P11-A/P15-02/P15-03/P16-02 task와 MASTER_PLAN 리스크 갱신. 결과: probe/results/company_check_20260703_r2_scenarios.md.
 - 2026-07-03 P09-03 r2 AWAITING-REVIEW (Codex). 보고서: plan/reports/P09-03-r2.md. unknown-tool 시나리오 복원, 서버 off SKIP 및 전체 17 테스트 파일 447 checks/1 skip 통과.
-
 - 2026-07-03 P09-03 r2 IN-PROGRESS (Codex). reviews/P09-03-r1.md 필수 수정 반영 시작. 시작 HEAD: 61b724f.
-
-- 2026-07-03 Fable 배치 리뷰 3차: P12-03 **APPROVED** (리뷰 환경 Chromium headless CDP로 4 actions 독립 재현 성공), P09-03 **CHANGES-REQUESTED** (시나리오③ unknown-tool 복원 + r2는 실행 증거 필수 — reviews/P09-03-r1.md). 재검증: 전 17 테스트 파일 중 14개 405 checks + smoke SKIP 통과(리눅스 리뷰 환경), Windows 전용 3개(agent_cli/encoding_paths/probes)는 두 diff 무접촉 확인으로 대체. P11-01 BLOCKED 유지.
+- 2026-07-03 Fable 배치 리뷰 3차 (리뷰 세션): P12-03 **APPROVED** (리뷰 환경 Chromium headless CDP로 4 actions 독립 재현 성공), P09-03 **CHANGES-REQUESTED** (시나리오③ unknown-tool 복원 + r2는 실행 증거 필수 — reviews/P09-03-r1.md). 재검증: 전 17 테스트 파일 중 14개 405 checks + smoke SKIP 통과(리눅스 리뷰 환경), Windows 전용 3개(agent_cli/encoding_paths/probes)는 두 diff 무접촉 확인으로 대체. P11-01 BLOCKED 유지.
 - 2026-07-03 company_check 종합 실측 (사용자): gateway **native function calling 완전 지원**(tool_calls 반환) + 전 앱 COM/MATLAB/Chrome 실동작 성공 + Excel VBProject 접근 가능. Fable: 리스크 5종 해소, **P11-A(native tools 경로) 신설·READY**, P11-01은 P11-A 선행 추가, MASTER_PLAN 리스크 갱신. 결과 probe/results/company_check_20260703.md.
 - 2026-07-03 P12-03 AWAITING-REVIEW (Codex). 보고서: plan/reports/P12-03-r1.md. Chrome CDP live 4 actions + 전체 17 테스트 파일 447 checks/1 skip 통과.
 

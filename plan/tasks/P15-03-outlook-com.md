@@ -11,6 +11,13 @@
 비서 기능의 회사 연결점: Outlook 2016에서 일정을 읽어 schedule_store와 동기화하고,
 받은편지함을 mail_report 파이프라인 입력으로 잇는다. **발송은 dangerous.**
 
+> **실측 반영 (2026-07-03, company_check ⑤)**: DispatchEx 새 인스턴스로
+> GetNamespace→GetDefaultFolder 접근 시 **40s hang** (프로필/보안 프롬프트 대기 추정).
+> COM 접속 자체는 성공(16.0.0.5507). **구현 지침: ① `win32com.client.GetActiveObject
+> ("Outlook.Application")`로 실행 중 인스턴스에 붙는 것을 1차로, ② 미실행이면
+> "Outlook을 먼저 실행하세요" 안내 반환 (새 인스턴스 기동 금지), ③ 모든 MAPI 호출을
+> 짧은 타임아웃의 격리 서브프로세스로.**
+
 ## 작업 항목
 1. `agent_ops/adapters/outlook_com.py` (excel_com과 동일 optional-import 패턴):
    - `read_calendar(days=7)` → [{title, start, end}] — schedule_store 스키마로 변환하는

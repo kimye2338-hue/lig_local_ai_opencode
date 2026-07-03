@@ -10,12 +10,15 @@
 ## 목표
 CLI 배치형 어댑터 2종 — COM보다 안정적인 경로. subprocess 기반이라 stdlib만으로 가능.
 
-> **probe 실측 + 사용자 확인 (2026-07-03, 회사 PC)**: MATLAB R2024a 경로 확인
-> (`C:\Program Files\MATLAB\R2024a\bin\matlab.exe`). AutoCAD는 **Mechanical 2019,
-> 비표준 경로 `C:\AutoCAD 2019\`** — 사용자는 `acad.exe /p LIGNEX1 /product ACADM`
-> 바로가기로 실행. 구현 지침: exe 탐색에 `C:\AutoCAD*\accoreconsole.exe` 포함(probe_env
-> 반영됨), accoreconsole 호출 시 `/product ACADM` 컨텍스트가 필요한지 회사 실측으로 확인,
-> 프로필/제품 인자는 env(`ACAD_PROFILE`, `ACAD_PRODUCT`)로 받되 기본값을 위 실측값으로.
+> **실측 확정 (2026-07-03, company_check ③⑥)**:
+> - **MATLAB: -batch 실계산 성공** (mean/max 출력, ~21s 기동 포함) — 어댑터는 이 형식
+>   그대로. timeout 여유 있게(기본 300s).
+> - **AutoCAD: accoreconsole 구동됨** (`C:\AutoCAD 2019\accoreconsole.exe`), 단 빈
+>   세션에서 SAVEAS 시도 시 **ErrorStatus=53 (exit 53)**. 구현 지침: ① 반드시
+>   `/i <사본.dwg>`로 시작 도면 지정 (신규 생성 워크플로는 동봉 빈 템플릿 dwg를 사본으로),
+>   ② **stdout/stderr는 UTF-16LE 디코딩** (실측: 유니코드 출력), ③ exit 53=파일 문제로
+>   분류해 안내, ④ `/p LIGNEX1 /product ACADM`(사용자 실행 방식)은 acad.exe용 —
+>   accoreconsole에 불필요하면 생략, env(`ACAD_PROFILE`/`ACAD_PRODUCT`)로만 노출.
 
 ## 작업 항목
 1. `agent_ops/adapters/matlab_batch.py`:
