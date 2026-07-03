@@ -586,12 +586,70 @@ def gen_mail_report(task: str, out_dir: Path,
     return [p1, p2]
 
 
+def _matlab_input_file(ctx: Dict[str, Any]) -> str:
+    for f in (ctx.get("inputs") or {}).get("files", []):
+        name = str(f.get("name", ""))
+        if name.lower().endswith((".csv", ".tsv", ".xlsx")):
+            return name
+    return "data.csv"
+
+
+def _matlab_notable_comments(ctx: Dict[str, Any]) -> str:
+    notable = (ctx.get("inputs") or {}).get("notable_items", [])
+    if not notable:
+        return "       % 입력 요약의 notable 항목 없음 — 업무 규격에 맞게 기준을 확정하세요."
+    lines = ["       % 입력 요약 notable:"]
+    for item in notable[:5]:
+        safe = str(item).replace("\n", " ")[:120]
+        lines.append(f"       % - {safe}")
+    return "\n".join(lines)
+
+
+def gen_matlab_script(task: str, out_dir: Path,
+                      ctx: Optional[Dict[str, Any]] = None) -> List[Path]:
+    ctx = _ensure_context(task, ctx)
+    input_file = _matlab_input_file(ctx)
+    body = f"""%% 시험 데이터 후처리 스크립트 (자동 생성 scaffold)
+% 요청: {task}
+% 입력: {_input_names(ctx)}
+% 실행: matlab -batch "run('작업.m')"   (작업 폴더에서)
+% 상태: app validation pending — MATLAB 2024a에서 -batch 실행 검증 전
+try
+    %% 1. 설정
+    INPUT_FILE = '{input_file}';
+    OUT_PREFIX = '결과_후처리';
+    %% 2. 로드
+    T = readtable(INPUT_FILE);
+    %% 3. 필터/이상값 (입력 요약의 notable 반영 주석)
+{_matlab_notable_comments(ctx)}
+    % TODO(사용자 확인): 이상값 기준을 업무 규격에 맞게 조정
+    %% 4. 기본 통계
+    S = varfun(@mean, T, 'InputVariables', @isnumeric);
+    disp(S)
+    %% 5. 플롯 저장
+    fig = figure('Visible', 'off');
+    % plot(...)  % 입력 열 구조에 맞는 기본 플롯
+    saveas(fig, [OUT_PREFIX '_plot.png']);
+    %% 6. 결과 저장
+    writetable(S, [OUT_PREFIX '_통계.csv']);
+    fprintf('완료: %s\\n', OUT_PREFIX);
+catch err
+    fprintf(2, '오류: %s\\n', err.message);
+    exit(1);
+end
+"""
+    path = out_dir / "작업.m"
+    atomic_write_text(path, body)
+    return [path]
+
+
 GENERATORS = {
     "vba_macro": gen_vba_macro,
     "document": gen_document,
     "slide_outline": gen_slide_outline,
     "browser_script": gen_browser_script,
     "mail_report": gen_mail_report,
+    "matlab_script": gen_matlab_script,
 }
 
 

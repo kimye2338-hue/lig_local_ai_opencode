@@ -51,6 +51,7 @@ BENCHMARKS = [
     ("이 내용으로 PPT 만들어줘", "presentation_generation", "slide_outline"),
     ("웹페이지에서 메일 확인하고 분류 및 요약해줘", "web_mail_assistant", "mail_report"),
     ("크롬 브라우저 매크로 만들어줘", "browser_automation", "browser_script"),
+    ("시험 데이터 후처리 매트랩 스크립트 만들어줘", "matlab_automation", "matlab_script"),
 ]
 
 
@@ -242,6 +243,11 @@ def main() -> None:
           "결재/승인" in actions_md and "광고/스팸" not in actions_md)
     check("browser scaffold forbids hardcoded credentials",
           "하드코딩하지 마세요" in (tmp / "browser_automation" / "browser_macro.py").read_text(encoding="utf-8"))
+    matlab = (tmp / "matlab_automation" / "작업.m").read_text(encoding="utf-8")
+    check("MATLAB scaffold is -batch ready with try/catch",
+          "matlab -batch" in matlab and "try" in matlab and "catch err" in matlab and "exit(1)" in matlab)
+    check("MATLAB scaffold uses base processing structure",
+          "readtable(INPUT_FILE)" in matlab and "varfun(@mean" in matlab and "writetable" in matlab)
     check("unknown artifact kind reported, not raised",
           generate_artifacts("x", ["no_such_kind"], out_dir=tmp / "bad")["ok"] is False)
 
@@ -273,6 +279,12 @@ def main() -> None:
                                   filenames=["macro_excel.txt"])
     check("validator catches a file extension that defeats the purpose",
           any(x["rule"] == "file_extension" for x in v_ext["violations"]), str(v_ext["violations"]))
+    v_mat = validate_artifact_set("matlab_script", [matlab.replace("exit(1);", "")],
+                                  task="시험 데이터 후처리 매트랩 스크립트 만들어줘",
+                                  filenames=["작업.m"])
+    check("validator catches MATLAB missing exit on error",
+          not v_mat["ok"] and any(x["rule"] == "matlab_exit_on_error" for x in v_mat["violations"]),
+          str(v_mat["violations"]))
     check("Office 2016 banned list has 21 functions", len(_OFFICE2016_BANNED) == 21, str(_OFFICE2016_BANNED))
     for fn in ("XLOOKUP", "TEXTJOIN", "LET"):
         v_office = validate_artifact_set("vba_macro", [xl + f'\nSub Bad_{fn}(): Range("A1").Formula = "={fn}(A1:A2)": End Sub\n'],
@@ -464,6 +476,22 @@ def main() -> None:
     gdoc4 = (tmp / "ground4" / "문서.md").read_text(encoding="utf-8")
     check("log analysis document reports error counts and actual error lines",
           "ERROR 2건" in gdoc4 and "vibration sensor timeout" in gdoc4)
+
+    # --- input-grounded scenario 5: CSV -> MATLAB post-processing script ---
+    task_g6 = "시험 데이터 후처리 매트랩 스크립트 만들어줘"
+    plan_g6 = plan_task(task_g6)
+    check("MATLAB task routes to matlab_automation",
+          any(c["id"] == "matlab_automation" for c in plan_g6["capabilities"]),
+          str(plan_g6["capabilities"]))
+    check("MATLAB task plans matlab_script", "matlab_script" in plan_g6["artifact_kinds"], str(plan_g6))
+    out_g6 = generate_artifacts(task_g6, ["matlab_script"], out_dir=tmp / "ground6",
+                                context=build_artifact_context(task_g6, plan_g6, ing))
+    mtext = (tmp / "ground6" / "작업.m").read_text(encoding="utf-8")
+    check("MATLAB script passes quality with CSV input",
+          out_g6["quality"]["matlab_script"]["ok"], str(out_g6["quality"]["matlab_script"]))
+    check("MATLAB script reflects input CSV name and notable rows",
+          "INPUT_FILE = '시험결과.csv'" in mtext and "치수B" in mtext and "불합격" in mtext,
+          mtext[:1000])
 
     # --- honesty: unsupported-only input, no input, fake success ---
     ing5 = ingest_inputs([str(input_dir / "모델.bin")])

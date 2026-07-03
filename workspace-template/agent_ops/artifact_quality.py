@@ -112,6 +112,20 @@ _KIND_RULES: Dict[str, List[Rule]] = {
         ("source_and_company", "분류 근거(mock 또는 입력 메일)와 실제 메일함은 company pending임을 구분해야 함",
          lambda t: (("mock" in t) or ("입력 메일" in t)) and ("company validation pending" in t)),
     ],
+    "matlab_script": [
+        ("matlab_batch_run", "matlab -batch 실행 방법이 명시되어야 함",
+         lambda t: "matlab -batch" in t),
+        ("matlab_try_catch", "try/catch 구조가 있어야 함",
+         lambda t: "try" in t and "catch err" in t),
+        ("matlab_exit_on_error", "오류 시 exit(1)이 있어야 함",
+         lambda t: "exit(1)" in t),
+        ("matlab_input_constant", "INPUT_FILE 상수가 있어야 함",
+         lambda t: "INPUT_FILE" in t),
+        ("matlab_pending", "MATLAB 실제 실행 검증 pending이 명시되어야 함",
+         lambda t: "app validation pending" in t and "MATLAB 2024a" in t),
+        ("matlab_base_functions", "base MATLAB 함수만 사용해야 함",
+         lambda t: all(name not in t for name in ("smoothdata(", "findpeaks(", "butter(", "filtfilt("))),
+    ],
 }
 
 # Host-app-specific VBA rules, activated by the generated filename
@@ -146,6 +160,7 @@ _KIND_SUFFIXES: Dict[str, set] = {
     "slide_outline": {".md", ".json"},
     "browser_script": {".py"},
     "mail_report": {".md"},
+    "matlab_script": {".m"},
 }
 
 

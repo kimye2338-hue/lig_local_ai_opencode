@@ -95,6 +95,14 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "keywords": ["일정", "약속", "마감", "리마인드", "캘린더", "스케줄", "미루", "연기",
                      "schedule", "deadline"],
     },
+    "matlab_automation": {
+        "description": "시험 데이터 후처리용 MATLAB 스크립트 scaffold 생성",
+        "status": "scaffold_available",
+        "artifact_kinds": ["matlab_script"],
+        "outputs": [".m"],
+        "pending": ["app validation pending: MATLAB 2024a에서 -batch 실행 검증"],
+        "keywords": ["매트랩", "matlab", "후처리", "플롯", "그래프 그려", ".m"],
+    },
     "office_cad_automation": {
         "description": "Office/CAD 앱 자동화 (SolidWorks/Excel/Word/PowerPoint/HWP) — 매크로/절차 산출물",
         "status": "scaffold_available",
@@ -133,6 +141,10 @@ ARTIFACT_KIND_INFO: Dict[str, Dict[str, str]] = {
     "mail_report": {
         "files": "메일_분류_보고서.md, 액션아이템.md",
         "purpose": "메일 분류/요약 보고서와 오늘 처리할 액션아이템 목록",
+    },
+    "matlab_script": {
+        "files": "작업.m",
+        "purpose": "MATLAB 2024a -batch로 실행할 시험 데이터 후처리 scaffold",
     },
 }
 
