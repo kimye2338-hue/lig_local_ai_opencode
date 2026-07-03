@@ -1,492 +1,521 @@
-# OpenCodeLIG 마스터플랜 — "구두 지시 → 오프라인 PC 업무 자동화"
+# OpenCodeLIG 마스터플랜 v2 — "구두 지시 → 오프라인 PC 업무 자동화"
 
-- 작성: 2026-07-03, 기준 HEAD `9363b9c` (8차 세션까지 완료, 총 260 checks locally validated)
-- 목적: 이 문서 하나만 보고 **어떤 세션(하위 모델 포함)이든** 다음 작업을 이어갈 수 있게 한다.
-- 읽는 규칙: 각 단계의 [작업 항목] → [검증 명령] → [완료 기준(DoD)] → [금지/가드레일] 순서로 그대로 수행한다.
-  판단이 필요하면 "왜 이 순서인가"를 먼저 읽는다.
+- 작성: 2026-07-03 (v2 — 사용자 환경/업무 확정 답변 반영, v1 대체), 기준 HEAD `d68b2c0`
+- 목적: 이 문서 하나만 보고 **어떤 세션(하위 모델 포함)이든** 다음 작업을 오차 없이 이어간다.
+- 읽는 규칙: 담당 단계 섹션의 [작업 항목] → [검증 명령] → [완료 기준(DoD)] → [금지/가드레일]을
+  순서대로 그대로 수행한다. 판단이 필요하면 §3(순서 근거)과 §7(불변 규칙)을 따른다.
 
 ---
 
 ## 0. 최종 목표 (제품 정의)
 
-> 사내 오프라인 내부망 PC에서, 로컬 LLM(EXAONE/Qwen 등)을 이용해,
-> 사용자가 **구두로 지시**하면 컴퓨터 업무(문서/표/PPT/매크로/메일/브라우저/CAD)를
-> **알아서 수행하고 증거와 함께 보고**하는 프로그램.
+> 사내 오프라인 내부망 PC에서, H100 서버의 로컬 LLM API(EXAONE-4.5-33B / Qwen3.6-27B)를 이용해,
+> 사용자가 지시하면(텍스트 우선, 음성은 확장 예약) **비서 업무·일정 관리·주요 소프트웨어 매크로
+> 작업**을 알아서 수행하고 증거와 함께 보고하는 프로그램.
 
-측정 가능한 성공 기준 (전 단계 완료 시):
+사용자가 확정한 3대 핵심 업무 (모든 우선순위 판단의 기준):
+1. **비서 역할** — 브리핑, 메일 분류/액션아이템, 회의록 정리, 보고서 초안
+2. **일정 관리** — 일정 등록/조회/리마인드, 마감 추적
+3. **주요 소프트웨어 매크로 작업** — Excel/HWP/SolidWorks/ANSYS/MATLAB/AutoCAD 자동화
 
-| # | 기준 | 측정 방법 |
-|---|------|----------|
-| 1 | 대표 업무 10종 중 8종 이상 "지시→결과물" E2E 완료 (사람 개입은 승인 1회 이내) | 16단계 파일럿 체크리스트 |
-| 2 | 7B급 weak model에서 tool-call 성공률 ≥ 95% | 10단계 capability-floor 벤치 |
-| 3 | 모든 실행이 audit log에 남고, 모든 산출물이 quality validator 통과 | 12단계 orchestrator 검사 |
-| 4 | 완전 오프라인 설치 가능 (인터넷 0회) | 14단계 반입 패키지 + setup 검증 |
-| 5 | 음성 지시 → 텍스트 변환 정확도가 실사용 가능 수준 (한국어 업무 문장) | 13단계 STT 스모크 10문장 |
+측정 가능한 최종 성공 기준:
 
-상태 어휘 (전 세션 공통, 절대 혼용 금지):
-`implemented / locally validated / locally validated with mock / input-grounded /
-artifact generated / static reviewed / app validation pending / company validation pending /
-security cleanup pending`
+| # | 기준 | 측정 |
+|---|------|------|
+| 1 | 파일럿 업무 12종(§P19) 중 10종 이상 "지시→결과물" E2E (사람 개입은 승인 1회 이내) | P19 결과표 |
+| 2 | gateway(EXAONE/Qwen) tool-call 성공률 ≥ 95% | P11 floor 벤치 |
+| 3 | 모든 실행 audit log 기록 + 모든 산출물 quality validator 통과 | P13 검사 |
+| 4 | 인터넷 0회로 회사 PC 전체 설치 (반입 zip 1개) | P17 리허설 |
+| 5 | 생성된 Office 매크로가 **Office 2016**에서 실행됨 | P15 실측 |
 
----
-
-## 1. 현재 위치 (v8) — 있는 것 / 없는 것
-
-### 이미 있고 검증된 것 (재사용하라. 새로 만들지 마라)
-
-| 계층 | 모듈 | 상태 |
-|------|------|------|
-| LLM 호출 | `lig_runtime.py` (재시도/fallback 호출 루프), `lig_providers.py` (secret-free 설정), `toolcall_parser.py` (깨진 tool-call 복구) | locally validated with mock |
-| 실행 | `tool_dispatch.py` + `local_tools.py` (workspace 격리 파일 도구 7종, path-traversal 차단), `run_agent_loop` 멀티턴 | locally validated |
-| 계획 | `capabilities.py` (keyword 라우팅+근거/confidence, 복합 분해, semantic planner hook) | locally validated |
-| 입력 | `input_ingest.py` (CSV/LOG/코드/메일JSON 요약, secret 마스킹, unsupported 기록) | locally validated |
-| 산출 | `artifact_generators.py` (5종 generator, 공유 context, 입력 근거 반영, enrich hook) | locally validated / input-grounded |
-| 품질 | `artifact_quality.py` (kind별 규칙 + required_terms 가짜 성공 차단) | locally validated |
-| 앱 연동 | `adapters/__init__.py` (4종 skeleton, 전부 available=false) | scaffold — app validation pending |
-| 운영 | `doctor.py`, `launch/*.bat`, checkpoint/resume, 진단 파일 | locally validated |
-| 테스트 | 9개 파일 260 checks | 전부 통과 유지 필수 |
-
-### 아직 없는 것 = 이 문서의 나머지 전부
-
-1. **real LLM 실측 0회** — mock으로만 검증됨. (최대 리스크)
-2. **음성 입력 없음** — STT/마이크 캡처 미구현.
-3. **앱 어댑터 실행 없음** — 매크로를 만들지만 실행은 못 함.
-4. **한 명령 오케스트레이션 없음** — plan/agent/artifact가 분리된 명령.
-5. **승인 게이트/audit log 없음** — 파괴적 작업 통제 장치 미비.
-6. **오프라인 반입물 미확정** — dependencies.json에 PENDING_PREFETCH 잔존, 모델 파일 미정.
-7. **git 히스토리에 내부 hostname 잔존** — 커밋 67e0028/be9f981 (security cleanup pending).
+상태 어휘 (혼용 금지): `implemented / locally validated / locally validated with mock /
+input-grounded / artifact generated / static reviewed / app validation pending /
+company validation pending / security cleanup pending`
 
 ---
 
-## 2. 목표 아키텍처 (최종 상태)
+## 1. 확정 환경 (2026-07-03 사용자 답변 — 변경 시 이 표부터 갱신)
+
+### 1.1 LLM (변경 불가 — 사용자 권한 밖)
+
+| 항목 | 값 |
+|------|-----|
+| 서빙 | 사내 H100 서버, **API로만 접근** (자원 넉넉 → 긴 컨텍스트/enrich 적극 활용 가능) |
+| 모델 | **EXAONE-4.5-33B** (coding/chat 라우트, think_off 변형), **Qwen3.6-27B** (fallback 라우트) |
+| API 형식 | OpenAI 호환. 라우트가 URL 경로에 인코딩됨 — 이미 `agent_ops/lig_providers.py`의 `_ROUTE_DEFAULTS`에 반영: `lig-coding`(/EXAONE-4.5-33B-vibe_coding_think_off/v1), `lig-chat`(/EXAONE-4.5-33B-default_think_off/v1), `lig-fallback`(/Qwen3.6-27B-vibe_coding_think_off/v1) |
+| secret | `%USERPROFILE%\OpenCodeLIG_USERDATA\secrets\lig-api.env` (LIG_GATEWAY_BASE_URL, LIG_API_KEY). **절대 커밋/출력 금지** |
+| 변경 대응 | 라우트/모델/타임아웃은 lig-api.env의 env 키로 오버라이드 (P9에서 완전 오버라이드로 확장) |
+
+### 1.2 하드웨어
+
+| PC | 사양 | 역할 |
+|----|------|------|
+| 사내 업무 PC | i7-14700K / RAM 64GB / RTX 2000 Ada 16GB / SSD 1TB + HDD 2TB / **Windows 11** | 운영. gateway API 사용. (16GB VRAM → 비상용 로컬 14B Q4 서빙도 가능 — 백업 옵션) |
+| 집 개발 PC | Ryzen 3500X / RAM 16GB / RTX 2060 Super 8GB / SSD 1TB / **Windows 10** | 개발/선검증. 로컬 실측 모델: **Qwen2.5-7B-Instruct Q4** (8GB VRAM 상한 기준) |
+
+### 1.3 사내 소프트웨어 (버전 고정 — 호환성 기준)
+
+| SW | 버전 | 자동화 경로 (확정) |
+|----|------|-------------------|
+| MS Office | **2016** (전 제품 2016 기준으로 맞출 것) | COM (win32com) + VBA. **2016에 없는 함수 금지 (§6.2)** |
+| 한글(HWP) | 2019 | HwpFrame COM |
+| SolidWorks | 2022 한글판 | SldWorks COM (late binding, 기존 VBA scaffold와 정합) |
+| ANSYS | 2024R1 — Mechanical, SpaceClaim, Classic Icepak, Fluent | Fluent: journal(.jou) + `fluent -g -i` 배치 / Mechanical: ACT(Python) 스크립트 / SpaceClaim: 스크립트(IronPython) — 생성 우선, 실행은 앱 검증 |
+| MATLAB | 2024a | `.m` 생성 + `matlab -batch` CLI 실행 (COM 불필요, 가장 안정적) |
+| AutoCAD | 2019 | `.scr` 스크립트/AutoLISP 생성 + `accoreconsole.exe` 배치 실행 |
+| 브라우저 | Chrome | CDP (드라이버/설치 불필요) |
+
+### 1.4 기타 확정 사항
+
+- 반입 용량 제한 **없음** → GGUF 모델/whisper 모델 반입 가능.
+- 집 Excel은 최신 버전 → **"집에서 됨" ≠ "2016 호환"**. §6.2 금지 목록 + 회사 실측이 최종.
+- git 히스토리 purge **사용자 승인 확보됨 (2026-07-03)** → P10에서 실행.
+- 마이크: 존재하나 당장 미사용 → 음성은 **인터페이스만 설계**(P13), 구현은 P20으로 예약.
+
+---
+
+## 2. 목표 아키텍처
 
 ```text
-[구두 지시] ──voice.bat──> whisper.cpp(STT, 오프라인) ──텍스트──┐
-[텍스트 지시] ────────────────────────────────────────────────┤
-                                                              v
-                    agentops.py work  (12단계에서 신설)
-                                                              v
-   input_ingest(입력 자료) ─> plan_task(분해/근거) ─> WorkContext(공유)
-                                                              v
-        agent loop (lig_runtime + tool_dispatch + local_tools)
-             ^ LLM 우선순위: ① 사내 gateway EXAONE/Qwen (company)
-             |               ② PC-로컬 GGUF 서버 (llama.cpp/Ollama)
-             |               ③ mock (파이프라인 검증용)
-                                                              v
-     artifact_generators + artifact_quality (+ LLM enrich, 검증 통과 시만)
-                                                              v
-     [승인 게이트] ─> adapters 실행 (browser CDP / Excel / HWP / SolidWorks)
-                                                              v
-        결과 보고(.md) + audit log(jsonl) + diagnostics(secret-free)
+[텍스트 지시 / (예약) 음성] ──> agentops.py work (P13 신설)
+        v
+input_ingest(xlsx 포함, P14 확장) ─> plan_task(분해/근거) ─> WorkContext(공유)
+        v
+agent loop (lig_runtime + tool_dispatch + local_tools)
+   ^ LLM 라우팅(P9): lig-coding(EXAONE, 도구/매크로/코드)
+   |                lig-chat(EXAONE, 문서/요약/한국어)
+   |                lig-fallback(Qwen3.6, EXAONE 실패 시 자동)
+   |                local_openai(집 Qwen 7B — 개발 전용)  |  mock(파이프라인 검증)
+        v
+artifact_generators + artifact_quality (+ enrich: H100이라 적극 사용, 검증 통과 시만 대체)
+        v
+[승인 게이트(P13)] ─> adapters 실행
+   browser CDP(P12) | Office 2016 COM(P15) | HWP/SW/MATLAB/AutoCAD/ANSYS(P16)
+        v
+결과 보고(.md) + audit log(jsonl) + 비서/일정 모듈(P14: briefing/schedule/reminder)
 ```
 
-원칙 (모든 단계 공통):
-- 코어는 stdlib-only 유지. 외부 패키지는 어댑터/음성 계층에만, 반드시 `release/dependencies.json`에 먼저 기록.
-- 모든 새 기능은 mock으로 먼저 검증 → real은 별도 표기.
-- 검증 못 한 것을 됐다고 말하지 않는다 (상태 어휘 준수).
+확장 원칙 (사용자 요구 "추후 변경에도 맞출 수 있는 구조"의 구현 방식):
+- **모든 확장점은 registry**: capability = `CAPABILITIES` 항목, 산출물 = `GENERATORS` 함수,
+  실행 = `adapters/` 모듈, LLM = provider 라우트(env 오버라이드). if/else 특수 처리 금지.
+- gateway 스펙 변경은 **코드 수정 없이 lig-api.env 키 변경만으로** 흡수돼야 한다 (P9 DoD).
+- 코어(agent_ops 비어댑터부)는 stdlib-only 유지. 외부 패키지는 어댑터/ingest 확장에만,
+  반드시 `release/dependencies.json` 선기록.
 
 ---
 
-## 3. 왜 이 순서인가 (의존성과 리스크 기준)
+## 3. 단계 구성과 순서 근거
 
-```text
-9. 로컬 LLM real 실측(집)  ──> 10. weak-model floor ──> 12. work 오케스트레이터
-                                     │                        │
-11a. 브라우저 CDP 어댑터(집) ────────┘                        │
-13. 음성 입력(집) ────────────────────────────────────────────┤
-14. 오프라인 반입 패키지  <── 11b~d. Excel/HWP/SW 어댑터(회사) │
-15. 보안/감사/운영 준비 ──────────────────────────────────────┤
-16. 회사 파일럿 (전 단계 수렴) <──────────────────────────────┘
-```
+| 단계 | 내용 | 장소 | 선행 |
+|------|------|------|------|
+| **P9** | Real LLM 연결 완성 (gateway 정합 + env 완전 오버라이드 + 집 Qwen 실측) | 집 | — |
+| **P10** | git 히스토리 purge (승인 확보됨 — 짧은 전용 세션) | 집 | — |
+| **P11** | weak-model capability floor (집 Qwen 7B 기준 벤치) | 집 | P9 |
+| **P12** | 어댑터 1차: 브라우저 CDP (의존성 0, 첫 실행형) | 집 | — |
+| **P13** | `work` 오케스트레이터 + 승인 게이트 + audit log | 집 | P9 |
+| **P14** | 비서/일정 관리 모듈 (schedule/briefing/reminder/회의록) + xlsx ingest | 집 | P13 |
+| **P15** | Office 2016 어댑터 (Excel COM 우선, Outlook/Word/PPT) + 2016 호환 규칙 | 집(선검증)→회사 | P17 일부(pywin32) |
+| **P16** | 엔지니어링 어댑터 (HWP/SolidWorks/MATLAB/AutoCAD/ANSYS) | 회사 중심 | P15 패턴 |
+| **P17** | 오프라인 반입 패키지 (전 의존성+모델, 인터넷 차단 리허설) | 집 | P9~P15 확정분 |
+| **P18** | 운영/보안 마무리 (secret 스캔 훅, runbook, audit 순환) | 집 | — |
+| **P19** | 회사 파일럿 (업무 12종 실측) | **회사** | 전부 |
+| **P20** | 음성 입력 구현 (whisper.cpp — 예약, 파일럿 후) | 집→회사 | P13 |
 
-- **9단계가 무조건 먼저**: 지금까지 real mode는 한 번도 실행된 적 없다. 집 PC는 인터넷이
-  되므로 Ollama+Qwen(소형)을 받아 **회사 가기 전에** "LLM이 실제로 도구를 부리는" 경로의
-  리스크를 전부 태워야 한다. 이게 되면 회사에서는 base_url만 바꾸면 된다.
-- 11a(브라우저 CDP)와 13(음성)은 **추가 의존성 없이/집에서** 검증 가능하므로 병렬 진행 가능.
-- 11b~d(Office/HWP/SolidWorks)는 회사 PC(앱 존재)가 필요 → 14(반입) 이후 회사에서 마무리.
-- 16(파일럿)은 모든 것의 수렴점.
-
-예상 규모: 단계당 1~2 세션, 총 10~14 세션.
+순서 근거:
+- **P9 최우선**: real mode 실측 0회가 최대 리스크. 집 Qwen으로 태운다. gateway는 코드상
+  이미 정합(lig_providers)이므로 회사에서는 lig-api.env만 채우면 된다.
+- **P10을 앞으로**: 승인이 확보됐고, 공개 repo에 내부 hostname이 남아있는 것은 지금도
+  진행 중인 리스크. 독립 작업이라 언제든 가능 → 즉시 처리.
+- **P14(비서/일정)를 어댑터보다 앞에**: 사용자 3대 업무 중 2개(비서, 일정)가 앱 없이도
+  완성 가능(stdlib + 기존 파이프라인). 가치가 가장 빨리 나온다.
+- P15/P16은 pywin32 반입(P17 일부 선행)과 회사 앱이 필요 → 뒤에.
+- 예상 규모: 단계당 1~2 세션, 총 12~16 세션.
 
 ---
 
 ## 4. 단계별 상세 계획
 
-> 공통 시작 의식(모든 세션, 생략 금지):
+> **공통 시작 의식** (모든 세션, 생략 금지):
 > ```bat
 > cd /d "%USERPROFILE%\OpenCodeLIG_HOME_LAB\repo"
-> git status -sb          (사용자 untracked 5개 외에 이상 없어야 함)
-> git log --oneline -5    (HEAD 기록해 둘 것)
+> git status -sb    (사용자 untracked 5개 외 이상 없어야 함)
+> git log --oneline -5
 > cd workspace-template
-> py -3.11 tests\test_capability_bench.py   (빠른 스모크; 시간 되면 9개 전부)
+> py -3.11 tests\test_capability_bench.py
 > ```
-> 공통 종료 의식: 9개 테스트 전부 실행 → 전부 통과 시에만 commit/push → 메모리 갱신 → 보고.
+> **공통 종료 의식**: 9개 기존 테스트 + 신규 테스트 전부 실행 → 전부 통과 시에만
+> 개별 `git add` → commit/push → 메모리 갱신 → §7.3 형식 보고.
 
 ---
 
-### 9단계 — Real LLM 이중화 + 집에서 첫 실측 ★최우선★
+### P9 — Real LLM 연결 완성 + 집 실측 ★다음 세션★
 
-**목적**: mock 검증을 real 검증으로 바꾼다. 회사 gateway 없이도 로컬 GGUF 서버로
-agent loop 전체를 실측하고, 모델별 tool-call 형식 차이를 파서에 흡수한다.
-
-**선행 조건**: 없음 (지금 바로 가능). 집 PC 인터넷 필요 (Ollama/모델 다운로드).
+**목적**: gateway 클라이언트를 "스펙 변경에도 코드 수정 없이 대응"하는 형태로 완성하고,
+집 Qwen 7B로 agent loop 전체를 처음으로 실측한다.
 
 **작업 항목**:
-1. `agent_ops/lig_providers.py`에 프로필 개념 추가 (기존 키 유지, 하위 호환):
-   - `LIG_PROVIDER_PROFILE` env: `company_gateway`(기본) / `local_openai`(범용 OpenAI 호환).
-   - `local_openai`는 secret 불필요: `LIG_LOCAL_BASE_URL`(기본 `http://127.0.0.1:11434/v1`),
-     `LIG_LOCAL_MODEL`(기본 `qwen2.5:7b-instruct`)만 읽는다. validate_config가 프로필별로
-     "무엇이 빠졌는지"를 정확히 말해야 한다.
-2. `lig_runtime.py`: 프로필에 따라 요청 payload/헤더 구성 분기. **transport 주입 구조는
-   그대로 유지** (기존 mock 테스트 14개가 깨지면 안 됨).
-3. 집 PC 실측 절차 (문서화 포함, `launch/README.md`에 §5로 추가):
+1. `lig_providers.py` 확장 (기존 키/함수 시그니처 유지 — 15개 테스트 무손상):
+   - env 완전 오버라이드: `LIG_MODEL_CODING/CHAT/FALLBACK`(모델명), 기존 `LIG_ROUTE_*`(경로),
+     `LIG_API_TIMEOUT_SEC` — **라우트 추가/모델 교체가 env 편집만으로 가능**해야 한다.
+   - 프로필: `LIG_PROVIDER_PROFILE=company_gateway`(기본) / `local_openai`.
+     local_openai는 secret 불필요: `LIG_LOCAL_BASE_URL`(기본 http://127.0.0.1:11434/v1),
+     `LIG_LOCAL_MODEL`(기본 qwen2.5:7b-instruct).
+   - `config/lig-api.env.example`에 신규 키 전부 주석과 함께 반영.
+2. `lig_runtime.py`: 프로필 분기. transport 주입 구조 유지 (mock 테스트 14개 보존).
+3. **작업 유형→라우트 자동 선택**: plan의 capability로 결정 — 매크로/코드/파일 작업은
+   lig-coding, 문서/요약/메일 분류는 lig-chat, 호출 실패·비정상 응답 시 lig-fallback
+   (기존 fallback 정책 재사용). 선택 결과를 진단에 기록.
+4. 집 실측 (Ollama):
    ```bat
-   ollama pull qwen2.5:7b-instruct   (또는 3b — 램 부족 시)
+   ollama pull qwen2.5:7b-instruct
    set LIG_PROVIDER_PROFILE=local_openai
    run-agent.bat --mode real --task "메모.txt 파일을 읽고 요약해서 요약.md로 저장해줘"
    ```
-4. 실측에서 나온 Qwen의 tool-call 원문을 `results/`에 저장하고, 깨진 형식이 있으면
-   `toolcall_parser.py`에 복구 규칙 추가 (+ `test_toolcall_parser.py`에 실제 사례 기반 테스트).
-5. `tests/test_real_llm_smoke.py` 신설: 서버가 안 떠 있으면 **전 항목 SKIP을 명시 출력**
-   ("local llm not running — skipped, not failed")하고 exit 0. 떠 있으면 시나리오 3종
-   (파일 요약 / 파일 생성 / 잘못된 도구명 복구) 실측.
-6. doctor에 `llm_endpoints` 섹션: 프로필, base_url 도달성(연결만, secret 없음), 모델명.
+   (16GB RAM/8GB VRAM 주의: 7b가 무거우면 `qwen2.5:3b-instruct`로 낮추고 그 사실 기록)
+5. 실측 tool-call 원문을 results/에 수집 → 깨진 형식은 `toolcall_parser.py`에 규칙 추가
+   (+실사례 기반 테스트 추가).
+6. `tests/test_real_llm_smoke.py`: 서버 없으면 "local llm not running — skipped, not failed"
+   출력 후 exit 0. 있으면 3 시나리오(요약/생성/오류 복구).
+7. doctor `llm_endpoints` 섹션: 프로필, 라우트별 설정 여부(presence만), base_url 도달성
+   (**host 문자열 출력 금지** — ok/fail만).
 
-**검증 명령**:
-```bat
-py -3.11 tests\test_lig_providers.py
-py -3.11 tests\test_lig_runtime.py
-py -3.11 tests\test_real_llm_smoke.py     (Ollama 켠 상태/끈 상태 각 1회)
-run-agent.bat --mode real --task "..."     (위 3번)
-```
+**검증 명령**: `test_lig_providers.py`, `test_lig_runtime.py`, `test_real_llm_smoke.py`
+(서버 on/off 각 1회), 4번 실측.
 
 **DoD**:
-- [ ] 로컬 Qwen으로 "파일 읽고 요약 저장" E2E 최소 1회 성공, 산출물과 진단 파일 증빙
-- [ ] Ollama 꺼진 상태에서 run-agent가 exit 2 + 원인 안내 (crash 금지)
+- [ ] 집 Qwen으로 "파일 읽고 요약 저장" E2E ≥1회 성공 (산출물+진단 증빙)
+- [ ] 라우트/모델 변경이 lig-api.env 편집만으로 반영됨을 테스트로 증명
+- [ ] Ollama 꺼진 상태에서 exit 2 + 원인 안내 (crash 금지)
 - [ ] 기존 260 checks 무손상
-- [ ] 보고 표기: "locally validated with local Qwen; EXAONE/사내 gateway는 company validation pending"
+- [ ] 보고: "locally validated with local Qwen; EXAONE-4.5-33B/Qwen3.6-27B gateway는 company validation pending"
 
-**금지/가드레일**:
-- 로컬 실측 성공을 "회사 검증 완료"라고 절대 말하지 마라.
-- Ollama 설치 실패 시 mock 코드 경로를 고치려 들지 마라 — 실패 사실과 원인만 보고.
-- lig-api.env에 어떤 실제 값도 커밋하지 마라 (example 파일만).
+**금지**: 로컬 실측 성공을 회사 검증이라 말하기. lig-api.env 실값 커밋. 실측 실패 시
+mock 경로 수정으로 도피 (실패 사실만 보고).
 
 ---
 
-### 10단계 — Weak-model capability floor (하위 모델 안정화)
+### P10 — git 히스토리 purge (승인 확보됨: 2026-07-03)
 
-**목적**: 7B급(가능하면 3B급) 모델에서도 tool-call이 안정적으로 돌게 만든다.
-회사에서 쓸 모델 성능을 통제할 수 없으므로, 바닥 성능을 벤치로 고정한다.
+**목적**: 공개 repo 히스토리의 내부 hostname(커밋 67e0028, be9f981) 제거.
 
-**선행 조건**: 9단계 완료.
+**작업 항목** (순서 엄수):
+1. 전체 백업: `git clone --mirror` 를 repo 밖 별도 폴더에 (완료 확인 전 다음 단계 금지).
+2. 집 PC에서 `pip install git-filter-repo` (인터넷 가능).
+3. `replacements.txt` 작성: 내부 hostname → `INTERNAL-GATEWAY-PLACEHOLDER`.
+   (hostname 원문은 이 파일에만, **커밋 금지** — 사용 후 삭제)
+4. `git filter-repo --replace-text replacements.txt` → 로컬 히스토리 전수 검사:
+   `git log --all -S"<hostname 일부>" --oneline` 결과 0건 확인.
+5. `git push --force origin rebuild/fable5-open-architecture` (+다른 브랜치도 오염 시 처리).
+6. GitHub PR #8 본문/코멘트에 hostname 있는지 육안 점검 → 있으면 편집.
+7. 완료 후 상태 어휘 갱신: security cleanup **done** (이후 보고에서 pending 제거).
 
-**작업 항목**:
-1. `tests/test_capability_floor.py` 신설 (로컬 LLM 필요, 없으면 SKIP):
-   시나리오 10종 × 반복 3회 → 성공률/실패 유형 집계를 `results/reports/capability_floor.md`로 저장.
-   시나리오는 8차까지의 대표 업무를 재사용 (새 시나리오 발명 금지).
-2. 실패 유형별 대응 (우선순위 순):
-   - tool-call JSON 깨짐 → `toolcall_parser.py` 규칙 추가 (실측 사례 기반만)
-   - 없는 도구 호출 → tool_dispatch의 오류 메시지에 "사용 가능 도구 목록" 자동 포함
-   - 무한 사과/반복 → repeated-failure cutoff 파라미터 튜닝 (기존 구조 재사용)
-   - 도구 안 쓰고 말로 때움 → 시스템 프롬프트에 "파일 작업은 반드시 도구 사용" 강조 1줄
-3. 시스템 프롬프트/스키마는 **줄이는 방향**으로만 수정 (현재 ~2.3KB 초과 금지).
-4. 3B/7B 모델별 성공률을 같은 리포트에 비교 기록.
+**DoD**: 히스토리 전체 검색 0건 / 백업 존재 / push 후 원격 재클론으로 재확인.
 
-**DoD**:
-- [ ] 7B에서 tool-call 성공률 ≥ 95%, 3B 수치 기록 (달성 못 하면 수치 그대로 보고 — 조작 금지)
-- [ ] capability_floor.md 리포트 생성, doctor에서 경로 노출
-- [ ] 기존 테스트 무손상
-
-**금지**: 성공률을 올리려고 시나리오를 쉽게 바꾸지 마라. 파서에 "모델이 안 낸 형식"을
-추측으로 추가하지 마라 (실측 로그에 있는 형식만).
+**금지**: 백업 없이 filter-repo 실행. replacements.txt 커밋. 이 단계에서 다른 코드 수정
+섞기 (순수 purge 세션으로 유지 — 사고 시 원인 분리).
 
 ---
 
-### 11a단계 — 브라우저 CDP 어댑터 (집에서 가능, 의존성 0)
+### P11 — Weak-model capability floor
 
-**목적**: 첫 번째 **실행형** 어댑터. Chrome DevTools Protocol은 추가 설치가 필요 없어
-"생성한 스크립트를 실제로 실행"하는 최초 사례로 최적.
-
-**선행 조건**: 없음 (9단계와 병렬 가능). Chrome 존재 (doctor의 chrome_9222 체크 재사용).
-
-**작업 항목**:
-1. `agent_ops/adapters/browser_cdp.py`:
-   - stdlib-only WebSocket 클라이언트 최소 구현 (RFC6455 클라이언트, 텍스트 프레임만, ~200줄)
-     — 외부 패키지 금지. `http://127.0.0.1:9222/json`으로 탭 목록/생성은 urllib 사용.
-   - `execute(action, options)` 지원 action: `open_url`, `get_title`, `extract_text`
-     (Runtime.evaluate로 document.body.innerText), `screenshot`(Page.captureScreenshot →
-     results/에 png 저장).
-   - 로그인/입력 자동화는 이번 단계 범위 아님 (company validation pending 유지).
-2. `adapters/__init__.py`의 browser 항목: execute 연결, **실제 Chrome으로 3개 action 성공 후에만**
-   `available: True`로 변경 + `"validated": "local Chrome, <날짜>"` 기록.
-3. `launch/chrome-debug.bat`: `--remote-debugging-port=9222 --user-data-dir=%TEMP%\opencodelig_chrome`
-   로 기존 프로필과 분리해 기동.
-4. `tests/test_browser_adapter.py`: 9222 안 떠 있으면 SKIP 명시. 떠 있으면 example.com
-   open→title→extract 검증.
-
-**DoD**:
-- [ ] chrome-debug.bat → example.com 열고 텍스트 추출 실측 성공 (증빙: 결과 파일)
-- [ ] browser adapter available=True (근거 문자열 포함), 나머지 3개 어댑터는 false 유지
-- [ ] 사내 시스템 로그인은 여전히 company validation pending으로 표기
-
-**금지**: 사용자 기본 Chrome 프로필로 디버그 포트를 열지 마라 (반드시 별도 user-data-dir).
-selenium/playwright를 이 단계에서 도입하지 마라.
-
----### 11b~d단계 — Excel COM → HWP → SolidWorks 어댑터 (회사 PC 중심)
-
-**목적**: 생성한 VBA/문서를 실제 앱에서 실행/변환한다.
-
-**선행 조건**: 14단계에서 pywin32 wheel 반입 (Excel/HWP/SW 공통). 앱이 있는 PC.
-집 PC에 Excel이 있으면 11b는 집에서 선검증 가능 (있는지 먼저 확인하고 시작).
-
-**작업 항목** (어댑터당 동일 패턴, 한 세션에 하나씩):
-1. `adapters/excel_com.py`: `execute(macro_path, workbook_path, options)`:
-   - **원본은 절대 직접 수정 금지**: 항상 `사본_<원본명>`으로 복사 후 작업.
-   - win32com으로 Excel 기동(Visible 옵션) → VBProject import는 보안 설정 이슈가 있으므로
-     1차 구현은 "매크로 실행"이 아니라 **openpyxl 없는 순수 COM 데이터 작업**(셀 읽기/쓰기/
-     저장)과 "사용자에게 Alt+F11 import 안내"의 이중 경로로 시작. VBProject 접근은
-     Trust Center 설정 확인 후 2차.
-   - 실패 시 Excel 프로세스 잔류 방지 (finally에서 Quit + 프로세스 확인).
-2. `adapters/hwp_com.py`: HwpFrame COM으로 문서.md → hwp 변환 (텍스트 유입 수준부터).
-3. `adapters/solidworks_com.py`: SldWorks.Application 접속 → 열린 문서 확인 → 생성된
-   매크로의 RunMacro 실행. **반드시 사본 문서에서만** (문서 자동 저장 금지, 사용자 확인 후 저장).
-4. 각 어댑터: 실제 앱에서 시나리오 3종 성공 로그를 `validation/` 아닌
-   `workspace-template/agent_ops/results/adapter_validation/`에 남긴 뒤에만 available=True.
-5. `tests/test_office_adapters.py`: 앱 없으면 SKIP 명시 (CI에서도 SKIP으로 통과해야 함).
-
-**DoD** (어댑터별):
-- [ ] 사본 기반 실행 1회 이상 성공 + 로그 증빙 → 그때만 available=True
-- [ ] 앱 없는 PC에서 테스트가 SKIP으로 정직하게 통과
-- [ ] 실패해도 앱 프로세스/파일 잔류 없음
-
-**금지**: 앱이 없는 PC에서 available=True로 바꾸지 마라. 원본 파일을 직접 조작하지 마라.
-"COM 코드를 작성했다"를 "앱 검증 완료"라고 보고하지 마라 (static reviewed로 표기).
+v1과 동일 골자. 대상: 집 Qwen 7B(필수), 3B(참고). 회사 모델(33B/27B)은 훨씬 크므로
+집 floor 통과 = 회사 여유. `tests/test_capability_floor.py` (LLM 없으면 SKIP),
+시나리오 10종 × 3회 성공률을 `results/reports/capability_floor.md`로. 실패 유형별 대응은
+파서 규칙(실측 기반만)/오류 메시지 개선/프롬프트 다이어트(2.3KB 초과 금지) 순.
+**DoD**: 7B 성공률 수치 보고(목표 ≥90%, 미달 시 수치 그대로) + 기존 테스트 무손상.
 
 ---
 
-### 12단계 — `work` 오케스트레이터 + 승인 게이트 + audit log
+### P12 — 브라우저 CDP 어댑터 (첫 실행형)
 
-**목적**: "한 명령이면 끝"을 만든다. 음성(13단계)이 최종적으로 꽂히는 자리.
+v1과 동일. `adapters/browser_cdp.py`: stdlib WebSocket 클라이언트(RFC6455, ~200줄) +
+`http://127.0.0.1:9222/json`. action: open_url / get_title / extract_text / screenshot.
+`launch/chrome-debug.bat`은 **반드시 별도 user-data-dir**. 실측 3 action 성공 후에만
+available=True. 사내 시스템 로그인은 company validation pending 유지.
+`tests/test_browser_adapter.py` (9222 없으면 SKIP).
 
-**선행 조건**: 9단계. (어댑터는 있으면 실행, 없으면 pending 안내 — 의존 아님)
+---
+
+### P13 — `work` 오케스트레이터 + 승인 게이트 + audit log
+
+**목적**: "한 명령이면 끝". 비서 모듈(P14)과 음성(P20)이 꽂히는 자리.
 
 **작업 항목**:
-1. `agentops.py`에 `work` subcommand:
+1. `agentops.py work`:
    ```bat
    py -3.11 agent_ops\agentops.py work --task "..." [--input 경로]... [--mode mock|real] [--execute] [--yes]
    ```
-   흐름: ingest → plan(+출력) → **승인 게이트** → agent loop(파일 작업이 필요한 경우) →
-   artifact 생성+품질 검증 → (--execute && adapter available 시) 어댑터 실행 →
-   최종 보고 `results/reports/work_<run_id>.md` 생성.
-2. 승인 게이트 (`agent_ops/approval.py`):
-   - 위험 분류: `safe`(파일 생성/읽기, workspace 내) / `caution`(기존 파일 수정) /
-     `dangerous`(workspace 밖 쓰기, 앱 실행, 삭제).
-   - dangerous는 콘솔 y/n 확인 (구체적으로 "무엇을 하려는지" 목록 제시). `--yes`로 일괄 승인
-     가능하되 audit에 "auto-approved" 기록.
+   흐름: ingest → plan 출력 → **승인 게이트** → (필요 시) agent loop → artifact+품질 →
+   (--execute && adapter available) 어댑터 실행 → 최종 보고 `results/reports/work_<run_id>.md`.
+2. `agent_ops/approval.py`: 위험 분류 `safe`(workspace 내 생성/읽기) / `caution`(기존 파일
+   수정) / `dangerous`(workspace 밖 쓰기, 앱 실행, 삭제, 일정 변경). dangerous는 실행 전
+   "무엇을 할지" 목록 제시 후 y/n. `--yes`는 audit에 auto-approved 기록.
 3. `agent_ops/audit.py`: append-only `%USERPROFILE%\OpenCodeLIG_USERDATA\audit\audit.jsonl`
-   — {ts, run_id, task 앞 80자, tool/adapter, target, verdict}. **secret/파일 내용은 기록 금지**.
-   tool_dispatch와 adapter 실행 경로 양쪽에 훅.
-4. 최종 보고 md: 요청/입력 요약/계획/수행 내역/산출물 목록+품질 결과/pending/다음 명령.
-5. `tests/test_work_command.py`: mock 모드 E2E (승인 게이트는 --yes 경로 + 거부 경로 모두).
+   {ts, run_id, task 80자, tool/adapter, target, verdict}. **secret/파일 내용 기록 금지.**
+   tool_dispatch와 adapter 실행 양쪽에 훅. audit 실패는 경고만 (작업 중단 금지).
+4. `tests/test_work_command.py`: mock E2E + 승인 거부 경로 + audit 기록 확인.
+
+**DoD**: work 한 줄로 입력→보고서→최종 보고 md / dangerous 무승인 실행 불가 /
+audit 무결 / 기존 테스트 무손상.
+
+**금지**: --yes를 기본값으로 켜기. 승인 게이트 우회 경로 신설.
+
+---
+
+### P14 — 비서/일정 관리 모듈 ★사용자 3대 업무 중 2개★
+
+**목적**: 앱 없이 완성 가능한 비서 기능을 먼저 완성한다 (가장 빨리 가치가 나오는 단계).
+
+**작업 항목**:
+1. **일정 저장소** `agent_ops/schedule_store.py` (stdlib):
+   - 데이터: `%USERPROFILE%\OpenCodeLIG_USERDATA\schedule\schedule.json`
+     (원자적 쓰기 — 기존 atomic_write_json 재사용, 백업 1세대 유지)
+   - 항목: {id, title, due(YYYY-MM-DD[ HH:MM]), category(회의/보고/시험/개인),
+     status(open/done), source(manual/mail/meeting), created}
+   - 자연어 날짜 최소 지원: "오늘/내일/금요일/N일 후/7월 15일" → 결정적 파서
+     (LLM 아님 — 오차 금지 영역). 못 알아들으면 되묻는 메시지 반환.
+2. **CLI**: `agentops.py schedule add|list|today|week|done|remove` + `work`에서
+   capability `schedule_management`로 라우팅 (CAPABILITIES에 등록, keywords: 일정/약속/
+   마감/리마인드/캘린더/스케줄/등록/미루/연기 등).
+3. **아침 브리핑** `agentops.py briefing` + `launch/briefing.bat`:
+   출력(md+콘솔): 오늘/이번 주 일정, 마감 임박(3일 내), 미완료 액션아이템(기존
+   액션아이템.md들 스캔), (입력 주어지면) 메일 분류 요약. → `results/reports/briefing_<날짜>.md`
+4. **리마인더**: `schtasks /Create`로 매일 아침 briefing.bat 등록/해제하는
+   `launch/install-reminder.bat` (등록 전 사용자 확인 문구 출력).
+5. **회의록 capability** `meeting_minutes`: 회의 메모/텍스트 입력 → 회의록.md
+   (참석/논의/결정/액션아이템 표) + 액션아이템은 schedule에 등록 제안(승인 게이트 경유).
+   generator는 기존 document 구조 재사용 + input_ingest 근거 반영.
+6. **주간보고 초안** `weekly_report`: 지난 7일 audit log + 완료 일정 + 생성 산출물 목록으로
+   "이번 주 한 일" 초안 md 생성 (비서 기능의 핵심 부가가치).
+7. `tests/test_secretary.py`: 일정 CRUD/날짜 파서/브리핑 생성/회의록 산출물 품질
+   (quality validator 통과) — 전부 mock/로컬로 검증 가능.
 
 **DoD**:
-- [ ] `work --task "시험 결과 파일 읽고 보고서 만들어줘" --input ... --mode mock` 한 줄로
-      보고서+품질검증+최종 보고 md까지 생성
-- [ ] dangerous 작업이 승인 없이 실행되지 않음 (거부 테스트 통과)
-- [ ] audit.jsonl에 전 과정 기록, secret 없음
+- [ ] `schedule add "금요일 14시 진동시험 보고서 마감"` → today/week 조회 정합
+- [ ] briefing.bat 1회 실행으로 브리핑 md 생성 (일정+액션아이템 반영, input-grounded 규칙 준수)
+- [ ] 회의 메모 → 회의록+일정 등록 제안 E2E (mock)
+- [ ] 날짜 파서가 모호한 입력에 추측 대신 되묻기
 - [ ] 기존 테스트 무손상
 
-**금지**: 승인 게이트를 우회하는 기본값(--yes 기본 on) 금지. audit 실패가 작업을 죽이면 안 됨
-(try/except, 단 실패 사실은 stderr 경고).
+**금지**: 날짜 해석을 LLM에 맡기기 (결정적 파서만). 일정 삭제/변경을 승인 게이트 없이
+수행. Outlook 연동을 이 단계에서 시도 (P15의 COM 검증 후).
 
 ---
 
-### 13단계 — 음성 입력 (구두 지시) — 집에서 검증 가능
+### P15 — Office 2016 어댑터 + 호환 규칙
 
-**목적**: "구두로 지시"를 실현한다. 완전 오프라인 STT.
-
-**기술 선택 (근거)**:
-- STT: **whisper.cpp** (exe + GGML 모델 파일만 반입, pip 의존성 0) — faster-whisper보다
-  오프라인 반입이 압도적으로 단순. 한국어는 `ggml-small`(465MB)부터 시작, 부족하면 medium.
-- 녹음: whisper.cpp 공식 배포의 `whisper-cli`는 wav 입력이므로, 녹음은
-  **ffmpeg.exe 단일 실행파일** (`ffmpeg -f dshow -i audio=...`) 또는 whisper.cpp의
-  `whisper-stream.exe`(SDL2 동봉 빌드, 마이크 직접) 중 실측 후 선택.
-- 피드백(TTS, 옵션): Windows 내장 SAPI (`PowerShell Add-Type System.Speech`) — 설치 0.
-  한국어 보이스(Heami) 존재 여부는 회사 PC에서 확인.
+**목적**: Excel부터 실제 실행. 집 Excel(최신)로 COM 스모크 → 회사 2016에서 최종 검증.
 
 **작업 항목**:
-1. `release/dependencies.json`에 whisper.cpp exe/모델/ffmpeg 항목 추가 (URL+SHA256, 14단계에서 prefetch).
-2. `agent_ops/voice_input.py` (stdlib): 녹음 subprocess → whisper-cli subprocess → 텍스트
-   후처리(앞뒤 공백/타임스탬프 제거) → 반환. 실패 시 "텍스트로 입력하세요" 안내.
-3. `launch/voice.bat`: 누르면 N초 녹음(기본 8초, 인자로 조정) → STT → 인식 문장 표시 →
-   `y` 확인 후 `work` 명령으로 전달. **인식 오류로 잘못된 작업이 실행되는 것을 확인 단계로 방지.**
-4. `tests/test_voice_input.py`: exe/모델 없으면 SKIP. 있으면 동봉 샘플 wav(직접 녹음해 커밋,
-   1~2초 "보고서 만들어줘")로 STT 텍스트에 "보고서" 포함 확인.
-5. doctor에 `voice` 섹션: whisper exe/모델/ffmpeg 존재 여부, 샘플 STT 스모크 결과.
+1. **§6.2 호환 규칙을 코드로**: `artifact_quality.py`에 vba_macro 규칙 추가 —
+   2016 부재 함수(XLOOKUP/XMATCH/FILTER/SORT/UNIQUE/SEQUENCE/LET/LAMBDA/TEXTJOIN/CONCAT/
+   IFS/SWITCH/MAXIFS/MINIFS/TEXTSPLIT 등) 등장 시 FAIL. 매크로 헤더에 "대상: Office 2016" 명시.
+2. `adapters/excel_com.py` `execute(action, ...)`:
+   - 항상 `사본_<원본명>.xlsx`로 복사 후 작업 (원본 불가침).
+   - 1차 action: open/read_range/write_range/save_as/run_macro_file(가능 시)/close.
+     VBProject 접근은 Trust Center 의존 → 차단 시 "Alt+F11 수동 import 안내"로 자동 강등
+     (실패 아님, 안내가 결과물).
+   - finally에서 Quit + 프로세스 잔류 확인.
+3. `adapters/outlook_com.py` (비서 연동): 일정 읽기(오늘/주간)→schedule_store 동기화,
+   메일 제목/발신 읽기→기존 mail_report 파이프라인에 입력. **발송은 dangerous 분류**
+   (승인 필수). 집에 Outlook 없으면 static reviewed로 두고 회사 검증.
+4. Word/PowerPoint COM은 문서/PPT 변환 action만 (md→docx 텍스트 유입, slide_spec→pptx 골격).
+5. `tests/test_office_adapters.py`: 앱 없으면 SKIP. 집 Excel로 사본 왕복(read/write/save) 검증.
 
-**DoD**:
-- [ ] 집 PC에서 마이크 → "시험 결과 정리해서 보고서 만들어줘" → work 실행까지 E2E 1회 성공
-- [ ] 한국어 10문장 스모크 결과 기록 (오인식은 오인식대로 기록)
-- [ ] 음성 없이도 모든 기능이 동작 (음성은 부가 계층임을 코드 구조로 보장)
+**DoD**: 집 Excel COM 사본 왕복 성공(locally validated) / 2016 금지 함수 규칙이 벤치에
+포함 / available=True는 **회사 2016 실측 후에만** (집 성공은 "app validation pending
+(2016 확인 필요)" 유지) / 기존 테스트 무손상.
 
-**금지**: 인식 텍스트를 확인 없이 바로 실행하는 기본값 금지. 녹음 파일을 repo에 커밋하지
-마라 (테스트용 1개 샘플 wav 제외, 1MB 미만).
+**금지**: 집 최신 Excel 성공을 2016 검증이라 표기. 원본 파일 직접 조작. 메일 자동 발송
+기본 활성화.
 
 ---
 
-### 14단계 — 오프라인 반입 패키지 완성
+### P16 — 엔지니어링 SW 어댑터 (기계연구원 코어)
 
-**목적**: 인터넷 0회로 회사 PC에 전체 시스템을 설치 가능하게 한다.
+**목적**: HWP 2019 / SolidWorks 2022 / MATLAB 2024a / AutoCAD 2019 / ANSYS 2024R1.
+생성(generator)은 집에서, 실행(adapter)은 회사에서. 한 세션에 1~2개씩.
 
-**선행 조건**: 9/11a/13단계에서 무엇이 실제로 필요한지 확정된 후. (미리 하면 두 번 일함)
+**작업 항목** (공통 패턴: 생성기 강화 → adapter execute → 앱 실측 → available):
+1. **MATLAB** (가장 쉬움 — CLI): capability `matlab_automation` 등록, `.m` 생성기
+   (시험 데이터 후처리 템플릿: 로드/필터/플롯/저장, 입력 근거 반영),
+   `adapters/matlab_batch.py`: `matlab -batch "run('작업.m')"` + exit code/로그 수집.
+2. **AutoCAD 2019**: `.scr` 생성기(도면 일괄 인쇄/레이어 정리 등 템플릿) +
+   `adapters/autocad_batch.py`: `accoreconsole.exe /i 도면.dwg /s 스크립트.scr` (사본 정책).
+3. **ANSYS 2024R1**: capability `simulation_automation` — Fluent journal 생성기
+   (읽기→세팅 확인→계산→후처리 export 골격) + `adapters/fluent_batch.py`:
+   `fluent 3ddp -g -i job.jou` (배치 실행 가능성이 높음). Mechanical ACT/SpaceClaim
+   스크립트는 **생성기만** (실행은 GUI 의존 → app validation pending 명시).
+4. **HWP 2019**: `adapters/hwp_com.py` — 문서.md → hwp 변환(텍스트 유입+제목 스타일).
+5. **SolidWorks 2022 한글판**: `adapters/solidworks_com.py` — RunMacro(사본 문서),
+   기존 VBA scaffold(ActiveDoc guard/GetType)와 정합. 자동 저장 금지.
+6. 각 어댑터 테스트: 앱 없으면 SKIP. 실측 로그는 `results/adapter_validation/`.
+
+**DoD** (어댑터별): 사본 기반 실측 ≥1회 → available=True + 검증 날짜 기록.
+실측 전엔 static reviewed / app validation pending. 기존 테스트 무손상.
+
+**금지**: 해석(ANSYS) 결과의 공학적 판단을 자동화라 주장 (도구는 실행/정리만, 판단은
+사용자). 원본 dwg/sldprt/분석 파일 직접 수정.
+
+---
+
+### P17 — 오프라인 반입 패키지 (용량 무제한 확정)
 
 **작업 항목**:
-1. `release/dependencies.json`의 모든 PENDING_PREFETCH 해소: 집 PC에서 실제 다운로드 →
-   SHA256 계산 → manifest에 기록. 대상(확정분): pywin32, openpyxl, python-pptx,
-   whisper.cpp(exe+ggml-small ko 검증본), ffmpeg, (선택) chromedriver.
-2. LLM 모델 반입 계획 확정 — **사용자 확인 필요 항목** (§6 참조): 회사 반입 정책상
-   GGUF 파일(수 GB) 반입이 가능한가? 가능하면 Qwen GGUF + llama.cpp server exe 포함,
-   불가면 gateway-only로 확정하고 로컬 서빙 항목은 계획에서 제거.
-3. `release/build_bundle.py` (stdlib): repo + wheels + exe + 모델 → 단일 zip + 매니페스트
-   (전 파일 SHA256). GitHub Actions "Build offline package"와 정합 유지.
-4. `release/setup.bat`: 회사 PC에서 zip 풀고 실행 → py 확인 → pip 오프라인 설치
-   (`pip install --no-index --find-links wheels\ ...`) → doctor 실행 → 결과 요약.
-5. `docs/BRING_IN_CHECKLIST.md`: 반입 매체 준비물 / 순서 / 설치 후 확인 명령 목록.
+1. `release/dependencies.json` PENDING_PREFETCH 전량 해소 (집에서 다운로드+SHA256):
+   pywin32(Excel/HWP/SW/Outlook COM), openpyxl(xlsx ingest), python-pptx,
+   **Qwen2.5 7B/14B GGUF + llama.cpp server exe** (사내 PC 16GB VRAM 백업 서빙용 — gateway
+   장애 대비), whisper.cpp exe + ggml-medium(ko) (P20 대비 선반입), ffmpeg.
+2. **xlsx ingest 확장** (openpyxl 확보 시점이 여기): `input_ingest.py`에 .xlsx 지원 —
+   시트/행열/헤더/이상 행 추출을 CSV와 동일 규칙으로. openpyxl 없으면 기존대로
+   unsupported (동작 저하 없음 — optional import 패턴).
+3. `release/build_bundle.py` + `release/setup.bat` (pip --no-index --find-links) + 설치 후
+   doctor 자동 실행. `docs/BRING_IN_CHECKLIST.md`.
+4. **리허설**: 집 PC 네트워크 어댑터 비활성 → setup.bat 전체 → doctor 전 섹션 정상.
 
-**DoD**:
-- [ ] 집 PC에서 "인터넷 차단 상태(네트워크 어댑터 비활성)"로 setup.bat 전체 리허설 성공
-- [ ] 매니페스트의 모든 항목에 SHA256 존재, PENDING_PREFETCH 0건
-- [ ] doctor가 설치 직후 전 섹션 정상 보고
-
-**금지**: 검증 안 된 URL을 manifest에 넣지 마라. 모델 파일을 git에 커밋하지 마라
-(zip 번들에만 포함, .gitignore 확인).
+**DoD**: PENDING_PREFETCH 0건 / 오프라인 리허설 성공 / xlsx ingest 벤치 추가(있으면 파싱,
+없으면 unsupported 정직 표기 양쪽 테스트) / 모델 파일 git 미커밋(.gitignore 확인).
 
 ---
 
-### 15단계 — 보안/감사/운영 준비
+### P18 — 운영/보안 마무리
 
-**작업 항목**:
-1. **git 히스토리 purge** (사용자 승인 필수 — 승인 없이 절대 실행 금지):
-   ```bat
-   pip download git-filter-repo (집에서) →
-   git filter-repo --replace-text replacements.txt   (내부 hostname → placeholder)
-   git push --force origin rebuild/fable5-open-architecture
-   ```
-   실행 전 로컬 전체 백업 clone 필수. PR/이슈 텍스트도 점검.
-2. secret 스캔 pre-commit: `tools\` 말고 `workspace-template/scripts/precommit_scan.py`
-   (stdlib, 패턴: api_key/token/password/내부 도메인 패턴) + 설치 안내.
-3. 운영 runbook `docs/RUNBOOK.md`: 증상별 대응 (LLM 무응답/도구 실패 반복/인코딩 깨짐/
-   어댑터 행) — 전부 기존 diagnostics 파일 경로와 연결.
-4. audit log 순환(크기 제한) 정책.
-
-**DoD**: 히스토리에서 내부 hostname 검색 0건 (`git log -S` 확인) / 스캔 훅 동작 / runbook 존재.
+secret 스캔 pre-commit(`workspace-template/scripts/precommit_scan.py`, stdlib),
+`docs/RUNBOOK.md`(증상→진단 파일→대응), audit log 크기 순환, lig-api.env 백업 안내
+(USERDATA는 repo 밖임을 명시). **DoD**: 훅 동작 / runbook 존재 / doctor에 운영 섹션.
 
 ---
 
-### 16단계 — 회사 PC 파일럿 (최종 수렴)
+### P19 — 회사 파일럿 (최종 수렴)
 
-**첫 출근일 체크리스트 (순서대로)**:
-1. 반입 zip → setup.bat → doctor 전 섹션 확인.
-2. `lig-api.env` 작성 (gateway URL/키 — 파일은 repo 밖 USERDATA, 절대 커밋 금지).
-3. gateway 스모크: `run-agent.bat --mode real --task "간단한 파일 요약"` — EXAONE/Qwen 각각.
-4. tool-call 형식 실측 → 필요 시 파서 보강 (10단계 절차 재사용).
-5. 대표 업무 10종 실행 (아래 표), 각각 성공/실패/소요시간 기록:
+**1일차 순서**: 반입 zip → setup.bat → doctor → lig-api.env 작성(커밋 금지) →
+gateway 스모크(lig-coding/chat/fallback 각 1회) → tool-call 형식 실측(필요 시 파서 보강).
 
-| # | 업무 | 사용 경로 |
-|---|------|----------|
-| 1 | 시험 CSV → 이상값 보고서+PPT | work --input |
-| 2 | 메일 목록 분류+액션아이템 | work --input |
-| 3 | 로그 원인 분석 문서 | work --input |
-| 4 | Excel 데이터 정리 (COM 실행) | work --execute |
-| 5 | 기존 매크로 검토 문서 | work --input |
-| 6 | 사내 페이지 텍스트 추출 | browser adapter |
-| 7 | 회의자료 초안 (문서+PPT) | work |
-| 8 | HWP 변환 | hwp adapter |
-| 9 | SolidWorks 매크로 실행 | sw adapter (사본) |
-| 10 | 음성 지시로 1~3 중 하나 재실행 | voice.bat |
+**파일럿 업무 12종** (비서/일정/매크로 = 사용자 3대 업무 반영):
 
-6. 실패 항목 → `docs/PILOT_BACKLOG.md`에 원인/재현/우선순위 기록 → 다음 세션들의 입력.
+| # | 업무 | 경로 | 구분 |
+|---|------|------|------|
+| 1 | 아침 브리핑 (일정+액션아이템) | briefing.bat | 비서 |
+| 2 | 일정 등록/조회/완료 (자연어) | work→schedule | 일정 |
+| 3 | 시험 xlsx → 이상값 보고서+PPT | work --input | 비서 |
+| 4 | 메일 분류+오늘 액션아이템 | work --input (+Outlook COM) | 비서 |
+| 5 | 회의 메모 → 회의록+일정 등록 | work --input | 비서 |
+| 6 | 주간보고 초안 자동 생성 | weekly_report | 비서 |
+| 7 | Excel 2016 데이터 정리 (COM 실행) | work --execute | 매크로 |
+| 8 | 보고서 → HWP 2019 변환 | hwp adapter | 매크로 |
+| 9 | SolidWorks 2022 매크로 실행 (사본) | sw adapter | 매크로 |
+| 10 | MATLAB 배치 후처리 실행 | matlab adapter | 매크로 |
+| 11 | AutoCAD .scr 일괄 처리 / Fluent journal 실행 중 1 | 배치 adapter | 매크로 |
+| 12 | 사내 웹페이지 텍스트 추출→요약 | browser CDP | 비서 |
 
-**DoD**: 10종 결과표 작성 (성공률 조작 금지), backlog 생성, company validation pending
-항목들의 실제 해소 여부를 상태 어휘로 갱신.
+각 항목: 성공/실패/소요시간/개입 횟수 기록 → `docs/PILOT_BACKLOG.md`. **성공률 조작 금지.**
+company validation pending 항목들의 실제 해소 여부를 상태 어휘로 일괄 갱신.
 
 ---
 
-## 5. 하위 모델 세션 실행 프로토콜 (실수 방지 규약 — 전 세션 필수)
+### P20 — 음성 입력 (예약 — 파일럿 후, 인터페이스는 P13에서 확보)
 
-### 5.1 불변 규칙 (위반 = 세션 실패)
+P13의 work가 `--task-file` 을 이미 받게 설계하면 음성은 "녹음→whisper.cpp STT→task-file"
+파이프만 추가하면 된다. 반입물(P17)에 whisper exe/모델 선포함. 구현 시 v1 계획의 13단계
+내용(확인 게이트 필수, 인식 텍스트 무확인 실행 금지)을 그대로 따른다.
 
-1. **기존 테스트가 깨지면**: 원인 파악 → 못 고치면 변경 revert → 사실대로 보고. 테스트를
-   약화시켜 통과시키는 것 금지.
-2. **성공 어휘 통제**: §0의 상태 어휘만 사용. mock 검증을 real이라, scaffold를 완성이라,
-   로컬을 회사 검증이라 말하지 않는다. 전체 제품 성공 선언 금지.
-3. **secret/내부 hostname**: 코드/커밋/보고 어디에도 출력 금지. lig-api.env 실값 커밋 금지.
-4. **repo 루트의 사용자 untracked 5개** (.gitignore, docs/home-lab-status.md, logs/, tools/,
-   validation/) 건드리지 않기. 커밋은 항상 **개별 파일 git add** (git add -A 금지).
-5. **파괴적 git 작업** (force push, filter-repo, reset --hard) 은 사용자 승인 텍스트가 이번
-   세션에 명시돼 있을 때만.
-6. **새 외부 의존성**: dependencies.json에 먼저 기록 + 사유. 코어(agent_ops 비어댑터부)는
-   stdlib-only 유지.
-7. **테스트 작성 규칙**: pytest 금지, 기존 check(label, cond) 스타일. 외부 자원(LLM/앱/포트)
-   필요 테스트는 없을 때 SKIP을 exit 0으로 명시 출력.
-8. **막혔을 때**: 같은 접근 2회 실패 시 접근을 바꾼다. 3회 실패 시 그 항목을 pending으로
-   보고하고 다음 항목 진행 (세션 전체를 태우지 않는다).
+---
 
-### 5.2 세션 프롬프트 템플릿 (복붙용)
+## 5. 신규 capability 등록 목록 (P14~P16에서 추가 — 이 외 임의 추가 금지)
 
+| capability id | 산출물 kind | 단계 |
+|---------------|------------|------|
+| `schedule_management` | schedule 조작(+확인 md) | P14 |
+| `meeting_minutes` | meeting_minutes(문서 변형) | P14 |
+| `weekly_report` | document 재사용 | P14 |
+| `matlab_automation` | matlab_script(.m) | P16 |
+| `simulation_automation` | fluent_journal(.jou)/ACT script | P16 |
+| (기존 office_cad_automation) | AutoCAD .scr 추가 | P16 |
+
+각 추가 시: keywords/pending/status 정직 기입 + ARTIFACT_KIND_INFO + generator +
+quality 규칙 + 벤치 시나리오를 **한 세트로** 커밋 (부분 커밋 금지).
+
+---
+
+## 6. 호환성 규칙 (하위 모델 필수 준수)
+
+### 6.1 Windows/한글 환경
+- 모든 신규 BAT: UTF-8 no BOM + CRLF, 첫 줄부에 `chcp 65001` + `set PYTHONUTF8=1`
+  (한글 경로 참조는 chcp 이후 라인). 기존 launch/*.bat 패턴 복제.
+- 파일 경로는 pathlib, 인코딩은 encoding_ops 정책(BOM/CRLF 보존) 재사용.
+
+### 6.2 Office 2016 호환 (사용자 확정: 전 Office 2016 기준)
+- 생성 VBA/수식에서 **금지**(2016 부재): XLOOKUP, XMATCH, FILTER, SORT, SORTBY, UNIQUE,
+  SEQUENCE, RANDARRAY, LET, LAMBDA, TEXTSPLIT, TEXTBEFORE/AFTER, VSTACK/HSTACK,
+  TEXTJOIN, CONCAT, IFS, SWITCH, MAXIFS, MINIFS. 대체: VLOOKUP/INDEX+MATCH/&연결/
+  중첩 IF/배열수식.
+- COM 코드는 Office 2016 개체 모델 범위만. 집(최신 Excel) 성공은 "문법/COM 스모크"일 뿐,
+  2016 실측 전까지 app validation pending 유지.
+
+### 6.3 앱 자동화 공통 안전 수칙
+- 원본 불가침: 항상 사본에서 실행. 자동 저장 금지(사용자 확인 후).
+- 실패 시 앱 프로세스/임시 파일 잔류 없게 finally 정리.
+- available=True는 "해당 버전 실제 앱 실측 성공 + 로그 증빙" 후에만.
+
+---
+
+## 7. 하위 모델 세션 실행 프로토콜
+
+### 7.1 불변 규칙 (위반 = 세션 실패)
+1. 기존 테스트가 깨지면: 원인 파악 → 못 고치면 revert → 사실대로 보고. 테스트 약화 금지.
+2. 상태 어휘(§0)만 사용. mock→real, scaffold→완성, 집 검증→회사 검증으로 부풀리기 금지.
+   전체 제품 성공 선언 금지.
+3. secret/내부 hostname: 코드·커밋·보고 어디에도 금지. lig-api.env 실값 커밋 금지.
+4. repo 루트 사용자 untracked 5개(.gitignore, docs/home-lab-status.md, logs/, tools/,
+   validation/) 불가침. 커밋은 개별 git add (git add -A 금지).
+5. 파괴적 git 작업은 이 문서에 승인이 기록된 것(P10)만, 그 절차 그대로.
+6. 새 외부 의존성: dependencies.json 선기록. 코어는 stdlib-only.
+7. 테스트: pytest 금지, check(label, cond) 스타일. 외부 자원 필요 테스트는 SKIP=exit 0 명시.
+8. 같은 접근 2회 실패 → 접근 변경. 3회 실패 → pending 보고 후 다음 항목 (세션 소진 금지).
+9. capability/어댑터 임의 추가 금지 — §5 목록만.
+
+### 7.2 세션 프롬프트 템플릿 (복붙용)
 ```text
-이전 결과를 이어서 OpenCodeLIG 작업을 계속해라. 이번 세션은 MASTER_PLAN.md의 <N>단계다.
-1) workspace-template/docs/MASTER_PLAN.md 의 <N>단계 섹션을 읽어라.
-2) 공통 시작 의식을 수행해라 (git 상태 + 테스트 스모크).
-3) [작업 항목]을 순서대로 구현해라. 판단이 필요하면 "왜 이 순서인가"와 5.1 불변 규칙을 따르라.
-4) [검증 명령]을 실행하고, [DoD] 각 항목을 체크해라. 못 채운 항목은 pending으로 남겨라.
+이전 결과를 이어서 OpenCodeLIG 작업을 계속해라. 이번 세션은 MASTER_PLAN.md의 P<N>단계다.
+1) workspace-template/docs/MASTER_PLAN.md 의 P<N> 섹션과 §6, §7을 읽어라.
+2) 공통 시작 의식을 수행해라.
+3) [작업 항목]을 순서대로 구현하고, [검증 명령]을 실행해라.
+4) [DoD]를 체크하고, 못 채운 항목은 pending으로 남겨라 (조작 금지).
 5) 9개 기존 테스트 + 신규 테스트 전부 통과 시에만 commit/push 해라.
-6) 최종 보고는 기존 형식(Outcome/Files changed/.../Next exact command)으로, 상태 어휘를 지켜라.
+6) §7.3 형식으로 보고해라.
 ```
 
-### 5.3 보고 형식 (전 세션 동일)
-
+### 7.3 보고 형식
 ```text
-Outcome: / Files changed: / (단계별 핵심 섹션): / Local validation: /
+Outcome: / Files changed: / (단계 핵심 섹션): / Local validation: /
 App/company validation pending: / Dependency impact: / Maintainability notes: /
 Security cleanup status: / New HEAD commit: / Next exact command:
 ```
 
 ---
 
-## 6. 사용자 확인 필요 항목 (진행 중 결정 필요 — 세션이 임의 결정 금지)
+## 8. 리스크 레지스터
 
-| # | 질문 | 영향 단계 | 미확인 시 기본값 |
-|---|------|----------|----------------|
-| 1 | 회사 PC 사양 (RAM/GPU/디스크 여유) | 9, 14 | gateway-only 가정 |
-| 2 | 사내 gateway 스펙 (엔드포인트 형식, 모델명, 인증 방식) | 9, 16 | OpenAI 호환 가정, lig-api.env로 흡수 |
-| 3 | 반입 매체 정책 (USB 허용? 용량? 수 GB 모델 파일 가능?) | 14 | wheel/exe만(수백 MB) 가정 |
-| 4 | 집 PC에 Excel 있는지 | 11b | 없다고 가정 (회사에서 검증) |
-| 5 | git 히스토리 purge 승인 (force push 동반) | 15 | 보류 (pending 유지) |
-| 6 | 회사 PC 마이크 존재/사용 정책 | 13 | 있다고 가정, 없으면 텍스트-only |
-| 7 | SolidWorks/HWP 버전 | 11c,d | COM late-binding으로 흡수 |
-
----
-
-## 7. 리스크 레지스터 (대비책 내장)
-
-| 리스크 | 가능성 | 대비 (계획 반영 위치) |
-|--------|--------|----------------------|
-| gateway 형식이 OpenAI 비호환 | 중 | lig_runtime payload 분기 + 16단계 1일차 스모크로 조기 발견 |
-| weak model이 tool-call 자체를 못 함 | 중 | 10단계 floor 벤치 + 파서 복구 + 최악 시 "명령 선택형" UI로 강등 (별도 백로그) |
-| 모델 파일 반입 불가 | 중 | gateway-only 경로가 독립 동작 (9단계 프로필 분리가 보험) |
-| VBProject COM 보안 차단 | 높음 | 11b 이중 경로 (COM 데이터 작업 + 수동 import 안내) |
-| STT 한국어 인식률 부족 | 중 | 13단계 확인 게이트 + medium 모델 업그레이드 여지 |
-| Chrome 버전 이슈 | 낮음 | CDP는 드라이버 불필요 (11a 선택 근거) |
-| 인코딩(cp949) 사고 재발 | 낮음 | 기존 BAT 규약(PYTHONUTF8=1) 전 신규 BAT에 복제 |
+| 리스크 | 가능성 | 대비 (반영 위치) |
+|--------|--------|-----------------|
+| gateway 스펙 변경 | 중 | env 완전 오버라이드(P9) — 코드 수정 없이 흡수 |
+| EXAONE tool-call 형식 특이 | 중 | P19 1일차 실측+파서 보강 절차, Qwen3.6 fallback 자동 |
+| gateway 장애/점검 | 중 | 사내 PC 16GB VRAM 로컬 GGUF 백업 서빙(P17 반입) |
+| VBProject COM 차단 | 높음 | P15 이중 경로(COM 데이터 작업 + 수동 import 안내 강등) |
+| 2016 비호환 수식 생성 | 중 | §6.2 금지 목록을 quality 규칙으로 강제(P15) |
+| ANSYS/CAD 배치 제약 | 중 | 생성기 우선, 실행은 pending 정직 표기 (P16) |
+| 집(Win10/최신Excel)↔회사(Win11/2016) 차이 | 중 | "집 성공=스모크" 원칙, 회사 실측 전 pending 유지 |
+| 날짜/일정 오해석 | 중 | 결정적 파서 + 모호 시 되묻기 (P14, LLM 배제) |
+| weak tool-call 불안정 | 중 | P11 floor + 파서 복구 + fallback 라우트 |
 
 ---
 
-## 8. 다음 세션이 시작해야 할 정확한 지점
+## 9. 다음 세션 시작 지점
 
-> **9단계.** 시작 명령:
+> **P9.** 시작:
 > ```bat
 > cd /d "%USERPROFILE%\OpenCodeLIG_HOME_LAB\repo\workspace-template"
 > py -3.11 tests\test_capability_bench.py
 > ```
-> 이후 §4의 9단계 [작업 항목] 1번(lig_providers 프로필)부터.
+> 이후 §4 P9 [작업 항목] 1번(lig_providers env 오버라이드)부터.
+> P10(purge)은 P9 직후 전용 세션으로 즉시 실행 (승인 확보됨).
