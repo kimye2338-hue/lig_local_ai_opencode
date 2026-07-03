@@ -21,6 +21,7 @@
 | 앱 COM 실동작 | **Excel 실왕복 + VBProject 접근**(매크로 자동주입 실동작), Outlook/HWP/SolidWorks 접속, MATLAB `-batch` 실실행, Chrome CDP 실기동 |
 | OpenCode | `--version` cold/warm 시간(느림 판정), 구버전 proxy(8765)·lig_diag 잔재, 신버전 표식, 강화 env 적용 여부 |
 | 환경 | OS/RAM/디스크/pywin32, 앱 설치 경로, Office 매크로 보안 정책 |
+| **업무 시나리오 실동작** | ① LLM native tool 왕복(파일 읽고 답변) ② Excel 매크로 주입+실행 ③ MATLAB 계산 ④ HWP 문서 생성/저장 ⑤ Outlook read ⑥ AutoCAD .scr 실행 — 각 업무를 **실제 1회 끝까지** 검증 (접속 확인이 아님) |
 
 ## 안전
 

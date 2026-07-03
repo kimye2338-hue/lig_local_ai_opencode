@@ -37,6 +37,12 @@ TIMEOUT_COM = 40
 TIMEOUT_MATLAB = 150
 TIMEOUT_CHROME = 40
 TIMEOUT_OPENCODE = 100
+TIMEOUT_SCN_AGENT = 90
+TIMEOUT_SCN_EXCEL = 60
+TIMEOUT_SCN_MATLAB = 150
+TIMEOUT_SCN_HWP = 60
+TIMEOUT_SCN_OUTLOOK = 40
+TIMEOUT_SCN_AUTOCAD = 120
 
 # ---------------------------------------------------------------- 마스킹 ---
 
@@ -467,6 +473,286 @@ def probe_opencode_startup() -> dict:
     return info
 
 
+# =================================================================
+#  업무 시나리오 실동작 (접속 확인이 아니라 "실제 1회 끝까지")
+# =================================================================
+
+def scn_gateway_agent() -> dict:
+    """native function calling으로 파일 읽기 tool 왕복 전체 — real work의 핵심 실증.
+
+    LLM에게 파일을 읽으라고 시키고 → tool_calls를 받아 → 실제로 파일을 읽어
+    되돌리고 → 최종 답변이 파일 내용을 반영하는지까지 end-to-end로 확인한다.
+    (P11-A native tools 경로와 P13-02 work real 경로가 실제로 돈다는 증거)
+    """
+    import urllib.error
+    import urllib.request
+    env = _load_env()
+    root = env.get("LIG_GATEWAY_BASE_URL", "").rstrip("/")
+    key = env.get("LIG_API_KEY", "")
+    if not root or "REPLACE" in root:
+        return {"ok": False, "status": "lig-api.env 미설정"}
+    base = root + env.get("LIG_ROUTE_CODING", "/gateway/EXAONE-4.5-33B-vibe_coding_think_off/v1") + "/chat/completions"
+    tmp = Path(os.environ.get("TEMP", ".")) / f"occ_agent_{os.getpid()}.txt"
+    tmp.write_text("시험 항목A 측정값 12.4 판정 합격\n시험 항목B 측정값 13.9 판정 불합격\n",
+                   encoding="utf-8")
+
+    def post(payload, timeout=60):
+        req = urllib.request.Request(base, data=json.dumps(payload).encode("utf-8"),
+            method="POST", headers={"Content-Type": "application/json",
+                                    "Authorization": f"Bearer {key}"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8", errors="replace"))
+
+    tools = [{"type": "function", "function": {
+        "name": "read_file", "description": "워크스페이스의 텍스트 파일을 읽어 내용을 반환한다",
+        "parameters": {"type": "object", "properties": {"path": {"type": "string"}},
+                       "required": ["path"]}}}]
+    info = {"ok": False}
+    try:
+        msgs = [{"role": "user",
+                 "content": f"{tmp.name} 파일을 read_file 도구로 읽고, 판정이 불합격인 항목만 알려줘."}]
+        r1 = post({"model": "EXAONE-4.5-33B", "max_tokens": 256, "tools": tools,
+                   "messages": msgs})
+        choice = (r1.get("choices") or [{}])[0]
+        msg = choice.get("message", {})
+        tcs = msg.get("tool_calls") or []
+        info["tool_call_requested"] = bool(tcs)
+        info["finish_reason"] = choice.get("finish_reason")
+        if not tcs:
+            info["status"] = "tool_calls 미반환 (native 경로 불가 — 텍스트 파싱 필요)"
+            info["assistant_content"] = str(msg.get("content", ""))[:200]
+            return info
+        tc = tcs[0]
+        call_id = tc.get("id") or "call_1"
+        if call_id == "N/A":
+            call_id = "occ_call_1"  # gateway id 신뢰 불가 → 자체 발급
+        try:
+            args = json.loads(tc.get("function", {}).get("arguments") or "{}")
+        except Exception:
+            args = {}
+        info["tool_args"] = args
+        file_content = tmp.read_text(encoding="utf-8")  # 실제 도구 실행
+        info["file_read_back"] = True
+        # 2차: 도구 결과를 되돌려 최종 답변
+        assistant_msg = {"role": "assistant", "content": msg.get("content") or "",
+                         "tool_calls": [{"id": call_id, "type": "function",
+                                         "function": tc.get("function", {})}]}
+        msgs += [assistant_msg,
+                 {"role": "tool", "tool_call_id": call_id, "name": "read_file",
+                  "content": file_content}]
+        r2 = post({"model": "EXAONE-4.5-33B", "max_tokens": 256, "messages": msgs})
+        final = (r2.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        info["final_answer"] = final[:300]
+        info["e2e_ok"] = ("B" in final) or ("불합격" in final)
+        info["ok"] = info["e2e_ok"]
+        info["status"] = ("전체 tool 왕복 성공 — 최종 답변이 파일 내용 반영"
+                          if info["e2e_ok"] else "왕복은 됐으나 최종 답변이 내용 미반영")
+    except urllib.error.HTTPError as e:
+        info["status"] = f"HTTP {e.code}: {e.read(200).decode('utf-8','replace')}"
+    except Exception as e:
+        info["status"] = f"실패: {type(e).__name__}: {e}"
+    finally:
+        try:
+            tmp.unlink()
+        except Exception:
+            pass
+    return info
+
+
+def scn_excel_macro() -> dict:
+    """임시 xlsx에 VBA 모듈을 주입하고 실행 — 자동주입 end-to-end (AccessVBOM 실증)."""
+    try:
+        import win32com.client  # type: ignore
+        import pythoncom  # type: ignore
+    except ImportError:
+        return {"ok": False, "status": "pywin32 없음"}
+    tmp = Path(os.environ.get("TEMP", ".")) / f"occ_xlmac_{os.getpid()}.xlsm"
+    xl = None
+    info = {"ok": False}
+    try:
+        pythoncom.CoInitialize()
+        xl = win32com.client.DispatchEx("Excel.Application")
+        xl.Visible = False
+        xl.DisplayAlerts = False
+        wb = xl.Workbooks.Add()
+        try:
+            mod = wb.VBProject.VBComponents.Add(1)  # 1 = 표준 모듈
+            mod.CodeModule.AddFromString(
+                'Sub OccMacroTest()\n'
+                '    ThisWorkbook.Worksheets(1).Range("A1").Value = 42\n'
+                'End Sub')
+            info["macro_injected"] = True
+            xl.Run("OccMacroTest")
+            val = wb.Worksheets(1).Range("A1").Value
+            info["macro_ran"] = True
+            info["result_cell"] = val
+            info["ok"] = (val == 42)
+            info["status"] = ("매크로 주입+실행 성공 (A1=42)" if info["ok"]
+                              else f"실행됐으나 결과 불일치 (A1={val})")
+        except Exception as e:
+            info["status"] = f"VBProject 주입/실행 차단: {type(e).__name__} — 수동 import 필요"
+        wb.Close(SaveChanges=False)
+    except Exception as e:
+        info["status"] = f"Excel COM 실패: {type(e).__name__}"
+    finally:
+        try:
+            if xl:
+                xl.Quit()
+        except Exception:
+            pass
+        try:
+            pythoncom.CoUninitialize()
+        except Exception:
+            pass
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except Exception:
+            pass
+    return info
+
+
+def scn_matlab_process() -> dict:
+    """MATLAB로 실제 데이터 계산 실행 (읽기/집계 대표) — -batch end-to-end."""
+    import glob
+    hits = sorted(glob.glob(r"C:\Program Files\MATLAB\R20*\bin\matlab.exe"))
+    exe = os.environ.get("MATLAB_EXE", hits[-1] if hits else "")
+    if not exe or not Path(exe).exists():
+        return {"ok": False, "status": "matlab.exe 미발견"}
+    t0 = time.time()
+    try:
+        r = subprocess.run(
+            [exe, "-batch", "M=[12.4 13.9 11.2]; fprintf('mean=%.2f max=%.2f\\n', mean(M), max(M))"],
+            capture_output=True, timeout=TIMEOUT_SCN_MATLAB - 10, text=True,
+            encoding="utf-8", errors="replace")
+        out = (r.stdout or "") + (r.stderr or "")
+        return {"ok": r.returncode == 0 and "mean=" in out, "seconds": round(time.time() - t0, 1),
+                "output_tail": out.strip()[-120:]}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "status": f"timeout(>{TIMEOUT_SCN_MATLAB-10}s)"}
+    except Exception as e:
+        return {"ok": False, "status": f"실패: {type(e).__name__}"}
+
+
+def scn_hwp_doc() -> dict:
+    """새 HWP 문서에 텍스트 삽입 후 임시 파일로 저장 — 문서 생성 end-to-end."""
+    try:
+        import win32com.client  # type: ignore
+        import pythoncom  # type: ignore
+    except ImportError:
+        return {"ok": False, "status": "pywin32 없음"}
+    tmp = Path(os.environ.get("TEMP", ".")) / f"occ_hwp_{os.getpid()}.hwp"
+    hwp = None
+    info = {"ok": False}
+    try:
+        pythoncom.CoInitialize()
+        hwp = win32com.client.DispatchEx("HWPFrame.HwpObject")
+        try:
+            hwp.RegisterModule("FilePathCheckDLL", "FilePathCheckerModule")
+        except Exception:
+            pass
+        try:
+            hwp.XHwpDocuments.Add(0)
+        except Exception:
+            pass
+        try:
+            act = hwp.CreateAction("InsertText")
+            pset = act.CreateSet()
+            pset.SetItem("Text", "OpenCodeLIG 계측 문서 — 자동 생성 테스트")
+            act.Execute(pset)
+            info["text_inserted"] = True
+        except Exception as e:
+            info["text_inserted"] = f"실패: {type(e).__name__}"
+        try:
+            hwp.SaveAs(str(tmp), "HWP", "")
+            info["saved"] = tmp.exists()
+            info["ok"] = tmp.exists()
+            info["status"] = "HWP 문서 생성+저장 성공" if info["ok"] else "저장 실패"
+        except Exception as e:
+            info["status"] = f"저장 차단: {type(e).__name__}"
+    except Exception as e:
+        info["status"] = f"HWP COM 실패: {type(e).__name__}"
+    finally:
+        try:
+            if hwp:
+                hwp.Quit()
+        except Exception:
+            pass
+        try:
+            pythoncom.CoUninitialize()
+        except Exception:
+            pass
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except Exception:
+            pass
+    return info
+
+
+def scn_outlook_read() -> dict:
+    """Outlook 일정/받은편지함 개수 read — 비서 연동 실동작(읽기)."""
+    try:
+        import win32com.client  # type: ignore
+        import pythoncom  # type: ignore
+    except ImportError:
+        return {"ok": False, "status": "pywin32 없음"}
+    ol = None
+    info = {"ok": False}
+    try:
+        pythoncom.CoInitialize()
+        ol = win32com.client.DispatchEx("Outlook.Application")
+        ns = ol.GetNamespace("MAPI")
+        inbox = ns.GetDefaultFolder(6)   # olFolderInbox
+        cal = ns.GetDefaultFolder(9)     # olFolderCalendar
+        info["inbox_count"] = int(inbox.Items.Count)
+        info["calendar_count"] = int(cal.Items.Count)
+        info["ok"] = True
+        info["status"] = "Outlook 받은편지함/일정 read 성공"
+    except Exception as e:
+        info["status"] = f"Outlook read 실패: {type(e).__name__}"
+    finally:
+        try:
+            pythoncom.CoUninitialize()
+        except Exception:
+            pass
+    return info
+
+
+def scn_autocad_script() -> dict:
+    """accoreconsole로 사본 dwg에 .scr 실행 — CAD 배치 자동화 end-to-end."""
+    import glob
+    hits = (sorted(glob.glob(r"C:\AutoCAD*\accoreconsole.exe"))
+            + sorted(glob.glob(r"C:\Program Files\Autodesk\AutoCAD*\accoreconsole.exe")))
+    exe = os.environ.get("ACCORECONSOLE_EXE", hits[-1] if hits else "")
+    if not exe or not Path(exe).exists():
+        return {"ok": False, "status": "accoreconsole.exe 미발견"}
+    tmpdir = Path(os.environ.get("TEMP", ".")) / f"occ_acad_{os.getpid()}"
+    tmpdir.mkdir(exist_ok=True)
+    scr = tmpdir / "test.scr"
+    # 새 도면에 원 하나 그리고 사본으로 저장 후 종료 (원본 없이 동작)
+    scr.write_text('_CIRCLE\n0,0\n10\n_SAVEAS\n2013\n"' + str(tmpdir / "out.dwg").replace("\\", "/") + '"\n_QUIT\n',
+                   encoding="utf-8")
+    t0 = time.time()
+    try:
+        r = subprocess.run([exe, "/s", str(scr)], capture_output=True,
+                           timeout=TIMEOUT_SCN_AUTOCAD - 10, text=True,
+                           encoding="utf-8", errors="replace", cwd=str(tmpdir))
+        secs = round(time.time() - t0, 1)
+        made = (tmpdir / "out.dwg").exists()
+        return {"ok": made or r.returncode == 0, "seconds": secs, "out_dwg_created": made,
+                "exit": r.returncode, "output_tail": ((r.stdout or "") + (r.stderr or "")).strip()[-150:]}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "status": f"timeout(>{TIMEOUT_SCN_AUTOCAD-10}s) — 대화형 대기 가능성"}
+    except Exception as e:
+        return {"ok": False, "status": f"실패: {type(e).__name__}"}
+    finally:
+        try:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        except Exception:
+            pass
+
+
 ISOLATED = {
     "gateway": (probe_gateway, TIMEOUT_GATEWAY),
     "excel": (probe_excel_com, TIMEOUT_COM),
@@ -476,7 +762,16 @@ ISOLATED = {
     "matlab": (probe_matlab, TIMEOUT_MATLAB),
     "chrome": (probe_chrome_cdp, TIMEOUT_CHROME),
     "opencode": (probe_opencode_startup, TIMEOUT_OPENCODE),
+    # 시나리오 (실제 1회 끝까지)
+    "scn_agent": (scn_gateway_agent, TIMEOUT_SCN_AGENT),
+    "scn_excel_macro": (scn_excel_macro, TIMEOUT_SCN_EXCEL),
+    "scn_matlab": (scn_matlab_process, TIMEOUT_SCN_MATLAB),
+    "scn_hwp": (scn_hwp_doc, TIMEOUT_SCN_HWP),
+    "scn_outlook": (scn_outlook_read, TIMEOUT_SCN_OUTLOOK),
+    "scn_autocad": (scn_autocad_script, TIMEOUT_SCN_AUTOCAD),
 }
+
+SCENARIOS = ["scn_agent", "scn_excel_macro", "scn_matlab", "scn_hwp", "scn_outlook", "scn_autocad"]
 
 
 # ------------------------------------------------ 인프로세스(빠르고 안전) ---
@@ -642,6 +937,29 @@ def _md(report: dict) -> str:
     L += ["", "## 5. 앱 설치/경로", ""]
     for k, v in report.get("apps", {}).items():
         L.append(f"- {k}: {v}")
+    scn = report.get("scenarios", {})
+    if scn:
+        L += ["", "## 6. 업무 시나리오 실동작 (실제 1회 끝까지)", ""]
+        labels = {
+            "scn_agent": "① LLM native tool 왕복 (파일 읽기→답변)",
+            "scn_excel_macro": "② Excel 매크로 주입+실행",
+            "scn_matlab": "③ MATLAB 데이터 계산 -batch",
+            "scn_hwp": "④ HWP 문서 생성+저장",
+            "scn_outlook": "⑤ Outlook 일정/메일 read",
+            "scn_autocad": "⑥ AutoCAD accoreconsole .scr 실행",
+        }
+        for key in SCENARIOS:
+            r = scn.get(key, {})
+            mark = "✅ OK" if r.get("ok") else "❌ 실패/차단"
+            detail = r.get("status", "")
+            extra = ""
+            if key == "scn_agent" and r.get("ok"):
+                extra = f" / 최종답변: {str(r.get('final_answer',''))[:60]}"
+            if key in ("scn_matlab", "scn_autocad") and r.get("seconds"):
+                extra += f" / {r.get('seconds')}s"
+            L.append(f"- {labels.get(key, key)}: {mark} — {detail}{extra}")
+        L += ["", "> 시나리오 ①이 OK면 real 업무 자동화(파일 읽고 처리)가 실제로 돈다는 뜻.",
+              "> ②~⑥은 각 앱 자동화 어댑터의 실기 전제 확인."]
     L += ["", "> 이 파일(.md)과 .json을 그대로 전달하면 됩니다. host/key/사용자명은 마스킹됨."]
     return "\n".join(L)
 
@@ -655,17 +973,20 @@ def main() -> int:
         "environment": collect_environment(),
         "apps": collect_apps(),
         "office_security": collect_office_security(),
-        "gateway": {}, "live": {},
+        "gateway": {}, "live": {}, "scenarios": {},
     }
     order = ["gateway", "opencode"]
     if not quick:
         order += ["excel", "outlook", "hwp", "solidworks", "chrome", "matlab"]
+        order += SCENARIOS
     for name in order:
         fn, timeout = ISOLATED[name]
         print(f"  [{name}] 검사 중 (최대 {timeout}s)...", flush=True)
         res = _isolated(name, timeout)
         if name == "gateway":
             report["gateway"] = res
+        elif name in SCENARIOS:
+            report["scenarios"][name] = res
         else:
             report["live"][name] = res
     secrets = _secret_values()
