@@ -23,8 +23,8 @@
 | P13-02 | `work` 오케스트레이터 subcommand E2E | codex | P13-01 | ANY | APPROVED | plan/reports/P13-02-r1.md | plan/reviews/P13-02-r1.md |
 | P14-01 | schedule store + 결정적 날짜 파서 | codex | — | ANY | APPROVED | plan/reports/P14-01-r1.md | plan/reviews/P14-01-r1.md |
 | P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | APPROVED | plan/reports/P14-02-r2.md | plan/reviews/P14-02-r2.md |
-| P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | AWAITING-REVIEW | plan/reports/P14-03-r1.md | |
-| P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | AWAITING-REVIEW | plan/reports/P14-04-r1.md | |
+| P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | APPROVED | plan/reports/P14-03-r1.md | plan/reviews/P14-03-r1.md |
+| P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | CHANGES-REQUESTED | plan/reports/P14-04-r1.md | plan/reviews/P14-04-r1.md |
 | P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | READY | | |
 | P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | APPROVED | plan/reports/P15-01-r1.md | plan/reviews/P15-01-r1.md |
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | APPROVED | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r2.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 Fable 리뷰 8차: **P14-03 r1 APPROVED**(briefing E2E 실측 — 일정/마감 OVERDUE/액션아이템 대기필터·출처/audit 전일요약 정확, reminder BAT y-only 게이트 — reviews/P14-03-r1.md). **P14-04 r1 CHANGES-REQUESTED**(① 영어 키워드 `minutes` bare substring이 `5 minutes 후에 알려줘` 오라우팅→회의록 스퓨리어스 생성, P16-01 `.m`과 동류 ② `_meeting_actions` owner 추출이 `김대리 담당: 7월…` 패턴에서 날짜 `7월`을 담당으로 채움=그럴듯한 오값, bench substring만 봐서 누락 — reviews/P14-04-r1.md). 재검증: 19개 중 16개 exit 0(+secretary 20, bench 182=184−openpyxl 2), Windows 전용 3개 diff 무접촉. Codex 다음: **P14-04 r2 → P18-02 → 신규 READY들**.
 
 - 2026-07-04 Fable 리뷰 7차: **P16-01 r2 APPROVED**(키워드 `.m`→`.m 스크립트`/`.m 파일` 경계화, `.md`/`.m` 7개 케이스 실측으로 오라우팅 재발 없음 + 양성 라우팅 유지, negative check 2개 회귀화 — reviews/P16-01-r2.md) → P16-02/P16-03 READY. 재검증: 19개 중 16개 exit 0(bench 171=173−openpyxl 2), Windows 전용 3개 diff 무접촉. 현재 AWAITING-REVIEW 없음. Codex 다음 READY: P18-02, P14-03~05, P15-03/04, P16-02~04.
 
