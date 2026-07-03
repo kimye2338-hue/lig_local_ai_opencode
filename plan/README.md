@@ -54,10 +54,14 @@ plan/
 | APPROVED | 완료 확정 (Fable만 이 상태로 변경 가능) |
 | SKIPPED | 사용자/Fable 결정으로 건너뜀 (사유는 리뷰 파일에) |
 
-## 지금 바로 시작하려면
+## 지금 바로 시작하려면 (워커에게 주는 원라인 프롬프트)
 
 ```text
-1) plan/PROTOCOL.md 정독
-2) plan/STATUS.md 에서 첫 READY 작업 확인
-3) 해당 plan/tasks/ 파일의 지시대로 수행
+Read AGENTS.md, then follow skills/worker-loop/SKILL.md:
+work through plan/STATUS.md READY tasks with auto-advance until blocked.
 ```
+
+- auto-advance: DoD 전부 ✅ + 회귀 green + deviation 없음 + hard gate 아님이면
+  리뷰를 기다리지 않고 다음 READY로 계속 간다 (조건/hard gate 목록은
+  `skills/worker-loop/SKILL.md`). 리뷰어(Fable)는 쌓인 보고서를 배치로 검토한다.
+- 수동으로 하려면: PROTOCOL.md 정독 → STATUS.md 첫 READY → 해당 tasks/ 파일 수행.

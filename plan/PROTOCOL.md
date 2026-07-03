@@ -2,6 +2,13 @@
 
 이 문서를 지키지 않은 작업은 리뷰에서 CHANGES-REQUESTED 또는 REJECTED 처리된다.
 
+## 0. 스킬 우선 (토큰 규약)
+
+반복 절차 지식은 `skills/`에 있다 — **작업 루프는 `skills/worker-loop/SKILL.md`가
+단일 진실 소스**이며, auto-advance(리뷰 대기 없이 다음 READY 연속 진행) 조건과
+hard gate 목록도 거기에 있다. 코드 작업 전 `skills/repo-conventions`,
+제출 전 `skills/self-review`를 적용한다. task 지시서와 스킬이 충돌하면 task가 이긴다.
+
 ## 1. 시작 절차 (매 작업 공통, 순서 고정)
 
 ```bat

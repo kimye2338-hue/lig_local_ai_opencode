@@ -8,10 +8,12 @@ plus the `agent_ops` office-automation runtime under `workspace-template/`.
 If you were asked to "다음 작업 진행", "continue the plan", or anything about the
 agent_ops / OpenCodeLIG build-out:
 
-1. Read `plan/README.md` (system) and `plan/PROTOCOL.md` (mandatory rules).
-2. Pick the **first READY task** in `plan/STATUS.md` and follow its file in `plan/tasks/`.
-3. After the work, write `plan/reports/<TASK-ID>-r<N>.md` and update your row in STATUS.
-4. Reviewer feedback arrives in `plan/reviews/` — apply all "필수 수정" items.
+1. Read `skills/worker-loop/SKILL.md` — it is the work loop (auto-advance rules included).
+2. Reusable procedures live in `skills/` (repo-conventions, self-review, windows-batch,
+   app-adapter). Read the ones your task names; do not re-derive them.
+3. Mandatory rules: `plan/PROTOCOL.md`. Board: `plan/STATUS.md` (take the first READY task).
+4. After each task, write `plan/reports/<TASK-ID>-r<N>.md`; reviewer feedback arrives in
+   `plan/reviews/` — apply all "필수 수정" items before new work.
 
 Strategy/why lives in `workspace-template/docs/MASTER_PLAN.md`. Do not start agent_ops
 work without reading `plan/PROTOCOL.md`.
