@@ -11,6 +11,10 @@
 회사 반입에 필요한 모든 외부물을 실제로 내려받아 SHA256과 함께 확정한다.
 용량 제한 없음 (사용자 확정).
 
+> **실측 반영 (2026-07-03)**: 회사 PC에 Python 3.11.3 + pywin32가 **이미 설치**되어
+> 있음 (probe/results/ env). wheel은 재현성 위해 그대로 반입하되, setup.bat은 기존
+> 설치를 감지하면 스킵하도록.
+
 ## 작업 항목
 1. `release/dependencies.json`의 PENDING_PREFETCH 전 항목 해소 + 신규 항목 추가:
    - pywin32 (py3.11 win_amd64 wheel), openpyxl(+의존 et_xmlfile), python-pptx(+의존)

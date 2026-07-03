@@ -21,6 +21,11 @@
 ## 산출물
 `docs/OPENCODE_INTEGRATION.md` — 출처(문서 URL/커밋) 명시, "확인됨 vs 추정" 구분 표기.
 
+## 진행 기록 (2026-07-03, Fable)
+- 항목 3 부분 완료: 공식 문서에서 `autoupdate:false` 확정 → 오프라인 패키지의
+  workspace opencode.json + 런처 env 강화로 반영됨 (커밋 3d7dca9). 기동 시간 개선
+  판정은 P00-03 실측 대기. 나머지 항목(provider 등록/확장점/TUI↔agent_ops)은 미착수.
+
 ## DoD
 - [ ] 4개 항목 각각 출처 있는 결론 또는 "공식 문서에 없음 — 실측 필요" 표기
 - [ ] agent_ops와의 통합 방식 권고 1개 확정

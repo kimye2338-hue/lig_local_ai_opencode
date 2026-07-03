@@ -516,12 +516,14 @@ Security cleanup status: / New HEAD commit: / Next exact command:
 
 ---
 
-## 9. 다음 세션 시작 지점
+## 9. 현재 운영 모드 (2026-07-03 갱신 — 이 절만 갱신하며 §1~§8은 전략 원본 유지)
 
-> **P9.** 시작:
-> ```bat
-> cd /d "%USERPROFILE%\OpenCodeLIG_HOME_LAB\repo\workspace-template"
-> py -3.11 tests\test_capability_bench.py
-> ```
-> 이후 §4 P9 [작업 항목] 1번(lig_providers env 오버라이드)부터.
-> P10(purge)은 P9 직후 전용 세션으로 즉시 실행 (승인 확보됨).
+> 실행은 **repo 루트 `plan/` 보드가 주도**한다 (이 문서는 전략/근거 원본).
+> - 구현: Codex 워커 — 원라인 프롬프트로 auto-advance (plan/README.md)
+> - 리뷰/설계/hard gate: Fable — 배치 리뷰, task·계획 갱신, P10-01 purge 전담
+> - 회사 실측: 사용자 — `plan/NEXT_ONSITE.md` 목록을 방문 때마다 수행/반출
+>
+> 진행 요약 (2026-07-03): P9 전체·P12~P15 선두·P17-01·P18-01 등 **11개 task APPROVED**,
+> gateway 3라우트 200 (연결 company validated — probe/results/), Excel 자동 주입 가능
+> 확정, `work` 한 명령 E2E 완성. 최대 남은 미지수는 EXAONE tool-call 실동작(P00-03)과
+> Office 2016 실기 실행(P15 계열 회사 검증).

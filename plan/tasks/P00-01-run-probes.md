@@ -25,5 +25,9 @@
 - 설치 앱/경로 실측 → P16 어댑터 exe 탐색 확정
 
 ## DoD
-- [ ] probe/results/에 집 PC env 결과 존재
-- [ ] (회사 접근 가능 시) 회사 env + gateway 결과 존재
+- [x] probe/results/에 집 PC env 결과 존재 (2026-07-03)
+- [x] 회사 env + gateway 결과 존재 (2026-07-03 r1~r3 — gateway 3라우트 200 확인)
+
+> **완료 (2026-07-03)**: 이 작업의 목적 달성 — 매크로 정책/앱 경로/gateway 경로가
+> 전부 실측됨. 남은 회사 실측(function calling/agent 실동작/기동 시간)은 **P00-03**으로
+> 이관. 상시 방문 목록은 `plan/NEXT_ONSITE.md`.

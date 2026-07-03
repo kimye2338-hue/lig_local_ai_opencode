@@ -6,8 +6,9 @@
 
 | ID | 제목 | 담당 | 선행 | 환경 | 상태 | 보고서 | 리뷰 |
 |----|------|------|------|------|------|--------|------|
-| P00-01 | 환경 probe 실행/업로드 (probe/README.md) | **human** | — | 집+회사 | READY | | |
-| P00-02 | OpenCode 공식 문서 연동 조사 | **fable** | — | INTERNET | READY | | |
+| P00-01 | 환경 probe 실행/업로드 (probe/README.md) | **human** | — | 집+회사 | APPROVED | probe/results/ r1~r3 | 잔여는 P00-03 이관 |
+| P00-02 | OpenCode 공식 문서 연동 조사 | **fable** | — | INTERNET | READY(부분 진행) | | |
+| P00-03 | 회사 real-mode 실측 팩 (NEXT_ONSITE.md) | **human** | — | COMPANY | READY | | |
 | P09-01 | LLM provider 프로필/env 완전 오버라이드 | codex | — | ANY | APPROVED | plan/reports/P09-01-r2.md | plan/reviews/P09-01-r2.md |
 | P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | APPROVED | plan/reports/P09-02-r1.md | plan/reviews/P09-02-r1.md |
 | P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | AWAITING-REVIEW | plan/reports/P09-03-r1.md | |
@@ -43,6 +44,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-03 계획 고도화 (Fable): gateway 3라우트 200(연결 company validated) 반영 — P00-01 APPROVED(잔여→P00-03 신설), NEXT_ONSITE.md 상시 방문 목록 신설, P11에 function-calling A/B 경로 반영, P16-02 accoreconsole 확정, P17-02 pywin32 기설치 반영.
 
 - 2026-07-03 P09-03 IN-PROGRESS (Codex). 시작 HEAD: 0e66194.
 - 2026-07-03 Fable 배치 리뷰 2차: 7건 전부 APPROVED (P09-02, P12-02, P13-02, P14-01, P15-01, P17-01, P18-01) — 전 16 테스트 파일 440 checks 재검증, deviation 0. 신규 READY: P09-03, P12-03, P14-02, P15-02, P16-01, P18-02.
