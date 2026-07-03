@@ -22,12 +22,13 @@ SECRET_ENV_PATH = Path(os.environ.get("LIG_API_ENV_FILE") or (Path.home() / "Ope
 DIAG_DIR = Path(os.environ.get("LIG_DIAG_DIR") or (Path.home() / "OpenCodeLIG_USERDATA" / "diagnostics"))
 
 _ROUTE_DEFAULTS = {
-    "lig-coding": ("LIG_ROUTE_CODING", "/EXAONE-4.5-33B-vibe_coding_think_off/v1", "EXAONE-4.5-33B"),
-    "lig-chat": ("LIG_ROUTE_CHAT", "/EXAONE-4.5-33B-default_think_off/v1", "EXAONE-4.5-33B"),
-    "lig-fallback": ("LIG_ROUTE_FALLBACK", "/Qwen3.6-27B-vibe_coding_think_off/v1", "Qwen3.6-27B"),
+    "lig-coding": ("LIG_ROUTE_CODING", "/EXAONE-4.5-33B-vibe_coding_think_off/v1", "LIG_MODEL_CODING", "EXAONE-4.5-33B"),
+    "lig-chat": ("LIG_ROUTE_CHAT", "/EXAONE-4.5-33B-default_think_off/v1", "LIG_MODEL_CHAT", "EXAONE-4.5-33B"),
+    "lig-fallback": ("LIG_ROUTE_FALLBACK", "/Qwen3.6-27B-vibe_coding_think_off/v1", "LIG_MODEL_FALLBACK", "Qwen3.6-27B"),
 }
 
 _PLACEHOLDER_MARKERS = ("REPLACE_WITH", "PUT_INTERNAL", "CHANGEME")
+_VALID_PROFILES = ("company_gateway", "local_openai")
 
 
 def load_lig_env(path: Optional[Path] = None) -> Dict[str, str]:
@@ -50,17 +51,36 @@ def _is_real(value: str) -> bool:
     return bool(value) and not any(m in value for m in _PLACEHOLDER_MARKERS)
 
 
+def get_profile(env: Optional[Dict[str, str]] = None) -> str:
+    """Return the selected provider profile, falling back safely on typos."""
+    env = env if env is not None else load_lig_env()
+    profile = (env.get("LIG_PROVIDER_PROFILE") or "company_gateway").strip()
+    return profile if profile in _VALID_PROFILES else "company_gateway"
+
+
 def build_providers(env: Optional[Dict[str, str]] = None) -> Dict[str, Dict[str, str]]:
     """Build the three provider routes. base_url may contain the internal host
     — treat returned dict as sensitive; do not print it."""
     env = env if env is not None else load_lig_env()
-    gateway = env.get("LIG_GATEWAY_BASE_URL", "").rstrip("/")
+    profile = get_profile(env)
     providers: Dict[str, Dict[str, str]] = {}
-    for name, (route_key, route_default, model_default) in _ROUTE_DEFAULTS.items():
+    if profile == "local_openai":
+        base_url = env.get("LIG_LOCAL_BASE_URL", "http://127.0.0.1:11434/v1").rstrip("/")
+        model = env.get("LIG_LOCAL_MODEL", "qwen2.5:7b-instruct")
+        for name in _ROUTE_DEFAULTS:
+            providers[name] = {
+                "base_url": base_url,
+                "model": model,
+                "timeout": env.get("LIG_API_TIMEOUT_SEC", "120"),
+            }
+        return providers
+
+    gateway = env.get("LIG_GATEWAY_BASE_URL", "").rstrip("/")
+    for name, (route_key, route_default, model_key, model_default) in _ROUTE_DEFAULTS.items():
         route = env.get(route_key, route_default)
         providers[name] = {
             "base_url": gateway + route if gateway else "",
-            "model": model_default,
+            "model": env.get(model_key, model_default),
             "timeout": env.get("LIG_API_TIMEOUT_SEC", "120"),
         }
     return providers
@@ -70,23 +90,35 @@ def validate_config(env: Optional[Dict[str, str]] = None, path: Optional[Path] =
     """Presence/shape validation only — safe to print and to write to diagnostics."""
     src = path or SECRET_ENV_PATH
     env = env if env is not None else load_lig_env(src)
+    raw_profile = (env.get("LIG_PROVIDER_PROFILE") or "company_gateway").strip()
+    profile = get_profile(env)
     providers = build_providers(env)
     report = {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "profile": profile,
         "secret_file_found": src.exists(),
         "gateway_url_set": _is_real(env.get("LIG_GATEWAY_BASE_URL", "")),
         "api_key_set": _is_real(env.get("LIG_API_KEY", "")),
         "default_provider": env.get("LIG_DEFAULT_PROVIDER", "lig-coding"),
         "providers": {name: {"route_set": bool(p["base_url"]), "model": p["model"]} for name, p in providers.items()},
     }
-    report["ready"] = bool(report["secret_file_found"] and report["gateway_url_set"] and report["api_key_set"])
+    if raw_profile and raw_profile not in _VALID_PROFILES:
+        report["profile_warning"] = "unknown profile; using company_gateway"
+    if profile == "local_openai":
+        report["ready"] = all(_is_real(p["base_url"]) and _is_real(p["model"]) for p in providers.values())
+    else:
+        report["ready"] = bool(report["secret_file_found"] and report["gateway_url_set"] and report["api_key_set"])
     missing = []
-    if not report["secret_file_found"]:
-        missing.append(f"secret file not found: {src}")
-    if not report["gateway_url_set"]:
-        missing.append("LIG_GATEWAY_BASE_URL missing or placeholder")
-    if not report["api_key_set"]:
-        missing.append("LIG_API_KEY missing or placeholder")
+    if profile == "company_gateway":
+        if not report["secret_file_found"]:
+            missing.append(f"secret file not found: {src}")
+        if not report["gateway_url_set"]:
+            missing.append("LIG_GATEWAY_BASE_URL missing or placeholder")
+        if not report["api_key_set"]:
+            missing.append("LIG_API_KEY missing or placeholder")
+    else:
+        if not report["ready"]:
+            missing.append("LIG_LOCAL_BASE_URL or LIG_LOCAL_MODEL missing or placeholder")
     report["missing"] = missing
     return report
 

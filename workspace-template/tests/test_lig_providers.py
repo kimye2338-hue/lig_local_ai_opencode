@@ -57,7 +57,32 @@ with tempfile.TemporaryDirectory() as td:
     check("3 providers", set(provs) == {"lig-coding", "lig-chat", "lig-fallback"}, str(provs.keys()))
     check("fallback is qwen", provs["lig-fallback"]["model"] == "Qwen3.6-27B" and "Qwen3.6-27B-vibe_coding_think_off" in provs["lig-fallback"]["base_url"], str(provs["lig-fallback"]))
 
-    # 6. Fallback policy decisions
+    # 6. Route/model env overrides are honored without code changes
+    override_env = {
+        "LIG_GATEWAY_BASE_URL": "http://10.0.0.2/gw",
+        "LIG_ROUTE_CODING": "/custom-coding/v1",
+        "LIG_MODEL_CODING": "custom-coding-model",
+        "LIG_API_TIMEOUT_SEC": "45",
+    }
+    provs = build_providers(override_env)
+    check("route and model overrides", provs["lig-coding"]["base_url"].endswith("/custom-coding/v1") and provs["lig-coding"]["model"] == "custom-coding-model" and provs["lig-coding"]["timeout"] == "45", str(provs["lig-coding"]))
+
+    # 7. local_openai profile is ready without api_key
+    local_env = {"LIG_PROVIDER_PROFILE": "local_openai"}
+    rep = validate_config(env=local_env, path=tmp / "missing-local.env")
+    check("local_openai ready without secret", rep["ready"] is True and rep["profile"] == "local_openai" and rep["api_key_set"] is False, str(rep))
+
+    # 8. Unknown profile falls back safely and reports a warning
+    rep = validate_config(env={"LIG_PROVIDER_PROFILE": "typo_profile"}, path=tmp / "absent.env")
+    check("bad profile -> company fallback", rep["profile"] == "company_gateway" and "profile_warning" in rep and rep["ready"] is False, str(rep))
+
+    # 9. Validation report stays secret-free even with local/company hosts configured
+    local_env = {"LIG_PROVIDER_PROFILE": "local_openai", "LIG_LOCAL_BASE_URL": "http://127.0.0.1:11434/v1", "LIG_LOCAL_MODEL": "qwen-local"}
+    rep = validate_config(env=local_env, path=tmp / "missing-local.env")
+    report_text = json.dumps(rep)
+    check("validate report omits host strings", "127.0.0.1" not in report_text and "11434" not in report_text and "10.0.0.2" not in report_text, str(rep))
+
+    # 10. Fallback policy decisions
     check("timeout first -> retry", decide_fallback("http_timeout", 1, "lig-coding")["action"] == "retry")
     check("timeout exhausted -> switch", decide_fallback("http_timeout", 2, "lig-coding")["action"] == "switch_fallback")
     check("4xx -> stop", decide_fallback("http_4xx", 1, "lig-coding")["action"] == "stop")
@@ -66,7 +91,7 @@ with tempfile.TemporaryDirectory() as td:
     check("no loop on last provider", decide_fallback("provider_unreachable", 1, "lig-fallback")["action"] == "local_fallback")
     check("unknown trigger -> stop", decide_fallback("weird_new_error", 1, "lig-coding")["action"] == "stop")
 
-    # 7. Fallback record written with required fields
+    # 11. Fallback record written with required fields
     out = record_fallback("lig-coding", "lig-fallback", "http_timeout", 2, "recovered", diag_dir=tmp / "diag")
     data = json.loads(out.read_text(encoding="utf-8"))
     need = {"provider_initial", "provider_final", "fallback_trigger", "fallback_attempts", "fallback_result"}

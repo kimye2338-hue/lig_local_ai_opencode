@@ -84,7 +84,7 @@ def main() -> None:
     tmp2 = Path(tempfile.mkdtemp(prefix="agentops_bat_"))
     (tmp2 / "작업공간").mkdir()
     env2 = make_env(tmp2)
-    r4 = run(["cmd", "/c", str(bat), "--mode", "mock", "--task", "BAT 한글 스모크"], env2)
+    r4 = run([str(bat), "--mode", "mock", "--task", "BAT 한글 스모크"], env2)
     out4 = r4.stdout.decode("utf-8", errors="replace")
     check("run-agent.bat mock exits 0", r4.returncode == 0, out4 + r4.stderr.decode("utf-8", errors="replace"))
     check("run-agent.bat produced output file",
