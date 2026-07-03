@@ -33,6 +33,7 @@ def _clean_event(event: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "ts": event.get("ts") or time.strftime("%Y-%m-%dT%H:%M:%S"),
         "run_id": str(event.get("run_id") or ""),
+        "task": str(event.get("task") or "")[:80],
         "kind": str(event.get("kind") or ""),
         "name": str(event.get("name") or "")[:80],
         "target": _basename(event.get("target")),
