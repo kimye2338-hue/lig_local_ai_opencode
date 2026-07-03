@@ -95,6 +95,14 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "keywords": ["일정", "약속", "마감", "리마인드", "캘린더", "스케줄", "미루", "연기",
                      "schedule", "deadline"],
     },
+    "meeting_minutes": {
+        "description": "회의 메모/녹취 텍스트를 구조화된 회의록과 일정 등록 제안으로 정리",
+        "status": "locally_validated",
+        "artifact_kinds": ["meeting_minutes"],
+        "outputs": ["회의록.md"],
+        "pending": [],
+        "keywords": ["회의록", "회의 정리", "미팅 정리", "회의 내용", "minutes"],
+    },
     "matlab_automation": {
         "description": "시험 데이터 후처리용 MATLAB 스크립트 scaffold 생성",
         "status": "scaffold_available",
@@ -145,6 +153,10 @@ ARTIFACT_KIND_INFO: Dict[str, Dict[str, str]] = {
     "matlab_script": {
         "files": "작업.m",
         "purpose": "MATLAB 2024a -batch로 실행할 시험 데이터 후처리 scaffold",
+    },
+    "meeting_minutes": {
+        "files": "회의록.md",
+        "purpose": "회의 메모/녹취를 개요, 논의, 결정, 액션아이템, 일정 등록 제안으로 정리한 회의록",
     },
 }
 

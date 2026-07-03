@@ -112,6 +112,16 @@ _KIND_RULES: Dict[str, List[Rule]] = {
         ("source_and_company", "분류 근거(mock 또는 입력 메일)와 실제 메일함은 company pending임을 구분해야 함",
          lambda t: (("mock" in t) or ("입력 메일" in t)) and ("company validation pending" in t)),
     ],
+    "meeting_minutes": [
+        ("meeting_attendees", "일시/참석 개요가 있어야 함",
+         lambda t: "## 개요" in t and "참석" in t),
+        ("meeting_discussion", "논의 내용 섹션이 있어야 함",
+         lambda t: "## 논의 내용" in t),
+        ("meeting_decisions", "결정 사항 섹션이 있어야 함",
+         lambda t: "## 결정 사항" in t),
+        ("meeting_actions", "액션아이템 표가 있어야 함",
+         lambda t: "## 액션아이템" in t and "| # | 할 일 | 담당 | 기한 |" in t),
+    ],
     "matlab_script": [
         ("matlab_batch_run", "matlab -batch 실행 방법이 명시되어야 함",
          lambda t: "matlab -batch" in t),
@@ -161,6 +171,7 @@ _KIND_SUFFIXES: Dict[str, set] = {
     "browser_script": {".py"},
     "mail_report": {".md"},
     "matlab_script": {".m"},
+    "meeting_minutes": {".md"},
 }
 
 

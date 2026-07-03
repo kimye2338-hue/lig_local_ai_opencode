@@ -586,6 +586,133 @@ def gen_mail_report(task: str, out_dir: Path,
     return [p1, p2]
 
 
+def _meeting_source_text(ctx: Dict[str, Any]) -> str:
+    chunks = []
+    for f in (ctx.get("inputs") or {}).get("files", []):
+        preview = str(f.get("preview", "")).strip()
+        if preview:
+            chunks.append(preview)
+    return "\n".join(chunks).strip()
+
+
+def _meeting_sentences(text: str) -> List[str]:
+    raw = re.split(r"(?<=[.!?。])\s+|[\r\n]+", text or "")
+    sentences: List[str] = []
+    for part in raw:
+        part = re.sub(r"\s+", " ", part).strip(" -\t")
+        if not part:
+            continue
+        pieces = re.split(r"(?<=[다요음함됨임])\.\s*", part)
+        for piece in pieces:
+            cleaned = piece.strip(" -\t.")
+            if cleaned and cleaned not in sentences:
+                sentences.append(cleaned)
+    return sentences
+
+
+def _meeting_discussion_rows(sentences: List[str]) -> str:
+    picked = sentences[:6]
+    if not picked:
+        return "- TODO: 입력 텍스트에서 논의 문단을 확인 필요"
+    return "\n".join(f"- {s}" for s in picked)
+
+
+def _meeting_decisions(sentences: List[str]) -> List[str]:
+    markers = ("결정", "합의", "승인")
+    return [s for s in sentences if any(m in s for m in markers)]
+
+
+def _meeting_actions(sentences: List[str]) -> List[Dict[str, str]]:
+    rows: List[Dict[str, str]] = []
+    for sentence in sentences:
+        if not any(marker in sentence for marker in ("하기로", "까지", "담당", "액션", "조치")):
+            continue
+        owner = "확인 필요"
+        m_owner = re.search(r"담당[:：]?\s*([A-Za-z0-9_가-힣]+)", sentence)
+        if m_owner:
+            owner = m_owner.group(1)
+        due = "확인 필요"
+        m_due = re.search(r"((?:\d{4}-\d{1,2}-\d{1,2})|(?:\d{1,2}월\s*\d{1,2}일)|(?:오늘|내일|모레|글피|이번주\s*[월화수목금토일]|다음주\s*[월화수목금토일]|[월화수목금토일]요일)|(?:\d+\s*(?:일|주|주일)\s*후))\s*까지?", sentence)
+        if m_due:
+            due = m_due.group(1)
+        todo = sentence
+        todo = re.sub(r"담당[:：]?\s*[A-Za-z0-9_가-힣]+", "", todo).strip(" ,")
+        rows.append({"todo": todo, "owner": owner, "due": due, "source": sentence})
+    return rows
+
+
+def _meeting_action_table(actions: List[Dict[str, str]]) -> str:
+    if not actions:
+        return "| 1 | TODO: 회의 메모에서 후속 조치 확인 필요 | 확인 필요 | 확인 필요 |"
+    return "\n".join(
+        f"| {i + 1} | {a['todo']} | {a['owner']} | {a['due']} |"
+        for i, a in enumerate(actions[:8]))
+
+
+def _meeting_schedule_suggestions(actions: List[Dict[str, str]]) -> str:
+    from . import schedule_store
+    lines = []
+    for action in actions:
+        due = action.get("due", "")
+        if due == "확인 필요":
+            continue
+        parsed = schedule_store.parse_due(due)
+        if not parsed.get("ok"):
+            continue
+        task = f"{action['todo']} {due}까지"
+        safe_task = task.replace('"', "'")
+        lines.append(f'- `py -3.11 agent_ops\\agentops.py schedule add "{safe_task}"`')
+    return "\n".join(lines) if lines else "- 없음 (파싱 가능한 기한 있는 액션아이템 없음)"
+
+
+def gen_meeting_minutes(task: str, out_dir: Path,
+                        ctx: Optional[Dict[str, Any]] = None) -> List[Path]:
+    ctx = _ensure_context(task, ctx)
+    source = _meeting_source_text(ctx)
+    sentences = _meeting_sentences(source)
+    decisions = _meeting_decisions(sentences)
+    actions = _meeting_actions(sentences)
+    basis = "입력 메모 기반" if ctx.get("input_grounded") else "입력 없음 — 확인 필요"
+    decision_lines = "\n".join(f"- {d}" for d in decisions[:8]) or "- 확인 필요"
+    body = f"""# 회의록
+
+- 요청: {task}
+- 생성: {time.strftime('%Y-%m-%d %H:%M:%S')} (OpenCodeLIG)
+- 상태: locally generated — 회의 참석자/기한은 사용자가 최종 확인하세요.
+- 기준: {basis}
+
+{_context_block(ctx)}
+
+{_input_section(ctx)}## 개요
+
+- 일시: 확인 필요
+- 참석: 확인 필요
+
+## 논의 내용
+
+{_meeting_discussion_rows(sentences)}
+
+## 결정 사항
+
+{decision_lines}
+
+## 액션아이템
+
+| # | 할 일 | 담당 | 기한 |
+|---|------|------|------|
+{_meeting_action_table(actions)}
+
+## 일정 등록 제안
+
+자동 등록은 하지 않습니다. 필요한 항목만 확인 후 아래 명령을 직접 실행하세요.
+
+{_meeting_schedule_suggestions(actions)}
+"""
+    path = out_dir / "회의록.md"
+    atomic_write_text(path, body)
+    return [path]
+
+
 def _matlab_input_file(ctx: Dict[str, Any]) -> str:
     for f in (ctx.get("inputs") or {}).get("files", []):
         name = str(f.get("name", ""))
@@ -650,6 +777,7 @@ GENERATORS = {
     "browser_script": gen_browser_script,
     "mail_report": gen_mail_report,
     "matlab_script": gen_matlab_script,
+    "meeting_minutes": gen_meeting_minutes,
 }
 
 

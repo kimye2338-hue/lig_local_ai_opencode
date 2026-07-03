@@ -51,6 +51,7 @@ BENCHMARKS = [
     ("이 내용으로 PPT 만들어줘", "presentation_generation", "slide_outline"),
     ("웹페이지에서 메일 확인하고 분류 및 요약해줘", "web_mail_assistant", "mail_report"),
     ("크롬 브라우저 매크로 만들어줘", "browser_automation", "browser_script"),
+    ("회의록 정리해줘", "meeting_minutes", "meeting_minutes"),
     ("시험 데이터 후처리 매트랩 스크립트 만들어줘", "matlab_automation", "matlab_script"),
 ]
 
@@ -366,6 +367,13 @@ def main() -> None:
         {"from": "noreply@ad", "subject": "[광고] 하계 특가", "body": "특가 안내"},
         {"from": "연구소", "subject": "회의 일정 공지", "body": "금요일 10시 회의"},
     ], ensure_ascii=False), encoding="utf-8")
+    meeting_txt = tmp / "회의메모.txt"
+    meeting_txt.write_text(
+        "2026-07-04 설계 검토 회의. 참석: 김대리, 이과장.\n"
+        "모터 브라켓 치수 변경안을 논의했다.\n"
+        "결정: 브라켓 두께를 3mm 늘리기로 합의했다.\n"
+        "김대리 담당: 7월 10일까지 도면 수정하기로 했다.\n",
+        encoding="utf-8")
 
     ing = ingest_inputs([str(input_dir)])
     check("ingest scans a folder with Korean/space path",
@@ -484,7 +492,29 @@ def main() -> None:
     check("log analysis document reports error counts and actual error lines",
           "ERROR 2건" in gdoc4 and "vibration sensor timeout" in gdoc4)
 
-    # --- input-grounded scenario 5: CSV -> MATLAB post-processing script ---
+    # --- input-grounded scenario 5: meeting memo -> meeting minutes ---
+    task_g5m = "회의 내용 읽고 회의록 정리해줘"
+    plan_g5m = plan_task(task_g5m)
+    check("meeting task routes to meeting_minutes",
+          any(c["id"] == "meeting_minutes" for c in plan_g5m["capabilities"]),
+          str(plan_g5m["capabilities"]))
+    check("meeting task plans meeting_minutes artifact",
+          "meeting_minutes" in plan_g5m["artifact_kinds"], str(plan_g5m))
+    ing_meeting = ingest_inputs([str(meeting_txt)])
+    out_g5m = generate_artifacts(task_g5m, ["meeting_minutes"], out_dir=tmp / "ground5m",
+                                 context=build_artifact_context(task_g5m, plan_g5m, ing_meeting))
+    minutes = (tmp / "ground5m" / "회의록.md").read_text(encoding="utf-8")
+    check("meeting minutes passes quality with input",
+          out_g5m["quality"]["meeting_minutes"]["ok"] and out_g5m["input_grounded"],
+          str(out_g5m["quality"]["meeting_minutes"]))
+    check("meeting minutes extracts decision and action",
+          "브라켓 두께" in minutes and "도면 수정" in minutes and "김대리" in minutes,
+          minutes[:1200])
+    check("meeting minutes suggests schedule command without auto registration",
+          "agentops.py schedule add" in minutes and "자동 등록은 하지 않습니다" in minutes,
+          minutes[:1200])
+
+    # --- input-grounded scenario 6: CSV -> MATLAB post-processing script ---
     task_g6 = "시험 데이터 후처리 매트랩 스크립트 만들어줘"
     plan_g6 = plan_task(task_g6)
     check("MATLAB task routes to matlab_automation",
