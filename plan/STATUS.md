@@ -22,7 +22,7 @@
 | P13-01 | approval(승인 게이트) + audit(감사 로그) 모듈 | codex | — | ANY | APPROVED | plan/reports/P13-01-r1.md | plan/reviews/P13-01-r1.md |
 | P13-02 | `work` 오케스트레이터 subcommand E2E | codex | P13-01 | ANY | APPROVED | plan/reports/P13-02-r1.md | plan/reviews/P13-02-r1.md |
 | P14-01 | schedule store + 결정적 날짜 파서 | codex | — | ANY | APPROVED | plan/reports/P14-01-r1.md | plan/reviews/P14-01-r1.md |
-| P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | CHANGES-REQUESTED | plan/reports/P14-02-r1.md | plan/reviews/P14-02-r1.md |
+| P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | IN-PROGRESS | plan/reports/P14-02-r1.md | plan/reviews/P14-02-r1.md |
 | P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | BLOCKED | | |
 | P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | BLOCKED | | |
 | P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | BLOCKED | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P14-02 r2 IN-PROGRESS (Codex). reviews/P14-02-r1.md 필수 수정 반영 시작. 시작 HEAD: 413e714.
 
 - 2026-07-03 Fable 배치 리뷰 5차: **P11-01 APPROVED**(시나리오 10종 task 원문 일치, mock 자가검증 7 checks + SKIP 재현) → **P11-02 READY**. **P14-02 CHANGES-REQUESTED**(한 글자 요일 오탐 2건 실증: 제목 훼손 "금형→형"·"검토→검" + parse_due 오탐 "언제까지인지 모르는 일"→일요일 등록 — reviews/P14-02-r1.md). **P15-02 CHANGES-REQUESTED**(옵션 없는 close가 audit 미기록 — 1건, 소규모 — reviews/P15-02-r1.md). 재검증: 19개 테스트 파일 중 16개 exit 0 + schedule/excel CLI·어댑터 실동작 재현, Windows 전용 3개는 diff 무접촉 확인. Codex 다음 순서: **P14-02 r2 → P15-02 r2 → P11-02(LOCAL-LLM) → P16-01 → P18-02**.
 
