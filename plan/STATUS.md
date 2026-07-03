@@ -9,40 +9,42 @@
 | P00-01 | 환경 probe 실행/업로드 (probe/README.md) | **human** | — | 집+회사 | READY | | |
 | P00-02 | OpenCode 공식 문서 연동 조사 | **fable** | — | INTERNET | READY | | |
 | P09-01 | LLM provider 프로필/env 완전 오버라이드 | codex | — | ANY | APPROVED | plan/reports/P09-01-r2.md | plan/reviews/P09-01-r2.md |
-| P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | AWAITING-REVIEW | plan/reports/P09-02-r1.md | |
-| P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | BLOCKED | | |
+| P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | APPROVED | plan/reports/P09-02-r1.md | plan/reviews/P09-02-r1.md |
+| P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | READY | | |
 | P10-01 | git 히스토리 내부 hostname purge | fable | — | FABLE-ONLY | READY | | |
 | P11-01 | weak-model capability-floor 하네스 | codex | P09-03 | ANY | BLOCKED | | |
 | P11-02 | floor 실측 + 파서/프롬프트 보강 | codex | P11-01 | LOCAL-LLM | BLOCKED | | |
 | P12-01 | stdlib WebSocket 미니 클라이언트 | codex | — | ANY | APPROVED | plan/reports/P12-01-r1.md | plan/reviews/P12-01-r1.md |
-| P12-02 | 브라우저 CDP 어댑터 + chrome-debug.bat | codex | P12-01 | ANY | AWAITING-REVIEW | plan/reports/P12-02-r1.md | |
-| P12-03 | CDP 실측 + available 전환 | codex | P12-02 | CHROME | BLOCKED | | |
+| P12-02 | 브라우저 CDP 어댑터 + chrome-debug.bat | codex | P12-01 | ANY | APPROVED | plan/reports/P12-02-r1.md | plan/reviews/P12-02-r1.md |
+| P12-03 | CDP 실측 + available 전환 | codex | P12-02 | CHROME | READY | | |
 | P13-01 | approval(승인 게이트) + audit(감사 로그) 모듈 | codex | — | ANY | APPROVED | plan/reports/P13-01-r1.md | plan/reviews/P13-01-r1.md |
-| P13-02 | `work` 오케스트레이터 subcommand E2E | codex | P13-01 | ANY | AWAITING-REVIEW | plan/reports/P13-02-r1.md | |
-| P14-01 | schedule store + 결정적 날짜 파서 | codex | — | ANY | AWAITING-REVIEW | plan/reports/P14-01-r1.md | |
-| P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | BLOCKED | | |
+| P13-02 | `work` 오케스트레이터 subcommand E2E | codex | P13-01 | ANY | APPROVED | plan/reports/P13-02-r1.md | plan/reviews/P13-02-r1.md |
+| P14-01 | schedule store + 결정적 날짜 파서 | codex | — | ANY | APPROVED | plan/reports/P14-01-r1.md | plan/reviews/P14-01-r1.md |
+| P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | READY | | |
 | P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | BLOCKED | | |
 | P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | BLOCKED | | |
 | P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | BLOCKED | | |
-| P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | AWAITING-REVIEW | plan/reports/P15-01-r1.md | |
-| P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | BLOCKED | | |
+| P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | APPROVED | plan/reports/P15-01-r1.md | plan/reviews/P15-01-r1.md |
+| P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | READY | | |
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | BLOCKED | | |
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | BLOCKED | | |
-| P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | BLOCKED | | |
+| P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | READY | | |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | BLOCKED | | |
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | BLOCKED | | |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | BLOCKED | | |
-| P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | AWAITING-REVIEW | plan/reports/P17-01-r1.md | |
+| P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
 | P17-02 | 의존성 prefetch + SHA256 확정 | codex | P16-04 | INTERNET | BLOCKED | | |
 | P17-03 | 반입 번들 build + setup.bat + 체크리스트 | codex | P17-02 | ANY | BLOCKED | | |
 | P17-04 | 오프라인 설치 리허설 (네트워크 차단) | human+codex | P17-03 | HUMAN | BLOCKED | | |
-| P18-01 | secret 스캔 pre-commit 스크립트 | codex | — | ANY | AWAITING-REVIEW | plan/reports/P18-01-r1.md | |
-| P18-02 | RUNBOOK + audit 순환 + doctor 운영 섹션 | codex | P13-01 | ANY | BLOCKED | | |
+| P18-01 | secret 스캔 pre-commit 스크립트 | codex | — | ANY | APPROVED | plan/reports/P18-01-r1.md | plan/reviews/P18-01-r1.md |
+| P18-02 | RUNBOOK + audit 순환 + doctor 운영 섹션 | codex | P13-01 | ANY | READY | | |
 | P19-01 | 회사 파일럿 체크리스트/기록 양식 준비 | codex | P14-03, P15-02, P16-02 | ANY | BLOCKED | | |
 | P19-02 | 회사 파일럿 12종 실측 | human+fable | P19-01, P17-04 | COMPANY+HUMAN | BLOCKED | | |
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-03 Fable 배치 리뷰 2차: 7건 전부 APPROVED (P09-02, P12-02, P13-02, P14-01, P15-01, P17-01, P18-01) — 전 16 테스트 파일 440 checks 재검증, deviation 0. 신규 READY: P09-03, P12-03, P14-02, P15-02, P16-01, P18-02.
 
 - 2026-07-03 P18-01 AWAITING-REVIEW (Codex). 보고서: plan/reports/P18-01-r1.md. secret scan 포함 전체 16파일 440 checks 통과.
 - 2026-07-03 P18-01 IN-PROGRESS (Codex). 시작 HEAD: 3e51d5a.
