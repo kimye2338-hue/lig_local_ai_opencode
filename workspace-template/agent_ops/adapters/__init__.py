@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from . import browser_cdp
+from . import browser_cdp, excel_com
 
 # adapter id -> spec. Keys mirror the capability registry vocabulary so
 # doctor/plan can report generation and execution status side by side.
@@ -38,6 +38,7 @@ ADAPTERS: Dict[str, Dict[str, Any]] = {
         "available": False,
         "requires": ["MS Office 설치", "pywin32 또는 python-pptx/openpyxl (dependencies.json 'office-doc-wheels')"],
         "pending": "app validation pending: Office가 있는 PC에서 매크로/변환 실행 검증",
+        "execute": excel_com.execute,
     },
     "browser": {
         "description": "Chrome 실제 제어 (CDP/selenium/playwright)",
