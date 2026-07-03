@@ -677,6 +677,14 @@ def cmd_schedule(args):
     return 2
 
 
+def cmd_briefing(args):
+    from agent_ops.secretary import build_briefing
+    path, text = build_briefing()
+    print(text)
+    print(f"브리핑 저장: {path}")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="OpenCode AgentOps v3.1 Co-Growth Runtime")
     sub = parser.add_subparsers(dest="cmd")
@@ -709,6 +717,7 @@ def main(argv=None):
     sp = sched.add_parser("today"); sp.set_defaults(func=cmd_schedule)
     sp = sched.add_parser("done"); sp.add_argument("id"); sp.set_defaults(func=cmd_schedule)
     sp = sched.add_parser("remove"); sp.add_argument("id"); sp.add_argument("--yes", action="store_true"); sp.set_defaults(func=cmd_schedule)
+    sub.add_parser("briefing").set_defaults(func=cmd_briefing)
     p = sub.add_parser("safety-check"); p.add_argument("text", nargs="*"); p.set_defaults(func=cmd_safety_check)
     p = sub.add_parser("safe-write"); p.add_argument("target"); p.add_argument("content_file"); p.set_defaults(func=cmd_safe_write)
     args = parser.parse_args(argv)
