@@ -25,7 +25,7 @@
 | P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | APPROVED | plan/reports/P14-02-r2.md | plan/reviews/P14-02-r2.md |
 | P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | APPROVED | plan/reports/P14-03-r1.md | plan/reviews/P14-03-r1.md |
 | P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | APPROVED | plan/reports/P14-04-r2.md | plan/reviews/P14-04-r2.md |
-| P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | IN-PROGRESS | | |
+| P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | AWAITING-REVIEW | plan/reports/P14-05-r1.md | |
 | P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | APPROVED | plan/reports/P15-01-r1.md | plan/reviews/P15-01-r1.md |
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | APPROVED | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r2.md |
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | READY | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P14-05 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P14-05-r1.md. weekly_report capability + agentops weekly 초안 생성 추가, secretary 37 checks/capability bench 192 checks/전체 20개 테스트 파일 통과.
 
 - 2026-07-04 Fable 전체 점검 (사용자 요청): 보드 37건(APPROVED 21/READY 10/BLOCKED 6) 의존성 그래프 **정합**(잘못 열린 READY 0, BLOCKED 6건 모두 선행 미충족 확인). 현재 트리 **secret scan 통과**(누출 0 — 내부 hostname은 git *history*에만 존재=P10-01 범위). 조치: NEXT_ONSITE에 **Windows 회귀 전수 baseline** 항목 신설(리뷰가 리눅스라 agent_cli/encoding_paths/probes 3개를 독립 재현 못 함 — 파일럿 전 1회 Windows 전수 필요). 미해결 스레드 3건 명시 → ① **P10-01 hostname purge**: FABLE-ONLY·READY·보안, 그러나 history rewrite+force push라 **열린 PR #8에 영향** → 사용자 go 신호 후 실행(현재 미실행). ② **P11-02 floor 66.7%**: 약모델(7B) 천장 데이터일 뿐, 회사는 강모델+native tools 확정이라 파일럿 blocker 아님, 파서 보강은 NEXT_ONSITE 실측 입력으로 추적. ③ Windows baseline(위 조치로 편입). 신규 AWAITING-REVIEW 없음, 코드 변경 없음(문서/보드만).
 
