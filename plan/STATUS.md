@@ -15,25 +15,25 @@
 | P10-01 | git 히스토리 내부 hostname purge | fable | — | FABLE-ONLY | READY | | |
 | P11-A | lig_runtime native function calling(tools) 경로 | codex | P09-02 | ANY | APPROVED | plan/reports/P11-A-r1.md | plan/reviews/P11-A-r1.md |
 | P11-01 | weak-model capability-floor 하네스 | codex | P09-03, P11-A | ANY | APPROVED | plan/reports/P11-01-r1.md | plan/reviews/P11-01-r1.md |
-| P11-02 | floor 실측 + 파서/프롬프트 보강 | codex | P11-01 | LOCAL-LLM | AWAITING-REVIEW | plan/reports/P11-02-r1.md | |
+| P11-02 | floor 실측 + 파서/프롬프트 보강 | codex | P11-01 | LOCAL-LLM | APPROVED | plan/reports/P11-02-r1.md | plan/reviews/P11-02-r1.md |
 | P12-01 | stdlib WebSocket 미니 클라이언트 | codex | — | ANY | APPROVED | plan/reports/P12-01-r1.md | plan/reviews/P12-01-r1.md |
 | P12-02 | 브라우저 CDP 어댑터 + chrome-debug.bat | codex | P12-01 | ANY | APPROVED | plan/reports/P12-02-r1.md | plan/reviews/P12-02-r1.md |
 | P12-03 | CDP 실측 + available 전환 | codex | P12-02 | CHROME | APPROVED | plan/reports/P12-03-r1.md | plan/reviews/P12-03-r1.md |
 | P13-01 | approval(승인 게이트) + audit(감사 로그) 모듈 | codex | — | ANY | APPROVED | plan/reports/P13-01-r1.md | plan/reviews/P13-01-r1.md |
 | P13-02 | `work` 오케스트레이터 subcommand E2E | codex | P13-01 | ANY | APPROVED | plan/reports/P13-02-r1.md | plan/reviews/P13-02-r1.md |
 | P14-01 | schedule store + 결정적 날짜 파서 | codex | — | ANY | APPROVED | plan/reports/P14-01-r1.md | plan/reviews/P14-01-r1.md |
-| P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | AWAITING-REVIEW | plan/reports/P14-02-r2.md | plan/reviews/P14-02-r1.md |
-| P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | BLOCKED | | |
-| P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | BLOCKED | | |
-| P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | BLOCKED | | |
+| P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | APPROVED | plan/reports/P14-02-r2.md | plan/reviews/P14-02-r2.md |
+| P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | READY | | |
+| P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | READY | | |
+| P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | READY | | |
 | P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | APPROVED | plan/reports/P15-01-r1.md | plan/reviews/P15-01-r1.md |
-| P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | AWAITING-REVIEW | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r1.md |
-| P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | BLOCKED | | |
-| P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | BLOCKED | | |
-| P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | AWAITING-REVIEW | plan/reports/P16-01-r1.md | |
+| P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | APPROVED | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r2.md |
+| P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | READY | | |
+| P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | READY | | |
+| P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | CHANGES-REQUESTED | plan/reports/P16-01-r1.md | plan/reviews/P16-01-r1.md |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | BLOCKED | | |
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | BLOCKED | | |
-| P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | BLOCKED | | |
+| P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | READY | | |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
 | P17-02 | 의존성 prefetch + SHA256 확정 | codex | P16-04 | INTERNET | BLOCKED | | |
 | P17-03 | 반입 번들 build + setup.bat + 체크리스트 | codex | P17-02 | ANY | BLOCKED | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 Fable 배치 리뷰 6차: **P14-02 r2 APPROVED**(제목 훼손·기한 오탐 필수 2건 CLI 실측 해결 재현) → P14-03/P14-04/P14-05 READY. **P15-02 r2 APPROVED**(옵션 없는 close audit 기록 실측 확인) → P15-03/P15-04(EXCEL)/P16-04 READY. **P11-02 r1 APPROVED**(리포트 경로 mock/real 분리 P11-01 요구대로 반영, 프롬프트 2193B≤2.3KB — 단 floor 66.7%로 90% 목표 미달은 미해결 갭으로 이월, 재작업 아님). **P16-01 r1 CHANGES-REQUESTED**(키워드 `.m`이 `.md` substring 오라우팅 → 문서 요청이 matlab_script 스퓨리어스 생성, hard gate — reviews/P16-01-r1.md). 재검증: 19개 중 16개 exit 0, schedule/excel/matlab 실동작 재현, Windows 전용 3개 diff 무접촉. Codex 다음: **P16-01 r2 → P18-02 → (신규 READY들)**.
 
 - 2026-07-04 P16-01 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P16-01-r1.md. matlab_automation capability + matlab_script 생성/품질/입력 반영 추가, 전체 19개 테스트 파일 exit 0.
 
