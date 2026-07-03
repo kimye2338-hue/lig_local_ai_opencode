@@ -46,6 +46,7 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-03 계획 정비·약모델 대비 (설계 Fable): 워커 모델 교체(GPT-5→5.4 mini) 대비로 READY task 지시서를 실코드 기준으로 구체화 — **P11-A 전면 재작성**(이미 구현된 기능 표 명시, 남은 델타=id/tool_call_id 발급+tool_call_mode 진단, 코드 블록 제공), P15-02(실증 COM 시퀀스+execute 계약 표), P14-02(CLI 계약), P16-01(.m 골격), P18-02(RUNBOOK 7행 표+회전 코드), P15-03(GetActiveObject+자식 프로세스 격리 패턴), P16-02(UTF-16LE 디코드+exit 53 처리). worker-loop에 규칙 2개 추가: 지시서 코드 그대로 사용/이미 구현됨 재구현 금지, auto-advance 연속 3개 한도. READY 대기열 불변: P11-A → P14-02 → P15-02 → P16-01 → P18-02.
 - 2026-07-03 company_check v2 시나리오 실측 (사용자): **① LLM native tool 왕복 E2E 성공(최종 답변이 파일 내용 정확 반영)** + ② Excel 매크로 주입·실행 + ③ MATLAB 계산 + ④ HWP 생성·저장 성공. ⑤ Outlook(새 인스턴스 hang→GetActiveObject로 지침 반영) ⑥ AutoCAD(/i 필요·UTF-16 출력, 지침 반영) 원인 특정. P11-A/P15-02/P15-03/P16-02 task와 MASTER_PLAN 리스크 갱신. 결과: probe/results/company_check_20260703_r2_scenarios.md.
 - 2026-07-03 P09-03 r2 AWAITING-REVIEW (Codex). 보고서: plan/reports/P09-03-r2.md. unknown-tool 시나리오 복원, 서버 off SKIP 및 전체 17 테스트 파일 447 checks/1 skip 통과.
 - 2026-07-03 P09-03 r2 IN-PROGRESS (Codex). reviews/P09-03-r1.md 필수 수정 반영 시작. 시작 HEAD: 61b724f.
