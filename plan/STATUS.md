@@ -30,9 +30,9 @@
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | APPROVED | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r2.md |
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | READY | | |
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | READY | | |
-| P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | AWAITING-REVIEW | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r1.md |
-| P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | BLOCKED | | |
-| P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | BLOCKED | | |
+| P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
+| P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | READY | | |
+| P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | READY | | |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | READY | | |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
 | P17-02 | 의존성 prefetch + SHA256 확정 | codex | P16-04 | INTERNET | BLOCKED | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 Fable 리뷰 7차: **P16-01 r2 APPROVED**(키워드 `.m`→`.m 스크립트`/`.m 파일` 경계화, `.md`/`.m` 7개 케이스 실측으로 오라우팅 재발 없음 + 양성 라우팅 유지, negative check 2개 회귀화 — reviews/P16-01-r2.md) → P16-02/P16-03 READY. 재검증: 19개 중 16개 exit 0(bench 171=173−openpyxl 2), Windows 전용 3개 diff 무접촉. 현재 AWAITING-REVIEW 없음. Codex 다음 READY: P18-02, P14-03~05, P15-03/04, P16-02~04.
 
 - 2026-07-04 Fable 배치 리뷰 6차: **P14-02 r2 APPROVED**(제목 훼손·기한 오탐 필수 2건 CLI 실측 해결 재현) → P14-03/P14-04/P14-05 READY. **P15-02 r2 APPROVED**(옵션 없는 close audit 기록 실측 확인) → P15-03/P15-04(EXCEL)/P16-04 READY. **P11-02 r1 APPROVED**(리포트 경로 mock/real 분리 P11-01 요구대로 반영, 프롬프트 2193B≤2.3KB — 단 floor 66.7%로 90% 목표 미달은 미해결 갭으로 이월, 재작업 아님). **P16-01 r1 CHANGES-REQUESTED**(키워드 `.m`이 `.md` substring 오라우팅 → 문서 요청이 matlab_script 스퓨리어스 생성, hard gate — reviews/P16-01-r1.md). 재검증: 19개 중 16개 exit 0, schedule/excel/matlab 실동작 재현, Windows 전용 3개 diff 무접촉. Codex 다음: **P16-01 r2 → P18-02 → (신규 READY들)**.
 
