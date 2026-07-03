@@ -24,7 +24,7 @@
 | P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | BLOCKED | | |
 | P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | BLOCKED | | |
 | P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | BLOCKED | | |
-| P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | IN-PROGRESS | | |
+| P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | AWAITING-REVIEW | plan/reports/P15-01-r1.md | |
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | BLOCKED | | |
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | BLOCKED | | |
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | BLOCKED | | |
@@ -44,6 +44,7 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-03 P15-01 AWAITING-REVIEW (Codex). 보고서: plan/reports/P15-01-r1.md. Office 2016 quality 규칙 포함 전체 15파일 427 checks 통과.
 - 2026-07-03 P15-01 IN-PROGRESS (Codex). 시작 HEAD: 8baf6ca.
 - 2026-07-03 P14-01 AWAITING-REVIEW (Codex). 보고서: plan/reports/P14-01-r1.md. 신규 schedule store 테스트 포함 전체 15파일 421 checks 통과.
 - 2026-07-03 P14-01 IN-PROGRESS (Codex). 시작 HEAD: e3021a0.
