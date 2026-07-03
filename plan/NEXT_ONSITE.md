@@ -40,6 +40,21 @@ OpenCode 기동 시간 / 앱·정책 전수). 사용법은 `probe/COMPANY_CHECK.
    `%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\runtime-last.json` (secret-free)
    → repo probe/results/ 커밋 또는 채팅 전달.
 
+## 회귀 전수 Windows baseline (파일럿 전 1회 — 리뷰가 대체 못 하는 검증)
+
+리뷰(Fable)는 리눅스 환경이라 `test_agent_cli.py`(run-agent.bat)·`test_encoding_paths.py`
+(cmd.exe/CRLF/chcp)·`test_probes.py`(%USERPROFILE% 마스킹) 3개를 **독립 재현하지 못한다**
+— 지금까지 워커의 Windows 실행 보고 + diff 무접촉으로 갈음해 왔다. P17-04(오프라인
+리허설)/P19(파일럿) 전에 **한 번은** Windows에서 전수 1회를 돌려 단일 green baseline을 남긴다:
+
+```bat
+cd /d %USERPROFILE%\OpenCodeLIG\workspace
+for %f in (tests\test_*.py) do py -3.11 %f
+```
+
+각 파일 마지막 줄(“ALL n …” / SKIP)만 모아 `probe/results/`에 커밋하면, 크로스파일
+상호작용까지 포함한 독립 baseline이 확보된다.
+
 ## 실패해도 가치 있는 것
 
 - 4·5번이 실패하면 그 diagnostics가 바로 P11-02(파서 보강)의 실측 입력이다 —

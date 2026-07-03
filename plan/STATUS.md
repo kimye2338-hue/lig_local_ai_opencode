@@ -46,6 +46,8 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-04 Fable 전체 점검 (사용자 요청): 보드 37건(APPROVED 21/READY 10/BLOCKED 6) 의존성 그래프 **정합**(잘못 열린 READY 0, BLOCKED 6건 모두 선행 미충족 확인). 현재 트리 **secret scan 통과**(누출 0 — 내부 hostname은 git *history*에만 존재=P10-01 범위). 조치: NEXT_ONSITE에 **Windows 회귀 전수 baseline** 항목 신설(리뷰가 리눅스라 agent_cli/encoding_paths/probes 3개를 독립 재현 못 함 — 파일럿 전 1회 Windows 전수 필요). 미해결 스레드 3건 명시 → ① **P10-01 hostname purge**: FABLE-ONLY·READY·보안, 그러나 history rewrite+force push라 **열린 PR #8에 영향** → 사용자 go 신호 후 실행(현재 미실행). ② **P11-02 floor 66.7%**: 약모델(7B) 천장 데이터일 뿐, 회사는 강모델+native tools 확정이라 파일럿 blocker 아님, 파서 보강은 NEXT_ONSITE 실측 입력으로 추적. ③ Windows baseline(위 조치로 편입). 신규 AWAITING-REVIEW 없음, 코드 변경 없음(문서/보드만).
+
 - 2026-07-04 Fable 리뷰 9차: **P14-04 r2 APPROVED**(리뷰가 검증 제시한 `_extract_owner`+`meeting minutes` 경계화를 워커가 그대로 채택, negative/정확성 bench 2개 회귀화. 실측: minutes 시간표현 2건 라우팅 차단+양성 3건 유지, 회의록 담당=`김대리`·`| 7월 |` 없음 — reviews/P14-04-r2.md). 권고: todo `까지` 접두 잔여 1줄 정리(검증 코드 제시, 승인 무관). 재검증: 19개 중 17개 exit 0(bench 184=186−openpyxl 2), Windows 전용 3개 diff 무접촉. 현재 AWAITING-REVIEW 없음. Codex 다음 READY: P18-02, P14-05, P15-03/04, P16-02~04.
 
 - 2026-07-04 리뷰 프로세스 개정 (사용자 피드백 반영, Fable): 리뷰는 "안 되는 것"만 잡지 말고 **되는 방법(검증된 수정 코드)+피드백+작업계획 수정내용**을 항상 포함한다. review-template.md에 3개 섹션 신설, delegate-to-codex 스킬에 규칙 5 추가. P14-04-r1 소급 보강(검증된 `_extract_owner`/키워드 경계화 코드 + 피드백 + P14-04 task "리뷰 반영" 절).
