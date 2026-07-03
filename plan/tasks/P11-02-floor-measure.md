@@ -12,6 +12,14 @@
 집 PC 로컬 Qwen으로 floor를 실측하고, 실패 유형별로 보강해 7B 성공률 ≥90%를 노린다.
 미달이면 **수치 그대로** 보고 (조작 금지).
 
+> **리뷰 반영 (P11-01-r1)**: mock 자가검증이 정본 `capability_floor.md`를 덮어쓴다.
+> 이 작업의 첫 커밋에서 실측 리포트 경로를 `capability_floor_<모델명>.md`로 분리하고
+> mock 자가검증은 정본 대신 tmp(또는 `capability_floor_mock.md`)에 쓰도록
+> `test_capability_floor.py`를 고쳐라 (doctor 필드는 실측 파일 우선으로 갱신).
+> P11-01의 native 비율 0/30은 runtime-last.json이 최종 턴 기준이라 생긴 값 —
+> 해석 시 이 점을 감안하고, 필요하면 집계 필드를 per-turn으로 바꾸지 말고
+> 리포트에 주석으로만 남겨라.
+
 ## 작업 항목
 1. `py -3.11 tests\test_capability_floor.py` 실측 (7b, 가능하면 3b도) → 리포트 커밋.
 2. 실패 유형별 보강 (우선순위 순, 각각 별 커밋):
