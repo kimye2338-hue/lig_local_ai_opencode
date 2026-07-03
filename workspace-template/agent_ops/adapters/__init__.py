@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from . import browser_cdp
+
 # adapter id -> spec. Keys mirror the capability registry vocabulary so
 # doctor/plan can report generation and execution status side by side.
 ADAPTERS: Dict[str, Dict[str, Any]] = {
@@ -44,6 +46,7 @@ ADAPTERS: Dict[str, Dict[str, Any]] = {
         "available": False,
         "requires": ["Chrome", "CDP는 추가 설치 불필요; selenium/playwright는 dependencies.json 'browser-automation-wheels'"],
         "pending": "real browser validation pending; 사내 시스템 로그인은 company validation pending",
+        "execute": browser_cdp.execute,
     },
     "hwp": {
         "description": "한글(HWP) 문서 자동화",
