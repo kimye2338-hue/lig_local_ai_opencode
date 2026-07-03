@@ -4,7 +4,14 @@
 > 404 원인 확정→해소). 이 문서는 **방문 1회의 가치를 극대화**하기 위해 항상 최신
 > "회사에서 할 일" 목록을 유지한다. 완료 항목은 지우고 이력에 한 줄 남긴다.
 
-## 준비물 (집에서)
+## ★ 가장 빠른 길: 계측기 하나만 반입
+
+`probe/company_check.py` **파일 하나**를 회사 PC로 가져가 `py -3.11 company_check.py`
+실행 → 생기는 `company_check_result.md`/`.json`을 전달하면, 아래 목록의 측정 대부분이
+한 번에 끝난다 (gateway function calling / Excel VBProject / MATLAB·Chrome 실동작 /
+OpenCode 기동 시간 / 앱·정책 전수). 사용법은 `probe/COMPANY_CHECK.md`.
+
+## 준비물 (집에서) — 전체 재설치까지 할 경우
 
 - 최신 CI 아티팩트 `LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE` (**PR #8 브랜치 런**에서
   다운로드 — main 아님!) 또는 변경 파일만 USB 반입.
