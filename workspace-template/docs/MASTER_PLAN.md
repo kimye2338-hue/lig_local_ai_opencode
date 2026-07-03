@@ -502,7 +502,7 @@ Security cleanup status: / New HEAD commit: / Next exact command:
 | 리스크 | 가능성 | 대비 (반영 위치) |
 |--------|--------|-----------------|
 | gateway 스펙 변경 | 중 | env 완전 오버라이드(P9) — 코드 수정 없이 흡수 |
-| **gateway 라우트 404 (실측 2026-07-03)** | **원인 확정·수정 반영** | 라우트에 `/gateway/` 접두 누락이 원인 (2차 실측: 80포트 Apache가 404) — 기본값 수정 완료, 200 응답 확인은 회사 재실측 대기 (probe/results/probe_gateway_company_20260703_r2.md) |
+| **gateway 라우트 404** | **해소 — 3라우트 200 (실측 3차)** | `/gateway/` 접두 반영 후 EXAONE coding/chat + Qwen fallback 전부 200. gateway 연결·기본 응답은 company validated. tool-call 실동작은 P11/P19 실측 대기 (probe/results/probe_gateway_company_20260703_r3.md) |
 | VBProject COM 차단 | ~~높음~~ **해소(실측)** | 회사 Excel AccessVBOM=1 + 정책 잠금 없음 → P15-02는 자동 주입이 1차 경로 (probe/results/probe_env_company_20260703.md) |
 | AutoCAD accoreconsole 미발견 | **해소(실측)** | `C:\AutoCAD 2019\accoreconsole.exe` 존재 확인 (Mechanical 2019) — P16-02 배치 자동화 경로 확정 |
 | EXAONE tool-call 형식 특이 | 중 | P19 1일차 실측+파서 보강 절차, Qwen3.6 fallback 자동 |
