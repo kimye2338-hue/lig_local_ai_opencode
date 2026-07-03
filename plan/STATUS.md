@@ -13,7 +13,7 @@
 | P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | APPROVED | plan/reports/P09-02-r1.md | plan/reviews/P09-02-r1.md |
 | P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | AWAITING-REVIEW | plan/reports/P09-03-r2.md | plan/reviews/P09-03-r1.md |
 | P10-01 | git 히스토리 내부 hostname purge | fable | — | FABLE-ONLY | READY | | |
-| P11-A | lig_runtime native function calling(tools) 경로 | codex | P09-02 | ANY | IN-PROGRESS | | |
+| P11-A | lig_runtime native function calling(tools) 경로 | codex | P09-02 | ANY | AWAITING-REVIEW | plan/reports/P11-A-r1.md | |
 | P11-01 | weak-model capability-floor 하네스 | codex | P09-03, P11-A | ANY | BLOCKED | | |
 | P11-02 | floor 실측 + 파서/프롬프트 보강 | codex | P11-01 | LOCAL-LLM | BLOCKED | | |
 | P12-01 | stdlib WebSocket 미니 클라이언트 | codex | — | ANY | APPROVED | plan/reports/P12-01-r1.md | plan/reviews/P12-01-r1.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-03 P11-A r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P11-A-r1.md. native tool-call id/tool_call_id 대응 + tool_call_mode 진단, 전체 10개 회귀 통과.
 
 - 2026-07-03 P11-A IN-PROGRESS (Codex). 시작 HEAD: 084366c.
 
