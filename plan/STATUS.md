@@ -11,7 +11,7 @@
 | P00-03 | 회사 real-mode 실측 팩 (NEXT_ONSITE.md) | **human** | — | COMPANY | READY | | |
 | P09-01 | LLM provider 프로필/env 완전 오버라이드 | codex | — | ANY | APPROVED | plan/reports/P09-01-r2.md | plan/reviews/P09-01-r2.md |
 | P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | APPROVED | plan/reports/P09-02-r1.md | plan/reviews/P09-02-r1.md |
-| P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | IN-PROGRESS | plan/reports/P09-03-r1.md | plan/reviews/P09-03-r1.md |
+| P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | AWAITING-REVIEW | plan/reports/P09-03-r2.md | plan/reviews/P09-03-r1.md |
 | P10-01 | git 히스토리 내부 hostname purge | fable | — | FABLE-ONLY | READY | | |
 | P11-A | lig_runtime native function calling(tools) 경로 | codex | P09-02 | ANY | READY | | |
 | P11-01 | weak-model capability-floor 하네스 | codex | P09-03, P11-A | ANY | BLOCKED | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-03 P09-03 r2 AWAITING-REVIEW (Codex). 보고서: plan/reports/P09-03-r2.md. unknown-tool 시나리오 복원, 서버 off SKIP 및 전체 17 테스트 파일 447 checks/1 skip 통과.
 
 - 2026-07-03 P09-03 r2 IN-PROGRESS (Codex). reviews/P09-03-r1.md 필수 수정 반영 시작. 시작 HEAD: 61b724f.
 
