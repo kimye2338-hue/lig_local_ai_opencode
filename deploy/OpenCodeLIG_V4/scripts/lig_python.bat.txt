@@ -1,0 +1,48 @@
+@echo off
+rem ==========================================================================
+rem lig_python.bat - locate a WORKING Python 3 and set LIG_PY for the caller.
+rem Order: LIG_PYTHON_EXE env -> python (PATH) -> py -3.11 -> py -3 ->
+rem        common per-user install locations. Each candidate is VERIFIED by
+rem        actually running it (the Microsoft Store python.exe alias fails
+rem        this check, so it is skipped automatically).
+rem No setlocal on purpose: LIG_PY must remain visible to the caller.
+rem ==========================================================================
+set "LIG_PY="
+
+if not defined LIG_PYTHON_EXE goto TRY_PATH
+if not exist "%LIG_PYTHON_EXE%" goto TRY_PATH
+"%LIG_PYTHON_EXE%" -c "import sys" >nul 2>nul && set "LIG_PY="%LIG_PYTHON_EXE%""
+if defined LIG_PY goto DONE
+
+:TRY_PATH
+python -c "import sys" >nul 2>nul && set "LIG_PY=python"
+if defined LIG_PY goto DONE
+py -3.11 -c "import sys" >nul 2>nul && set "LIG_PY=py -3.11"
+if defined LIG_PY goto DONE
+py -3 -c "import sys" >nul 2>nul && set "LIG_PY=py -3"
+if defined LIG_PY goto DONE
+
+for %%P in (
+  "%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+  "%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+  "%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
+  "%LOCALAPPDATA%\Programs\Python\Python310\python.exe"
+  "C:\Python313\python.exe"
+  "C:\Python312\python.exe"
+  "C:\Python311\python.exe"
+) do (
+  if not defined LIG_PY if exist "%%~P" (
+    "%%~P" -c "import sys" >nul 2>nul && set "LIG_PY="%%~P""
+  )
+)
+if defined LIG_PY goto DONE
+
+echo [문제] 사용할 수 있는 Python 3 을 찾지 못했습니다.
+echo [해결] 1. Python 이 설치돼 있다면, CMD 창에서 아래처럼 위치를 지정 후 다시 실행:
+echo           set LIG_PYTHON_EXE=C:\경로\python.exe
+echo        2. 설치가 안 돼 있다면 Python 3.11 설치 시
+echo           "Add python.exe to PATH" 를 체크하고 설치 후 다시 실행하세요.
+exit /b 9
+
+:DONE
+exit /b 0

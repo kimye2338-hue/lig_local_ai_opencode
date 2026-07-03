@@ -1,0 +1,43 @@
+# -*- coding: utf-8 -*-
+# lig_apply_config.py (V4) - (re)write opencode.proxy.json with automatic
+# backup and PROVE by read-back that instructions/baseURL/model are correct.
+# The config contains NO secrets (it points at the local proxy only), so this
+# works even before SET_LIG_SECRET.bat has been run. Does not launch anything.
+import json
+import sys
+
+import lig_common as C
+
+
+def main():
+    C.ensure_dirs()
+    C.load_secrets()
+    C.seed_fileops_if_missing()
+    C.write_config(backup=True)
+
+    back = json.loads(C.CFG.read_text(encoding="utf-8"))
+    base = back["provider"]["lig-proxy"]["options"]["baseURL"]
+    print("[OK] wrote          :", C.CFG)
+    print("[OK] baseURL        :", base)
+    print("[OK] model          :", back.get("model"))
+    print("[OK] instructions   :", back.get("instructions"))
+    problems = []
+    if base != C.PROXY_BASE:
+        problems.append("baseURL != %s" % C.PROXY_BASE)
+    if back.get("model") != C.PROVIDER_MODEL:
+        problems.append("model != %s" % C.PROVIDER_MODEL)
+    if "AGENTS_FILEOPS.md" not in (back.get("instructions") or []):
+        problems.append("AGENTS_FILEOPS.md missing from instructions")
+    if problems:
+        print("[ERROR] " + "; ".join(problems))
+        return 1
+    if not C.secrets_ok():
+        print("[NOTE] secrets not configured yet - run SET_LIG_SECRET.bat once")
+        print("       before starting the proxy/launcher.")
+    print("")
+    print("Config OK. Daily start: RUN_OPENCODE_LIG.bat   Diagnose: DIAG_OPENCODE_LIG.bat")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

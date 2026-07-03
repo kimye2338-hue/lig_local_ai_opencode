@@ -1,0 +1,25 @@
+@echo off
+rem ==========================================================================
+rem RUN_OPENCODE_LIG.bat (V4) - THE daily launcher.
+rem Mode-aware: reads OpenCodeLIG_USERDATA\state\startup_mode.txt written by
+rem DIAG_OPENCODE_LIG.bat (defaults to SAFE PURE until diag proves normal ok).
+rem ASCII/CMD only, no PowerShell.
+rem ==========================================================================
+if "%~1"=="__MAX" goto MAIN
+start "OpenCodeLIG" /max cmd /c "%~f0" __MAX
+exit /b
+
+:MAIN
+chcp 65001 >nul
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
+call "%USERPROFILE%\OpenCodeLIG\scripts\lig_python.bat"
+if not defined LIG_PY (pause & exit /b 9)
+%LIG_PY% "%USERPROFILE%\OpenCodeLIG\scripts\lig_launch.py"
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" (
+  echo.
+  echo [종료코드 %RC%] 화면의 [문제]/[해결] 안내를 따라 주세요.
+  pause
+)
+exit /b %RC%

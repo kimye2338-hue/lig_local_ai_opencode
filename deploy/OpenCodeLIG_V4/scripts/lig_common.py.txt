@@ -1,0 +1,361 @@
+# -*- coding: utf-8 -*-
+# lig_common.py (V4) - SINGLE SOURCE OF TRUTH for OpenCodeLIG.
+# All paths, environment building, secret loading, config generation, proxy
+# health/start, and safe subprocess helpers live here. lig_launch.py,
+# lig_apply_config.py and lig_diag.py import this module. stdlib only.
+#
+# Secrets: NEVER hardcoded here. Loaded from %USERPROFILE%\OpenCodeLIG\secrets\
+# lig_local.env (created once by SET_LIG_SECRET.bat, delivered separately).
+# Environment variables that are already set take precedence over the file.
+import datetime
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import time
+import urllib.request
+
+# ---------------------------------------------------------------- paths
+HOME = pathlib.Path(os.environ.get("USERPROFILE", str(pathlib.Path.home())))
+ROOT = HOME / "OpenCodeLIG"
+WS = ROOT / "workspace"
+BIN = ROOT / "bin"
+EXE = BIN / "opencode.exe"
+PROXY_PY = ROOT / "proxy" / "lig_toolcall_proxy.py"
+LOGS = ROOT / "logs"
+SECRET_FILE = ROOT / "secrets" / "lig_local.env"
+
+USERDATA = HOME / "OpenCodeLIG_USERDATA"
+CFGDIR = USERDATA / "opencode_config"
+CFG = CFGDIR / "opencode.proxy.json"
+DIAGDIR = USERDATA / "diagnostics"
+BACKUPS = USERDATA / "backups"
+STATEDIR = USERDATA / "state"
+MODE_FILE = STATEDIR / "startup_mode.txt"
+
+HOST = "127.0.0.1"
+PORT = "8765"
+PROXY_BASE = "http://%s:%s/v1" % (HOST, PORT)
+MODEL_ID = "ai_infra_llm_api"
+PROVIDER_MODEL = "lig-proxy/" + MODEL_ID
+EXPECTED_IDENTITY = "LIG generic-toolcall-rescue-v2"
+EXPECTED_REV = "v3"  # V4 package ships proxy rev v3; older proxies have no rev
+CLI_FLAGS_FILE = STATEDIR / "cli_flags.json"
+
+# Registry fail-fast: on the isolated network any npm/bun registry fetch can
+# only hang until TCP timeout (~45s). Pointing it at a closed local port makes
+# hidden fetches fail instantly instead. Harmless when nothing fetches.
+FAILFAST_REGISTRY = "http://127.0.0.1:9"
+
+INSTRUCTION_FILES = ["AGENTS.md", "AGENTS_FILEOPS.md", "AGENTS_SESSION_START.md"]
+
+
+def ensure_dirs():
+    for d in [WS, BIN, LOGS, ROOT / "proxy", ROOT / "scripts", ROOT / "docs",
+              ROOT / "secrets", CFGDIR, DIAGDIR, BACKUPS, STATEDIR,
+              USERDATA / "opencode_data", USERDATA / "opencode_state",
+              USERDATA / "opencode_cache",
+              WS / "memory", WS / "checkpoints", WS / "skills"]:
+        d.mkdir(parents=True, exist_ok=True)
+
+
+# ---------------------------------------------------------------- secrets
+def load_secrets():
+    """Load KEY=VALUE lines from lig_local.env into os.environ (no overwrite)."""
+    loaded = []
+    try:
+        for line in SECRET_FILE.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k, v = k.strip(), v.strip()
+            if k and k not in os.environ:
+                os.environ[k] = v
+                loaded.append(k)
+    except OSError:
+        pass
+    return loaded
+
+
+def secrets_ok():
+    return bool(os.environ.get("LIG_PROXY_CHAT_UPSTREAM")) and bool(os.environ.get("LIG_API_KEY"))
+
+
+def secrets_help():
+    return ("[ERROR] LIG secrets not configured.\n"
+            "  Missing: %s\n"
+            "  Fix    : run SET_LIG_SECRET.bat once (provided separately, NOT in git).\n"
+            "  It writes: %s" % (
+                ", ".join(k for k in ("LIG_PROXY_CHAT_UPSTREAM", "LIG_API_KEY")
+                          if not os.environ.get(k)) or "-",
+                SECRET_FILE))
+
+
+# ---------------------------------------------------------------- environment
+def build_env(registry_failfast=True):
+    """One environment for launcher, diagnostics and headless runs alike."""
+    env = os.environ.copy()
+    env.update({
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8",
+        "OPENCODE_DISABLE_MODELS_FETCH": "1",
+        "OPENCODE_CONFIG": str(CFG),
+        "OPENCODE_USERDATA": str(USERDATA),
+        "XDG_CONFIG_HOME": str(CFGDIR),
+        "XDG_DATA_HOME": str(USERDATA / "opencode_data"),
+        "XDG_STATE_HOME": str(USERDATA / "opencode_state"),
+        "XDG_CACHE_HOME": str(USERDATA / "opencode_cache"),
+        "AGENTOPS_HOME": str(WS),
+        # keep localhost traffic away from any corporate proxy settings
+        "NO_PROXY": "127.0.0.1,localhost",
+        # proxy runtime settings (secrets already merged into os.environ)
+        "LIG_PROXY_HOST": HOST,
+        "LIG_PROXY_PORT": PORT,
+        "LIG_LOG_DIR": str(LOGS),
+        "LIG_PROXY_MODEL": MODEL_ID,
+        "LIG_PROXY_TEMPERATURE": os.environ.get("LIG_PROXY_TEMPERATURE", "0"),
+        "LIG_PROXY_TOP_P": os.environ.get("LIG_PROXY_TOP_P", "1"),
+    })
+    if registry_failfast:
+        env["NPM_CONFIG_REGISTRY"] = FAILFAST_REGISTRY
+    else:
+        env.pop("NPM_CONFIG_REGISTRY", None)
+    return env
+
+
+# ---------------------------------------------------------------- mode state
+def get_mode():
+    try:
+        first = MODE_FILE.read_text(encoding="utf-8").splitlines()[0].strip().lower()
+        if first in ("normal", "pure"):
+            return first
+    except (OSError, IndexError):
+        pass
+    return "pure"  # safe default until a diagnostic proves normal is fast
+
+
+def set_mode(mode, reason=""):
+    STATEDIR.mkdir(parents=True, exist_ok=True)
+    MODE_FILE.write_text("%s\n# set %s\n# reason: %s\n" % (
+        mode, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), reason),
+        encoding="utf-8")
+
+
+# ---------------------------------------------------------------- config
+def build_config():
+    instructions = [n for n in INSTRUCTION_FILES if (WS / n).exists()]
+    if "AGENTS_FILEOPS.md" not in instructions:
+        instructions.append("AGENTS_FILEOPS.md")
+    return {
+        "$schema": "https://opencode.ai/config.json",
+        "autoupdate": False, "share": "disabled", "shell": "cmd.exe",
+        "instructions": instructions,
+        "provider": {"lig-proxy": {
+            "npm": "@ai-sdk/openai-compatible", "name": "LIG Local Tool Proxy",
+            "options": {"baseURL": PROXY_BASE, "apiKey": "local-proxy",
+                        "timeout": 180000, "chunkTimeout": 90000},
+            "models": {MODEL_ID: {"name": "[proxy] LIG tool-call bridge",
+                                  "limit": {"context": 32768, "output": 4096}}}}},
+        "model": PROVIDER_MODEL, "small_model": PROVIDER_MODEL,
+        "enabled_providers": ["lig-proxy"],
+        "permission": {
+            "read": "allow", "grep": "allow", "glob": "allow", "lsp": "allow",
+            "todowrite": "allow", "skill": "allow", "edit": "allow",
+            "question": "ask", "webfetch": "deny", "websearch": "deny",
+            "external_directory": "ask", "doom_loop": "deny",
+            "bash": {"*": "allow", "rm -rf *": "deny", "rm -fr *": "deny",
+                     "rm -r *": "deny", "del /f *": "deny", "del /q *": "deny",
+                     "del /s *": "deny", "rmdir /s *": "deny", "rd /s *": "deny",
+                     "format *": "deny", "*EncodedCommand*": "deny",
+                     "*Invoke-Expression*": "deny",
+                     "git push *": "ask", "git reset --hard *": "ask"}},
+        "compaction": {"auto": True, "prune": False, "reserved": 8000},
+        "watcher": {"ignore": ["*.pyc", "__pycache__/**", ".git/**", "*.log",
+                               "node_modules/**"]},
+    }
+
+
+def write_config(backup=True):
+    ensure_dirs()
+    if backup and CFG.exists():
+        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        (BACKUPS / ("opencode.proxy.%s.json" % stamp)).write_text(
+            CFG.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+    cfg = build_config()
+    CFG.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return cfg
+
+
+def seed_fileops_if_missing():
+    """Minimal fallback so `instructions` never references a missing file."""
+    fileops = WS / "AGENTS_FILEOPS.md"
+    if not fileops.exists():
+        fileops.write_text(
+            "# File operation policy\n\n"
+            "- To create or modify a file, ALWAYS use the write or edit tool.\n"
+            "- NEVER use the bash tool with echo/cat/printf/heredoc to create files.\n"
+            "- Keep the EXACT file path the user gave; do not rename it.\n"
+            "- After writing, reply with ONLY the file path and a 3-line summary.\n"
+            "- Never paste the full file contents into the chat.\n",
+            encoding="utf-8")
+    return fileops
+
+
+# ---------------------------------------------------------------- proxy
+def proxy_health(timeout=3):
+    """Full /health check. Returns a dict:
+      reachable  - port answered 200
+      identity   - "proxy" field
+      rev        - "rev" field ("" on pre-V4 proxies)
+      upstream_configured - bool ("" -> False on pre-V4 proxies)
+      is_v4      - identity AND rev match this package (strict check;
+                   NEVER trust the legacy identity string alone)
+    """
+    h = {"reachable": False, "identity": "unreachable", "rev": "",
+         "upstream_configured": False, "is_v4": False, "raw": ""}
+    try:
+        with urllib.request.urlopen("http://%s:%s/health" % (HOST, PORT), timeout=timeout) as r:
+            h["raw"] = r.read(500).decode("utf-8", "replace")
+            h["reachable"] = r.status == 200
+    except Exception as exc:
+        h["raw"] = repr(exc)
+        return h
+    try:
+        j = json.loads(h["raw"])
+        h["identity"] = j.get("proxy", "unknown")
+        h["rev"] = j.get("rev", "")
+        h["upstream_configured"] = bool(j.get("upstream_configured"))
+    except ValueError:
+        h["identity"] = "not-json"
+    h["is_v4"] = (h["identity"] == EXPECTED_IDENTITY and h["rev"] == EXPECTED_REV)
+    return h
+
+
+def shutdown_proxy(timeout=3):
+    """Ask a V4 proxy to exit via POST /shutdown. Older proxies ignore this."""
+    try:
+        req = urllib.request.Request("http://%s:%s/shutdown" % (HOST, PORT),
+                                     data=b"{}", method="POST",
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def start_proxy(env=None, wait=30):
+    """Ensure the V4 proxy is running. Returns (status, health_dict) where
+    status is one of: "ok", "stale" (old proxy holds the port), "failed"."""
+    h = proxy_health()
+    if h["reachable"] and h["is_v4"]:
+        return "ok", h
+    if h["reachable"] and not h["is_v4"]:
+        # a V4-but-outdated proxy honors /shutdown; truly old ones do not
+        if shutdown_proxy():
+            time.sleep(1.5)
+            h = proxy_health()
+        if h["reachable"] and not h["is_v4"]:
+            return "stale", h
+    if not PROXY_PY.exists():
+        h["raw"] = "proxy script missing: %s" % PROXY_PY
+        return "failed", h
+    env = env or build_env()
+    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) if os.name == "nt" else 0
+    subprocess.Popen([sys.executable, str(PROXY_PY)], cwd=str(WS), env=env,
+                     creationflags=flags)
+    for _ in range(wait):
+        time.sleep(1)
+        h = proxy_health()
+        if h["reachable"]:
+            return ("ok" if h["is_v4"] else "stale"), h
+    return "failed", h
+
+
+STALE_PROXY_MSG_KO = (
+    "[문제] 예전 버전 프록시가 이미 포트 %s 를 사용 중입니다 (identity=%%s rev=%%r).\n"
+    "       이 상태로는 새 기능(bash 가드 등)이 동작하지 않아 실행을 중단합니다.\n"
+    "[해결] 1. 화면에 떠 있는 프록시 콘솔 창(제목에 python/lig_toolcall 포함)을 닫으세요.\n"
+    "       2. 안 보이면 PC를 재부팅하거나, 작업 관리자에서 python 프로세스 중\n"
+    "          lig_toolcall_proxy 를 실행 중인 것만 종료하세요.\n"
+    "       3. 그 다음 RUN_OPENCODE_LIG.bat 을 다시 실행하세요." % PORT)
+
+
+def stale_proxy_message(h):
+    return STALE_PROXY_MSG_KO % (h.get("identity"), h.get("rev"))
+
+
+# ---------------------------------------------------------------- cli flags
+def write_cli_flags(flags):
+    STATEDIR.mkdir(parents=True, exist_ok=True)
+    CLI_FLAGS_FILE.write_text(json.dumps(flags, ensure_ascii=False, indent=2) + "\n",
+                              encoding="utf-8")
+
+
+def read_cli_flags():
+    """Flags probed by the last DIAG run: {"tui": {...}, "run": {...}}.
+    Defaults assume the currently-proven build behavior."""
+    default = {"tui": {"--pure": True, "--auto": True},
+               "run": {"--pure": True, "--auto": True, "-m": True}}
+    try:
+        j = json.loads(CLI_FLAGS_FILE.read_text(encoding="utf-8"))
+        for k in default:
+            if isinstance(j.get(k), dict):
+                default[k].update(j[k])
+    except (OSError, ValueError):
+        pass
+    return default
+
+
+# ---------------------------------------------------------------- subprocess
+def _to_text(v):
+    if v is None:
+        return ""
+    if isinstance(v, bytes):
+        return v.decode("utf-8", "replace")
+    return v
+
+
+def run_capture(args, cwd=None, env=None, timeout=60):
+    """UTF-8/cp949-safe capture. Never raises on timeout; returns a dict."""
+    t0 = time.time()
+    try:
+        cp = subprocess.run([str(a) for a in args], cwd=str(cwd) if cwd else None,
+                            env=env, capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", timeout=timeout)
+        return {"seconds": round(time.time() - t0, 1), "returncode": cp.returncode,
+                "timeout": False, "stdout": cp.stdout or "", "stderr": cp.stderr or ""}
+    except subprocess.TimeoutExpired as e:
+        return {"seconds": round(time.time() - t0, 1), "returncode": None,
+                "timeout": True, "stdout": _to_text(e.stdout), "stderr": _to_text(e.stderr)}
+    except OSError as e:
+        return {"seconds": round(time.time() - t0, 1), "returncode": -1,
+                "timeout": False, "stdout": "", "stderr": repr(e)}
+
+
+def tail(text, lines=40):
+    return "\n".join((text or "").splitlines()[-lines:])
+
+
+def tail_file(path, lines=40):
+    try:
+        return tail(pathlib.Path(path).read_text(encoding="utf-8", errors="replace"), lines)
+    except OSError as e:
+        return "(unreadable: %r)" % e
+
+
+def recent_logs(limit=3, max_bytes=5_000_000):
+    """Newest small *.log files under USERDATA and LOGS (for failure reports)."""
+    found = []
+    for base in (USERDATA, LOGS):
+        if base.exists():
+            for p in base.rglob("*.log"):
+                try:
+                    st = p.stat()
+                    if st.st_size <= max_bytes:
+                        found.append((st.st_mtime, p))
+                except OSError:
+                    pass
+    found.sort(reverse=True)
+    return [p for _, p in found[:limit]]

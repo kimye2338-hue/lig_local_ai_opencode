@@ -1,0 +1,84 @@
+# -*- coding: utf-8 -*-
+# lig_launch.py (V4.1) - the ONLY launcher logic. Called by RUN_OPENCODE_LIG.bat
+# (mode-aware) and RUN_OPENCODE_LIG_SAFE_PURE.bat (forces pure).
+# Never calls input(); the .bat handles pause on error. stdlib only.
+#
+# Exit codes: 2 exe missing / 3 proxy failed / 4 stale old proxy on port /
+#             5 proxy has no secrets / 10 secrets missing
+import subprocess
+import sys
+
+import lig_common as C
+
+
+def panel(mode, h, cfg):
+    bar = "=" * 46
+    print(bar)
+    print(" OpenCodeLIG  (모드: %s)" % ("SAFE_PURE (안전모드)" if mode == "pure" else "NORMAL"))
+    print("  프록시   : 정상 (rev %s)" % h.get("rev"))
+    print("  설정     : 정상 (%s)" % ", ".join(cfg["instructions"]))
+    print("  비밀키   : 로드됨")
+    print("  작업폴더 : %s" % C.WS)
+    print("  사용법   : 한국어로 지시하세요. 예) \"메모.md 파일 만들어줘\"")
+    print("  이어하기 : \"계속\" 이라고 입력하면 지난 작업을 이어갑니다.")
+    print(bar)
+
+
+def main():
+    C.ensure_dirs()
+    C.load_secrets()
+
+    if not C.EXE.exists():
+        print("[문제] opencode.exe 가 없습니다: %s" % C.EXE)
+        print("[해결] 오프라인 패키지의 opencode.exe 를 %s 에 복사한 뒤 다시 실행하세요." % C.BIN)
+        return 2
+    if not C.secrets_ok():
+        print("[문제] 사내 API 접속 정보(비밀 파일)가 아직 없습니다.")
+        print("[해결] 별도로 전달받은 SET_LIG_SECRET.bat 을 한 번 실행한 뒤 다시 실행하세요.")
+        print("       (파일 위치: %s)" % C.SECRET_FILE)
+        return 10
+
+    C.seed_fileops_if_missing()
+    cfg = C.write_config(backup=False)
+
+    env = C.build_env()
+    status, h = C.start_proxy(env)
+    if status == "stale":
+        print(C.stale_proxy_message(h))
+        return 4
+    if status == "failed":
+        print("[문제] 프록시가 시작되지 않았습니다: %s" % h.get("raw"))
+        print("[해결] DIAG_OPENCODE_LIG.bat 을 실행하고 [RESULT] 블록을 전달하세요.")
+        print("       로그: %s" % (C.LOGS / "lig_toolcall_proxy.log"))
+        return 3
+    if not h.get("upstream_configured"):
+        print("[문제] 프록시가 사내 게이트웨이 정보 없이 떠 있습니다.")
+        print("[해결] SET_LIG_SECRET.bat 실행 후, 프록시 콘솔 창을 닫고 다시 실행하세요.")
+        return 5
+
+    # mode: CLI arg > LIG_PURE env > saved state (diag-written) > default pure
+    argv = [a.lower() for a in sys.argv[1:]]
+    if "--pure" in argv:
+        mode = "pure"
+    elif "--normal" in argv:
+        mode = "normal"
+    elif env.get("LIG_PURE", "") in ("1", "true", "yes"):
+        mode = "pure"
+    else:
+        mode = C.get_mode()
+
+    # top-level flags validated by the last DIAG run (never guess new flags)
+    tui = C.read_cli_flags()["tui"]
+    args = [str(C.EXE)]
+    if mode == "pure" and tui.get("--pure", True):
+        args.append("--pure")
+    if tui.get("--auto", True):
+        args.append("--auto")
+
+    panel(mode, h, cfg)
+    print("[실행] %s" % " ".join(args))
+    return subprocess.call(args, cwd=str(C.WS), env=env)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

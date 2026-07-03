@@ -1,0 +1,25 @@
+@echo off
+rem ==========================================================================
+rem RUN_OPENCODE_LIG_SAFE_PURE.bat (V4) - explicit fallback launcher.
+rem Forces safe mode (--pure) regardless of saved startup mode. No feature
+rem loss: the file-write guard lives in the local proxy, and destructive
+rem bash commands stay denied by config permissions.
+rem ==========================================================================
+if "%~1"=="__MAX" goto MAIN
+start "OpenCodeLIG (PURE)" /max cmd /c "%~f0" __MAX
+exit /b
+
+:MAIN
+chcp 65001 >nul
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
+call "%USERPROFILE%\OpenCodeLIG\scripts\lig_python.bat"
+if not defined LIG_PY (pause & exit /b 9)
+%LIG_PY% "%USERPROFILE%\OpenCodeLIG\scripts\lig_launch.py" --pure
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" (
+  echo.
+  echo [종료코드 %RC%] 화면의 [문제]/[해결] 안내를 따라 주세요.
+  pause
+)
+exit /b %RC%
