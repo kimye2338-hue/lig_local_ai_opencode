@@ -8,7 +8,7 @@
 |----|------|------|------|------|------|--------|------|
 | P00-01 | 환경 probe 실행/업로드 (probe/README.md) | **human** | — | 집+회사 | READY | | |
 | P00-02 | OpenCode 공식 문서 연동 조사 | **fable** | — | INTERNET | READY | | |
-| P09-01 | LLM provider 프로필/env 완전 오버라이드 | codex | — | ANY | IN-PROGRESS | | |
+| P09-01 | LLM provider 프로필/env 완전 오버라이드 | codex | — | ANY | AWAITING-REVIEW | plan/reports/P09-01-r1.md | |
 | P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | BLOCKED | | |
 | P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | BLOCKED | | |
 | P10-01 | git 히스토리 내부 hostname purge | fable | — | FABLE-ONLY | READY | | |
@@ -44,5 +44,6 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-03 P09-01 AWAITING-REVIEW (Codex). 보고서: plan/reports/P09-01-r1.md.
 - 2026-07-03 P09-01 IN-PROGRESS (Codex). 시작 HEAD: ce412af.
 - 2026-07-03 보드 생성 (Fable). READY: P09-01, P10-01, P12-01, P13-01, P14-01, P15-01, P17-01, P18-01
