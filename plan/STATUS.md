@@ -17,7 +17,7 @@
 | P11-02 | floor 실측 + 파서/프롬프트 보강 | codex | P11-01 | LOCAL-LLM | BLOCKED | | |
 | P12-01 | stdlib WebSocket 미니 클라이언트 | codex | — | ANY | APPROVED | plan/reports/P12-01-r1.md | plan/reviews/P12-01-r1.md |
 | P12-02 | 브라우저 CDP 어댑터 + chrome-debug.bat | codex | P12-01 | ANY | APPROVED | plan/reports/P12-02-r1.md | plan/reviews/P12-02-r1.md |
-| P12-03 | CDP 실측 + available 전환 | codex | P12-02 | CHROME | READY | | |
+| P12-03 | CDP 실측 + available 전환 | codex | P12-02 | CHROME | IN-PROGRESS | | |
 | P13-01 | approval(승인 게이트) + audit(감사 로그) 모듈 | codex | — | ANY | APPROVED | plan/reports/P13-01-r1.md | plan/reviews/P13-01-r1.md |
 | P13-02 | `work` 오케스트레이터 subcommand E2E | codex | P13-01 | ANY | APPROVED | plan/reports/P13-02-r1.md | plan/reviews/P13-02-r1.md |
 | P14-01 | schedule store + 결정적 날짜 파서 | codex | — | ANY | APPROVED | plan/reports/P14-01-r1.md | plan/reviews/P14-01-r1.md |
@@ -44,6 +44,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-03 P12-03 IN-PROGRESS (Codex). 시작 HEAD: 34cc6ad.
 
 - 2026-07-03 계획 고도화 (Fable): gateway 3라우트 200(연결 company validated) 반영 — P00-01 APPROVED(잔여→P00-03 신설), NEXT_ONSITE.md 상시 방문 목록 신설, P11에 function-calling A/B 경로 반영, P16-02 accoreconsole 확정, P17-02 pywin32 기설치 반영.
 
