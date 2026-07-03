@@ -169,7 +169,19 @@ def run_doctor() -> dict:
         from .lig_providers import DIAG_DIR as _diag_dir
         bench_file = RESULTS / "capability_bench" / "last_bench.json"
         bench_info = read_json(bench_file, {}) if bench_file.exists() else {}
-        floor_report = RESULTS / "reports" / "capability_floor.md"
+        reports_dir = RESULTS / "reports"
+        real_floor_reports = sorted(
+            [p for p in reports_dir.glob("capability_floor_*.md") if p.name != "capability_floor_mock.md"],
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        ) if reports_dir.exists() else []
+        mock_floor_report = reports_dir / "capability_floor_mock.md"
+        legacy_floor_report = reports_dir / "capability_floor.md"
+        floor_report = (
+            real_floor_reports[0] if real_floor_reports else
+            mock_floor_report if mock_floor_report.exists() else
+            legacy_floor_report
+        )
         try:
             from .input_ingest import SUPPORTED_SUFFIXES
             ingest_available = True

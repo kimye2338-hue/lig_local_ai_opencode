@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import re
 import time
 import urllib.request
 from pathlib import Path
@@ -22,7 +23,7 @@ from typing import Any, Dict, List
 
 WS_TEMPLATE = Path(__file__).resolve().parents[1]
 DEFAULT_BASE_URL = "http://127.0.0.1:11434/v1"
-REPORT_PATH = WS_TEMPLATE / "agent_ops" / "results" / "reports" / "capability_floor.md"
+REPORT_DIR = WS_TEMPLATE / "agent_ops" / "results" / "reports"
 PASS = 0
 
 sys.path.insert(0, str(WS_TEMPLATE))
@@ -166,6 +167,16 @@ def format_counts(counts: Dict[str, int]) -> str:
     return ", ".join(f"{k}:{v}" for k, v in sorted(counts.items())) if counts else "-"
 
 
+def safe_model_name(model: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(model or "unknown")).strip("_") or "unknown"
+
+
+def report_path_for_model(model: str) -> Path:
+    if model == "mock-self-check":
+        return REPORT_DIR / "capability_floor_mock.md"
+    return REPORT_DIR / f"capability_floor_{safe_model_name(model)}.md"
+
+
 def write_report(rows: List[Dict[str, Any]], repeat: int, model: str) -> Path:
     total = len(rows)
     success = sum(1 for r in rows if r.get("success"))
@@ -193,9 +204,10 @@ def write_report(rows: List[Dict[str, Any]], repeat: int, model: str) -> Path:
             lines.append("- #%s %s: %s" % (
                 row.get("scenario"), classify_failure(row),
                 str(row.get("detail", ""))[:180].replace("\n", " ")))
-    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return REPORT_PATH
+    report_path = report_path_for_model(model)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return report_path
 
 
 def mock_selfcheck() -> None:
@@ -227,7 +239,8 @@ def mock_selfcheck() -> None:
     doctor = run_doctor()
     floor_info = doctor.get("artifact_pipeline", {}).get("capability_floor_report")
     check("doctor reports capability floor report",
-          isinstance(floor_info, dict) and floor_info.get("path") == str(REPORT_PATH), str(floor_info))
+          isinstance(floor_info, dict) and floor_info.get("path") == str(report), str(floor_info))
+    check("mock report path is separated from real reports", report.name == "capability_floor_mock.md", str(report))
 
 
 def run_real_floor() -> None:
