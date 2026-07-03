@@ -19,10 +19,11 @@
 4. PR #8 본문/코멘트 육안 점검.
 5. 완료 시 이후 모든 보고에서 "security cleanup pending" 제거 (done으로).
 
-## DoD
-- [ ] 히스토리 전수 검색 0건 (로컬+재클론)
-- [ ] 백업 mirror 존재
-- [ ] STATUS/보고 상태 어휘 갱신
+## DoD  (2026-07-04 완료 — reviews/P10-01-r1.md)
+- [x] 히스토리 전수 검색 0건 (로컬+재클론) — 전 16 브랜치·main·활성 PR #8 0회.
+      닫힌 PR #1/#2/#4 서버 스냅샷(refs/pull/*)만 잔여(클라이언트 불가) — 리뷰에 명시.
+- [x] 백업 mirror 존재 (scratchpad backup-mirror.git)
+- [x] STATUS/보고 상태 어휘 갱신 ("security cleanup pending"→done, PR #8 본문 반영)
 
 ## 금지
 - 이 세션에 다른 코드 변경 섞기 금지 (순수 purge 세션).

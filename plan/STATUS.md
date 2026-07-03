@@ -12,7 +12,7 @@
 | P09-01 | LLM provider 프로필/env 완전 오버라이드 | codex | — | ANY | APPROVED | plan/reports/P09-01-r2.md | plan/reviews/P09-01-r2.md |
 | P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | APPROVED | plan/reports/P09-02-r1.md | plan/reviews/P09-02-r1.md |
 | P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | APPROVED | plan/reports/P09-03-r3.md | plan/reviews/P09-03-r3.md |
-| P10-01 | git 히스토리 내부 hostname purge | fable | — | FABLE-ONLY | READY | | |
+| P10-01 | git 히스토리 내부 hostname purge | fable | — | FABLE-ONLY | APPROVED | plan/reviews/P10-01-r1.md | plan/reviews/P10-01-r1.md |
 | P11-A | lig_runtime native function calling(tools) 경로 | codex | P09-02 | ANY | APPROVED | plan/reports/P11-A-r1.md | plan/reviews/P11-A-r1.md |
 | P11-01 | weak-model capability-floor 하네스 | codex | P09-03, P11-A | ANY | APPROVED | plan/reports/P11-01-r1.md | plan/reviews/P11-01-r1.md |
 | P11-02 | floor 실측 + 파서/프롬프트 보강 | codex | P11-01 | LOCAL-LLM | APPROVED | plan/reports/P11-02-r1.md | plan/reviews/P11-02-r1.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 **P10-01 APPROVED (Fable 실행)**: 내부 gateway hostname을 git-filter-repo로 전 히스토리 치환(194 커밋 재작성). 백업 미러 2벌 후 **전 16개 브랜치(main·rebuild/ 포함) force-push** → 재클론 검증 **브랜치·main·활성 PR #8 전부 hostname 0회**, 원커밋 67e0028·be6e7d1 소멸. **잔여**: 원커밋 be9f981이 닫힌 PR #1/#2/#4의 `refs/pull/*` 서버 스냅샷에만 도달 가능(클라이언트 재작성 불가 — read-only ref). 완전 제거는 소유자의 닫힌 PR 삭제 또는 서버 gc 필요(플랫폼 측, 세션 밖). 전 브랜치 재작성으로 **모든 열린 세션은 재클론/hard-reset 필요**. 상세: reviews/P10-01-r1.md. 로컬 rebuild/는 재작성본으로 동기화 완료.
 
 - 2026-07-04 P14-05 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P14-05-r1.md. weekly_report capability + agentops weekly 초안 생성 추가, secretary 37 checks/capability bench 192 checks/전체 20개 테스트 파일 통과.
 
