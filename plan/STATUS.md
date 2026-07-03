@@ -36,7 +36,7 @@
 | P17-02 | 의존성 prefetch + SHA256 확정 | codex | P16-04 | INTERNET | BLOCKED | | |
 | P17-03 | 반입 번들 build + setup.bat + 체크리스트 | codex | P17-02 | ANY | BLOCKED | | |
 | P17-04 | 오프라인 설치 리허설 (네트워크 차단) | human+codex | P17-03 | HUMAN | BLOCKED | | |
-| P18-01 | secret 스캔 pre-commit 스크립트 | codex | — | ANY | IN-PROGRESS | | |
+| P18-01 | secret 스캔 pre-commit 스크립트 | codex | — | ANY | AWAITING-REVIEW | plan/reports/P18-01-r1.md | |
 | P18-02 | RUNBOOK + audit 순환 + doctor 운영 섹션 | codex | P13-01 | ANY | BLOCKED | | |
 | P19-01 | 회사 파일럿 체크리스트/기록 양식 준비 | codex | P14-03, P15-02, P16-02 | ANY | BLOCKED | | |
 | P19-02 | 회사 파일럿 12종 실측 | human+fable | P19-01, P17-04 | COMPANY+HUMAN | BLOCKED | | |
@@ -44,6 +44,7 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-03 P18-01 AWAITING-REVIEW (Codex). 보고서: plan/reports/P18-01-r1.md. secret scan 포함 전체 16파일 440 checks 통과.
 - 2026-07-03 P18-01 IN-PROGRESS (Codex). 시작 HEAD: 3e51d5a.
 - 2026-07-03 P17-01 AWAITING-REVIEW (Codex). 보고서: plan/reports/P17-01-r1.md. optional xlsx ingest 포함 전체 15파일 431 checks 통과.
 - 2026-07-03 P17-01 IN-PROGRESS (Codex). 시작 HEAD: 88b87ba.
