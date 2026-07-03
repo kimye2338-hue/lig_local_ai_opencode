@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from agent_ops.lig_runtime import TransportError, call_llm  # noqa: E402
+from agent_ops.lig_runtime import TransportError, _chat_completions_url, call_llm  # noqa: E402
 
 PASS = 0
 
@@ -63,6 +63,11 @@ def scripted(*events):
 
 with tempfile.TemporaryDirectory() as td:
     diag = Path(td)
+
+    check("base /v1 normalized to chat completions",
+          _chat_completions_url("http://127.0.0.1:11434/v1") == "http://127.0.0.1:11434/v1/chat/completions")
+    check("explicit chat completions url preserved",
+          _chat_completions_url("http://127.0.0.1:11434/v1/chat/completions") == "http://127.0.0.1:11434/v1/chat/completions")
 
     # 1. Clean structured tool call -> ok, no fallback
     t = scripted(resp("", [{"function": {"name": "read_file", "arguments": '{"path": "a.txt"}'}}]))

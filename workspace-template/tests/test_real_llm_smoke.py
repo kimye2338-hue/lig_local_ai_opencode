@@ -98,13 +98,14 @@ def main() -> None:
     memo = root / "input" / "memo.txt"
     memo.write_text("회의 메모: 배터리 브라켓 도면 검토, 케이블 간섭 확인, 금요일까지 요약 필요", encoding="utf-8")
 
-    r1 = run_agent("input/memo.txt 파일을 읽고 summary.md로 요약해서 저장해줘", env)
+    r1 = run_agent("input/memo.txt 파일을 읽고 summary.md로 요약해서 저장해줘. summary.md에는 반드시 input/memo.txt와 브라켓 단어를 포함해줘", env)
     out1 = output_text(r1)
     copy_diag(tmp, "summary")
     check("real scenario 1 exits 0", r1.returncode == 0, out1)
     summary = root / "summary.md"
     check("real scenario 1 creates summary.md", summary.exists(), out1)
-    check("summary mentions source memo", "브라켓" in summary.read_text(encoding="utf-8", errors="replace"))
+    summary_text = summary.read_text(encoding="utf-8", errors="replace")
+    check("summary reflects source memo", "브라켓" in summary_text, summary_text)
 
     r2 = run_agent("new_note.md 파일을 만들고 'local llm smoke ok'라고 적어줘", env)
     out2 = output_text(r2)

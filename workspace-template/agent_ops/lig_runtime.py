@@ -41,8 +41,18 @@ class TransportError(Exception):
         self.trigger = trigger
 
 
+def _chat_completions_url(url: str) -> str:
+    """Normalize OpenAI-compatible base URLs to chat completions endpoint."""
+    base = str(url or "").rstrip("/")
+    if base.endswith("/chat/completions"):
+        return base
+    if base.endswith("/v1"):
+        return base + "/chat/completions"
+    return base + "/v1/chat/completions"
+
+
 def default_transport(url: str, payload: Dict[str, Any], headers: Dict[str, str], timeout: int) -> Dict[str, Any]:
-    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+    req = urllib.request.Request(_chat_completions_url(url), data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             body = r.read().decode("utf-8", errors="replace")
