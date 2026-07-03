@@ -24,7 +24,7 @@
 | P14-01 | schedule store + 결정적 날짜 파서 | codex | — | ANY | APPROVED | plan/reports/P14-01-r1.md | plan/reviews/P14-01-r1.md |
 | P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | APPROVED | plan/reports/P14-02-r2.md | plan/reviews/P14-02-r2.md |
 | P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | APPROVED | plan/reports/P14-03-r1.md | plan/reviews/P14-03-r1.md |
-| P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | AWAITING-REVIEW | plan/reports/P14-04-r2.md | plan/reviews/P14-04-r1.md |
+| P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | APPROVED | plan/reports/P14-04-r2.md | plan/reviews/P14-04-r2.md |
 | P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | READY | | |
 | P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | APPROVED | plan/reports/P15-01-r1.md | plan/reviews/P15-01-r1.md |
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | APPROVED | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r2.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 Fable 리뷰 9차: **P14-04 r2 APPROVED**(리뷰가 검증 제시한 `_extract_owner`+`meeting minutes` 경계화를 워커가 그대로 채택, negative/정확성 bench 2개 회귀화. 실측: minutes 시간표현 2건 라우팅 차단+양성 3건 유지, 회의록 담당=`김대리`·`| 7월 |` 없음 — reviews/P14-04-r2.md). 권고: todo `까지` 접두 잔여 1줄 정리(검증 코드 제시, 승인 무관). 재검증: 19개 중 17개 exit 0(bench 184=186−openpyxl 2), Windows 전용 3개 diff 무접촉. 현재 AWAITING-REVIEW 없음. Codex 다음 READY: P18-02, P14-05, P15-03/04, P16-02~04.
 
 - 2026-07-04 리뷰 프로세스 개정 (사용자 피드백 반영, Fable): 리뷰는 "안 되는 것"만 잡지 말고 **되는 방법(검증된 수정 코드)+피드백+작업계획 수정내용**을 항상 포함한다. review-template.md에 3개 섹션 신설, delegate-to-codex 스킬에 규칙 5 추가. P14-04-r1 소급 보강(검증된 `_extract_owner`/키워드 경계화 코드 + 피드백 + P14-04 task "리뷰 반영" 절).
 
