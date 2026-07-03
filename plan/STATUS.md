@@ -30,7 +30,7 @@
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | APPROVED | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r2.md |
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | READY | | |
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | READY | | |
-| P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | IN-PROGRESS | plan/reports/P16-01-r1.md | plan/reviews/P16-01-r1.md |
+| P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | AWAITING-REVIEW | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r1.md |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | BLOCKED | | |
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | BLOCKED | | |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | READY | | |
