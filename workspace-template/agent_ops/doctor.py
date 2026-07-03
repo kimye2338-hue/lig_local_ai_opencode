@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -168,6 +169,7 @@ def run_doctor() -> dict:
         from .lig_providers import DIAG_DIR as _diag_dir
         bench_file = RESULTS / "capability_bench" / "last_bench.json"
         bench_info = read_json(bench_file, {}) if bench_file.exists() else {}
+        floor_report = RESULTS / "reports" / "capability_floor.md"
         try:
             from .input_ingest import SUPPORTED_SUFFIXES
             ingest_available = True
@@ -188,6 +190,10 @@ def run_doctor() -> dict:
             "last_bench_result": {"path": str(bench_file), "exists": bench_file.exists(),
                                   "checks_passed": bench_info.get("checks_passed"),
                                   "timestamp": bench_info.get("timestamp")},
+            "capability_floor_report": (
+                {"path": str(floor_report), "timestamp": time.strftime(
+                    "%Y-%m-%dT%H:%M:%S", time.localtime(floor_report.stat().st_mtime))}
+                if floor_report.exists() else "not generated"),
             "next_commands": [
                 'py -3.11 agent_ops\\agentops.py plan --task "작업 설명" --make-artifacts',
                 'py -3.11 tests\\test_capability_bench.py',
