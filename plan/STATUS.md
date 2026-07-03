@@ -15,7 +15,7 @@
 | P11-01 | weak-model capability-floor 하네스 | codex | P09-03 | ANY | BLOCKED | | |
 | P11-02 | floor 실측 + 파서/프롬프트 보강 | codex | P11-01 | LOCAL-LLM | BLOCKED | | |
 | P12-01 | stdlib WebSocket 미니 클라이언트 | codex | — | ANY | APPROVED | plan/reports/P12-01-r1.md | plan/reviews/P12-01-r1.md |
-| P12-02 | 브라우저 CDP 어댑터 + chrome-debug.bat | codex | P12-01 | ANY | READY | | |
+| P12-02 | 브라우저 CDP 어댑터 + chrome-debug.bat | codex | P12-01 | ANY | IN-PROGRESS | | |
 | P12-03 | CDP 실측 + available 전환 | codex | P12-02 | CHROME | BLOCKED | | |
 | P13-01 | approval(승인 게이트) + audit(감사 로그) 모듈 | codex | — | ANY | APPROVED | plan/reports/P13-01-r1.md | plan/reviews/P13-01-r1.md |
 | P13-02 | `work` 오케스트레이터 subcommand E2E | codex | P13-01 | ANY | READY | | |
@@ -44,6 +44,7 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-03 P12-02 IN-PROGRESS (Codex). 시작 HEAD: d0e0b56.
 - 2026-07-03 P09-02 AWAITING-REVIEW (Codex). 보고서: plan/reports/P09-02-r1.md. 전체 12파일 339 checks 통과.
 - 2026-07-03 P09-02 IN-PROGRESS (Codex). 시작 HEAD: e8ea04e.
 - 2026-07-03 Fable 리뷰: P09-01 r2 APPROVED (셸 오버라이드 검증, 20 checks) → P09-02 READY. 보고서 템플릿에 "1.5 사용자 체감 변화" 선택 섹션 정식화.
