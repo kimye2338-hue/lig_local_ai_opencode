@@ -26,6 +26,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from .lig_providers import DIAG_DIR
 from .lig_runtime import call_llm
+from .approval import classify_risk
+from .audit import record as audit_record
 from .local_tools import (
     ToolError,
     tool_append_file,
@@ -110,6 +112,7 @@ class ToolDispatcher:
         if not result["ok"]:
             self._failure_counts[sig] = self._failure_counts.get(sig, 0) + 1
         self._record(call, result)
+        self._audit(call, result)
         return result
 
     def repeated_failure(self, call: Dict[str, Any]) -> bool:
@@ -161,6 +164,30 @@ class ToolDispatcher:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception:
             pass  # diagnostics must never break dispatch
+
+    def _audit(self, call: Dict[str, Any], result: Dict[str, Any]) -> None:
+        try:
+            args = call.get("arguments", {})
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except Exception:
+                    args = {}
+            if not isinstance(args, dict):
+                args = {}
+            target = args.get("path") or args.get("target") or ""
+            name = call.get("name", "")
+            risk = classify_risk(name, str(target), self.root)
+            audit_record({
+                "kind": "tool",
+                "name": name,
+                "target": target,
+                "risk": risk,
+                "verdict": "approved" if result.get("ok") else "denied",
+                "detail": result.get("root_cause_category") or ("ok" if result.get("ok") else result.get("error", "")),
+            })
+        except Exception:
+            pass  # audit must never break dispatch
 
 
 AGENT_SYSTEM_PROMPT = (
