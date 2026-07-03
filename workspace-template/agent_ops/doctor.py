@@ -5,10 +5,12 @@ import json
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .core import RESULTS, REPORTS, ROOT, platform_info, run_cmd, atomic_write_text, atomic_write_json, read_json, CONFIG, now
 from .state_manager import heartbeat, update_checkpoint
-from .lig_providers import validate_config as validate_lig_config
+from .lig_providers import build_providers, load_lig_env, validate_config as validate_lig_config
+
 
 def chromedriver_candidates() -> list[str]:
     cfg = read_json(CONFIG / "agentops_config.json", {})
@@ -18,6 +20,74 @@ def chromedriver_candidates() -> list[str]:
         if item not in candidates:
             candidates.append(str(item))
     return candidates
+
+
+def _safe_local_base_label(base_url: str) -> str:
+    """Return a printable label without leaking a host or full URL.
+
+    127.0.0.1 is allowed by the task because it is the local Ollama default.
+    Any other host is reduced to a presence label.
+    """
+    if not base_url:
+        return "not configured"
+    try:
+        host = (urlsplit(base_url).hostname or "").lower()
+    except Exception:
+        return "configured"
+    if host == "127.0.0.1":
+        return "127.0.0.1"
+    if host in ("localhost", "::1"):
+        return "loopback"
+    return "configured"
+
+
+def _openai_models_url(base_url: str) -> str:
+    base = (base_url or "").rstrip("/")
+    return base + "/models"
+
+
+def _probe_openai_models(base_url: str) -> dict:
+    """Reachability probe for OpenAI-compatible local endpoints.
+
+    The returned object intentionally contains only booleans/status classes, never
+    the raw URL or exception repr because those may include internal hosts.
+    """
+    if not base_url:
+        return {"ok": False, "error_class": "not_configured"}
+    try:
+        import urllib.request
+        with urllib.request.urlopen(_openai_models_url(base_url), timeout=2) as response:
+            response.read(256)
+            return {"ok": True, "status": getattr(response, "status", 200)}
+    except Exception as exc:
+        return {"ok": False, "error_class": exc.__class__.__name__}
+
+
+def llm_endpoints_summary() -> dict:
+    """Secret-free inventory for real/local LLM readiness."""
+    env = load_lig_env()
+    cfg = validate_lig_config(env=env)
+    providers = build_providers(env)
+    profile = cfg.get("profile", "company_gateway")
+    routes = {}
+    for name, provider in providers.items():
+        routes[name] = {
+            "configured": bool(provider.get("base_url")),
+            "model_set": bool(provider.get("model")),
+            "timeout_set": bool(provider.get("timeout")),
+        }
+    local_base = providers.get("lig-coding", {}).get("base_url", "") if profile == "local_openai" else ""
+    return {
+        "profile": profile,
+        "ready": bool(cfg.get("ready")),
+        "secret_file_found": bool(cfg.get("secret_file_found")),
+        "gateway_url_set": bool(cfg.get("gateway_url_set")),
+        "api_key_set": bool(cfg.get("api_key_set")),
+        "routes": routes,
+        "local_base": _safe_local_base_label(local_base),
+        "local_reachable": _probe_openai_models(local_base) if profile == "local_openai" else {"ok": False, "skipped": "not local_openai profile"},
+    }
+
 
 def run_doctor() -> dict:
     heartbeat("doctor")
@@ -50,6 +120,10 @@ def run_doctor() -> dict:
         checks["lig_api_config"] = validate_lig_config()  # presence flags only, never secret values
     except Exception as exc:
         checks["lig_api_config"] = {"ready": False, "error": repr(exc)}
+    try:
+        checks["llm_endpoints"] = llm_endpoints_summary()
+    except Exception as exc:
+        checks["llm_endpoints"] = {"ok": False, "error_class": exc.__class__.__name__}
     # User-facing agent runtime readiness (secret-free: paths + flags only).
     try:
         from .tool_dispatch import REGISTRY
@@ -65,6 +139,7 @@ def run_doctor() -> dict:
             "diagnostics_dir": str(DIAG_DIR),
             "mock_smoke_ready": mock_ready,
             "real_provider_ready": bool(checks["lig_api_config"].get("ready")),
+            "local_llm_reachable": bool(checks.get("llm_endpoints", {}).get("local_reachable", {}).get("ok")),
             "company_validation": "pending",
         }
     except Exception as exc:
@@ -121,7 +196,7 @@ def run_doctor() -> dict:
     except Exception as exc:
         checks["artifact_pipeline"] = {"error": repr(exc)}
     atomic_write_json(RESULTS / "environment_check.json", checks)
-    lines = ["# AgentOps Doctor Report", "", f"- Generated: {checks['timestamp']}", f"- ChromeDriver found: `{found or 'NOT FOUND'}`", f"- Chrome 9222 OK: `{checks['chrome_9222'].get('ok')}`", f"- UTF-8 roundtrip OK: `{checks['encoding']['roundtrip_ok']}`", "", "## Raw", "```json", json.dumps(checks, ensure_ascii=False, indent=2), "```"]
+    lines = ["# AgentOps Doctor Report", "", f"- Generated: {checks['timestamp']}", f"- ChromeDriver found: `{found or 'NOT FOUND'}`", f"- Chrome 9222 OK: `{checks['chrome_9222'].get('ok')}`", f"- UTF-8 roundtrip OK: `{checks['encoding']['roundtrip_ok']}`", f"- LLM profile: `{checks.get('llm_endpoints', {}).get('profile', 'unknown')}`", f"- Local LLM reachable: `{checks.get('llm_endpoints', {}).get('local_reachable', {}).get('ok')}`", "", "## Raw", "```json", json.dumps(checks, ensure_ascii=False, indent=2), "```"]
     atomic_write_text(REPORTS / "DOCTOR_REPORT.md", "\n".join(lines))
     update_checkpoint("doctor completed")
     return checks
