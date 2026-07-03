@@ -27,6 +27,20 @@ Rule = Tuple[str, str, Callable[[str], bool]]
 
 # A TODO at end-of-line with no hint after it is a placeholder, not guidance.
 _BARE_TODO = re.compile(r"TODO\s*:?\s*$", re.MULTILINE)
+_OFFICE2016_BANNED = (
+    "XLOOKUP", "XMATCH", "FILTER", "SORT", "SORTBY", "UNIQUE", "SEQUENCE",
+    "RANDARRAY", "LET", "LAMBDA", "TEXTSPLIT", "TEXTBEFORE", "TEXTAFTER",
+    "VSTACK", "HSTACK", "TEXTJOIN", "CONCAT", "IFS", "SWITCH", "MAXIFS",
+    "MINIFS",
+)
+
+
+def _office2016_compatible(text: str) -> bool:
+    for name in _OFFICE2016_BANNED:
+        pattern = rf"(?:\bWorksheetFunction\s*\.\s*)?\b{re.escape(name)}\s*\("
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            return False
+    return True
 
 
 def _common_rules(task: str) -> List[Rule]:
@@ -58,6 +72,9 @@ _KIND_RULES: Dict[str, List[Rule]] = {
          lambda t: "실행 방법" in t),
         ("app_pending", "실제 앱 실행 검증이 pending임을 밝혀야 함",
          lambda t: "app validation pending" in t),
+        ("office2016_compat",
+         "Office 2016 부재 함수 호출은 금지됨 (단어 경계+괄호 패턴이라 주석/문자열 오탐 한계 있음)",
+         _office2016_compatible),
     ],
     "document": [
         ("has_title", "문서 제목(# 헤딩)으로 시작해야 함",

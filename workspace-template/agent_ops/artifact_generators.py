@@ -144,15 +144,15 @@ def _detect_target_app(task: str) -> str:
 
 _VBA_HOST_NOTES = {
     "solidworks": ("SolidWorks", "도구 > 매크로 > 편집(Alt+F8)에서 .bas를 불러오거나 새 매크로에 붙여넣기",
-                   "SldWorks.Application / ActiveDoc 기준. 어셈블리/파트/도면에 따라 문서 타입 확인 필요. 좌표계 변경은 저장 전 반드시 백업."),
+                   "대상: Office 2016 호환. SldWorks.Application / ActiveDoc 기준. 어셈블리/파트/도면에 따라 문서 타입 확인 필요. 좌표계 변경은 저장 전 반드시 백업."),
     "excel": ("Excel", "Alt+F11 (VBA 편집기) > 파일 > 파일 가져오기로 .bas import 후 Alt+F8로 실행",
-              "적용 대상 시트/범위를 상단 상수로 지정. 실행 전 통합문서를 저장하고 사본에서 먼저 테스트."),
+              "대상: Office 2016 호환. 적용 대상 시트/범위를 상단 상수로 지정. 최신 함수 대신 VLOOKUP/INDEX+MATCH/중첩 IF를 사용. 실행 전 통합문서를 저장하고 사본에서 먼저 테스트."),
     "word": ("Word", "Alt+F11 > 파일 가져오기로 .bas import 후 매크로 실행",
-             "ActiveDocument 기준. 실행 전 문서 저장."),
+             "대상: Office 2016 호환. ActiveDocument 기준. 최신 함수 대신 VLOOKUP/INDEX+MATCH/중첩 IF를 사용. 실행 전 문서 저장."),
     "powerpoint": ("PowerPoint", "Alt+F11 > 파일 가져오기로 .bas import 후 매크로 실행",
-                   "ActivePresentation 기준."),
+                   "대상: Office 2016 호환. ActivePresentation 기준. 최신 함수 대신 VLOOKUP/INDEX+MATCH/중첩 IF를 사용."),
     "generic": ("대상 앱", "해당 앱의 VBA 편집기에서 .bas import 후 실행",
-                "대상 앱과 문서 타입을 먼저 확인하세요."),
+                "대상: Office 2016 호환. 대상 앱과 문서 타입을 먼저 확인하세요."),
 }
 
 

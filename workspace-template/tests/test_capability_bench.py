@@ -25,7 +25,7 @@ from agent_ops.capabilities import (CAPABILITIES, ARTIFACT_KIND_INFO, classify_t
                                     plan_task, capability_summary)
 from agent_ops.artifact_generators import (GENERATORS, generate_artifacts, classify_mail,
                                            build_artifact_context)
-from agent_ops.artifact_quality import validate_artifact_set
+from agent_ops.artifact_quality import _OFFICE2016_BANNED, validate_artifact_set
 from agent_ops.input_ingest import ingest_inputs
 from agent_ops.adapters import ADAPTERS, adapter_summary
 
@@ -264,6 +264,20 @@ def main() -> None:
                                   filenames=["macro_excel.txt"])
     check("validator catches a file extension that defeats the purpose",
           any(x["rule"] == "file_extension" for x in v_ext["violations"]), str(v_ext["violations"]))
+    check("Office 2016 banned list has 21 functions", len(_OFFICE2016_BANNED) == 21, str(_OFFICE2016_BANNED))
+    for fn in ("XLOOKUP", "TEXTJOIN", "LET"):
+        v_office = validate_artifact_set("vba_macro", [xl + f'\nSub Bad_{fn}(): Range("A1").Formula = "={fn}(A1:A2)": End Sub\n'],
+                                         task="엑셀 시트 정리 매크로", filenames=["macro_excel.bas"])
+        check(f"validator blocks Office 2016 banned function {fn}",
+              any(x["rule"] == "office2016_compat" for x in v_office["violations"]),
+              str(v_office["violations"]))
+    note_only = validate_artifact_set("vba_macro", [xl + "\n' XLOOKUP is mentioned without a call\n"],
+                                      task="엑셀 시트 정리 매크로", filenames=["macro_excel.bas"])
+    check("Office 2016 rule does not flag plain mention",
+          not any(x["rule"] == "office2016_compat" for x in note_only["violations"]),
+          str(note_only["violations"]))
+    check("macro header states Office 2016 target",
+          "대상: Office 2016 호환" in xl)
 
     # --- enrichment: LLM fill is quality-gated and never lossy ---
     task_doc = "설비 점검 결과 보고서 작성해줘"
