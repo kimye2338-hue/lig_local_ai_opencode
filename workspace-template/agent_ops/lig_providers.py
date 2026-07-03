@@ -29,6 +29,7 @@ _ROUTE_DEFAULTS = {
 
 _PLACEHOLDER_MARKERS = ("REPLACE_WITH", "PUT_INTERNAL", "CHANGEME")
 _VALID_PROFILES = ("company_gateway", "local_openai")
+_SHELL_OVERRIDE_KEYS = ("LIG_PROVIDER_PROFILE", "LIG_LOCAL_BASE_URL", "LIG_LOCAL_MODEL")
 
 
 def load_lig_env(path: Optional[Path] = None) -> Dict[str, str]:
@@ -51,9 +52,18 @@ def _is_real(value: str) -> bool:
     return bool(value) and not any(m in value for m in _PLACEHOLDER_MARKERS)
 
 
+def _with_shell_overrides(env: Dict[str, str]) -> Dict[str, str]:
+    values = dict(env)
+    for key in _SHELL_OVERRIDE_KEYS:
+        if os.environ.get(key):
+            values[key] = os.environ[key]
+    return values
+
+
 def get_profile(env: Optional[Dict[str, str]] = None) -> str:
     """Return the selected provider profile, falling back safely on typos."""
     env = env if env is not None else load_lig_env()
+    env = _with_shell_overrides(env)
     profile = (env.get("LIG_PROVIDER_PROFILE") or "company_gateway").strip()
     return profile if profile in _VALID_PROFILES else "company_gateway"
 
@@ -62,6 +72,7 @@ def build_providers(env: Optional[Dict[str, str]] = None) -> Dict[str, Dict[str,
     """Build the three provider routes. base_url may contain the internal host
     — treat returned dict as sensitive; do not print it."""
     env = env if env is not None else load_lig_env()
+    env = _with_shell_overrides(env)
     profile = get_profile(env)
     providers: Dict[str, Dict[str, str]] = {}
     if profile == "local_openai":
@@ -90,6 +101,7 @@ def validate_config(env: Optional[Dict[str, str]] = None, path: Optional[Path] =
     """Presence/shape validation only — safe to print and to write to diagnostics."""
     src = path or SECRET_ENV_PATH
     env = env if env is not None else load_lig_env(src)
+    env = _with_shell_overrides(env)
     raw_profile = (env.get("LIG_PROVIDER_PROFILE") or "company_gateway").strip()
     profile = get_profile(env)
     providers = build_providers(env)

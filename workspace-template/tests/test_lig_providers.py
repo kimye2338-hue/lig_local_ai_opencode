@@ -7,6 +7,7 @@ Uses a temp env file — never touches or prints real secrets.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -16,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from agent_ops.lig_providers import build_providers, decide_fallback, load_lig_env, record_fallback, validate_config  # noqa: E402
 
 PASS = 0
+ENV_OVERRIDE_KEYS = ("LIG_PROVIDER_PROFILE", "LIG_LOCAL_BASE_URL", "LIG_LOCAL_MODEL")
 
 
 def check(label: str, cond: bool, detail: str = "") -> None:
@@ -30,6 +32,7 @@ def check(label: str, cond: bool, detail: str = "") -> None:
 
 with tempfile.TemporaryDirectory() as td:
     tmp = Path(td)
+    saved_env = {key: os.environ.pop(key, None) for key in ENV_OVERRIDE_KEYS}
 
     # 1. Missing secret file -> not ready, no crash
     rep = validate_config(path=tmp / "absent.env")
@@ -42,7 +45,7 @@ with tempfile.TemporaryDirectory() as td:
     check("placeholder -> not ready", rep["ready"] is False and rep["gateway_url_set"] is False and rep["api_key_set"] is False, str(rep))
 
     # 3. Real-looking values (fake) -> ready; report contains no secret value
-    secret = "sk-test-DO-NOT-LEAK-12345"
+    secret = "FAKE_DO_NOT_LEAK_12345"
     env_file.write_text(f"# comment\nLIG_GATEWAY_BASE_URL=http://10.0.0.1/gw\nLIG_API_KEY={secret}\nLIG_DEFAULT_PROVIDER=lig-coding\n", encoding="utf-8")
     rep = validate_config(path=env_file)
     check("configured -> ready", rep["ready"] is True, str(rep))
@@ -82,7 +85,23 @@ with tempfile.TemporaryDirectory() as td:
     report_text = json.dumps(rep)
     check("validate report omits host strings", "127.0.0.1" not in report_text and "11434" not in report_text and "10.0.0.2" not in report_text, str(rep))
 
-    # 10. Fallback policy decisions
+    # 10. Shell env overrides file/local profile keys
+    env_file.write_text(
+        "LIG_PROVIDER_PROFILE=company_gateway\n"
+        "LIG_GATEWAY_BASE_URL=http://10.0.0.3/gw\n"
+        "LIG_API_KEY=abc\n",
+        encoding="utf-8",
+    )
+    os.environ["LIG_PROVIDER_PROFILE"] = "local_openai"
+    os.environ["LIG_LOCAL_BASE_URL"] = "http://127.0.0.1:9999/v1"
+    os.environ["LIG_LOCAL_MODEL"] = "env-local-model"
+    rep = validate_config(path=env_file)
+    provs = build_providers(load_lig_env(env_file))
+    check("shell env overrides file profile", rep["profile"] == "local_openai" and rep["ready"] is True and provs["lig-coding"]["model"] == "env-local-model", str(rep))
+    for key in ENV_OVERRIDE_KEYS:
+        os.environ.pop(key, None)
+
+    # 11. Fallback policy decisions
     check("timeout first -> retry", decide_fallback("http_timeout", 1, "lig-coding")["action"] == "retry")
     check("timeout exhausted -> switch", decide_fallback("http_timeout", 2, "lig-coding")["action"] == "switch_fallback")
     check("4xx -> stop", decide_fallback("http_4xx", 1, "lig-coding")["action"] == "stop")
@@ -91,10 +110,16 @@ with tempfile.TemporaryDirectory() as td:
     check("no loop on last provider", decide_fallback("provider_unreachable", 1, "lig-fallback")["action"] == "local_fallback")
     check("unknown trigger -> stop", decide_fallback("weird_new_error", 1, "lig-coding")["action"] == "stop")
 
-    # 11. Fallback record written with required fields
+    # 12. Fallback record written with required fields
     out = record_fallback("lig-coding", "lig-fallback", "http_timeout", 2, "recovered", diag_dir=tmp / "diag")
     data = json.loads(out.read_text(encoding="utf-8"))
     need = {"provider_initial", "provider_final", "fallback_trigger", "fallback_attempts", "fallback_result"}
     check("fallback record fields", need.issubset(data) and (tmp / "diag" / "provider-fallback-history.jsonl").exists(), str(data))
+
+    for key, value in saved_env.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
 
 print(f"\n{PASS} checks passed")
