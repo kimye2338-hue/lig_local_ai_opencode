@@ -52,6 +52,7 @@ BENCHMARKS = [
     ("웹페이지에서 메일 확인하고 분류 및 요약해줘", "web_mail_assistant", "mail_report"),
     ("크롬 브라우저 매크로 만들어줘", "browser_automation", "browser_script"),
     ("회의록 정리해줘", "meeting_minutes", "meeting_minutes"),
+    ("주간보고 초안 만들어줘", "weekly_report", "document"),
     ("시험 데이터 후처리 매트랩 스크립트 만들어줘", "matlab_automation", "matlab_script"),
 ]
 

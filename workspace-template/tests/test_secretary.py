@@ -48,6 +48,12 @@ def run_briefing(env: dict) -> subprocess.CompletedProcess:
                           text=True, encoding="utf-8", errors="replace", timeout=120)
 
 
+def run_weekly(env: dict) -> subprocess.CompletedProcess:
+    return subprocess.run(["py", "-3.11", str(AGENTOPS), "weekly"],
+                          cwd=str(WS_TEMPLATE), env=env, capture_output=True,
+                          text=True, encoding="utf-8", errors="replace", timeout=120)
+
+
 def seed_schedule(env: dict) -> None:
     import importlib
     sys.path.insert(0, str(WS_TEMPLATE))
@@ -83,6 +89,36 @@ def seed_actions_and_audit(ws: Path, env: dict) -> None:
                      encoding="utf-8")
 
 
+def seed_weekly_fixtures(ws: Path, env: dict) -> None:
+    seed_schedule(env)
+    import importlib
+    sys.path.insert(0, str(WS_TEMPLATE))
+    old_dir = os.environ.get("LIG_SCHEDULE_DIR")
+    try:
+        os.environ["LIG_SCHEDULE_DIR"] = env["LIG_SCHEDULE_DIR"]
+        from agent_ops import schedule_store
+        importlib.reload(schedule_store)
+        schedule_store.mark_done(1)
+        schedule_store.mark_done(3)
+    finally:
+        if old_dir is None:
+            os.environ.pop("LIG_SCHEDULE_DIR", None)
+        else:
+            os.environ["LIG_SCHEDULE_DIR"] = old_dir
+    audit = Path(env["LIG_AUDIT_DIR"]) / "audit.jsonl"
+    audit.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {"ts": "2026-07-01T09:00:00", "kind": "work", "task": "시험 결과 보고서 작성", "verdict": "approved"},
+        {"ts": "2026-07-02T10:00:00", "kind": "schedule", "task": "일정 등록", "verdict": "approved"},
+        {"ts": "2026-06-20T10:00:00", "kind": "old", "task": "오래된 작업", "verdict": "approved"},
+    ]
+    audit.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+                     encoding="utf-8")
+    art = ws / "agent_ops" / "results" / "artifacts" / "run-week" / "문서.md"
+    art.parent.mkdir(parents=True, exist_ok=True)
+    art.write_text("# 시험 결과 보고서\n", encoding="utf-8")
+
+
 def test_briefing_with_fixtures() -> None:
     tmp, ws, env = env_for("fixtures")
     seed_schedule(env)
@@ -113,6 +149,38 @@ def test_empty_briefing_says_none() -> None:
     check("empty audit says no records", "audit 기록 없음" in body or "어제 audit 기록 없음" in body, body)
 
 
+def test_weekly_report_with_fixtures() -> None:
+    _tmp, ws, env = env_for("weekly")
+    seed_weekly_fixtures(ws, env)
+    r = run_weekly(env)
+    out = r.stdout + r.stderr
+    check("weekly exits 0", r.returncode == 0, out)
+    report = ws / "agent_ops" / "results" / "reports" / "weekly_20260704.md"
+    check("weekly report created", report.exists(), out)
+    body = report.read_text(encoding="utf-8")
+    for section in ("## 수행 업무", "## 완료 일정", "## 다음 주 예정", "## 생성 산출물"):
+        check(f"weekly has section {section}", section in body, body)
+    check("weekly cites all three sources",
+          "audit:" in body and "schedule:" in body and "artifacts:" in body, body)
+    check("weekly reflects audit tasks", "시험 결과 보고서 작성" in body and "일정 등록" in body, body)
+    check("weekly reflects done schedules", "오늘 설계 리뷰" in body and "지난 시험 follow-up" in body, body)
+    check("weekly reflects next week open schedule", "치수 보고서 마감" in body, body)
+    check("weekly reflects generated artifacts", "run-week" in body and "문서.md" in body, body)
+    check("weekly is clearly a draft", "TODO: 정성 성과/이슈는 직접 보완" in body, body)
+    check("console prints weekly report", "Weekly Report Draft 2026-07-04" in out and "주간보고 저장:" in out, out)
+
+
+def test_empty_weekly_says_none() -> None:
+    _tmp, ws, env = env_for("weekly_empty")
+    r = run_weekly(env)
+    out = r.stdout + r.stderr
+    check("empty weekly exits 0", r.returncode == 0, out)
+    body = (ws / "agent_ops" / "results" / "reports" / "weekly_20260704.md").read_text(encoding="utf-8")
+    check("empty weekly sections say none", body.count("없음") >= 4, body)
+    check("empty weekly still cites sources", "audit:" in body and "schedule:" in body and "artifacts:" in body, body)
+    check("empty weekly keeps draft TODO", "TODO: 정성 성과/이슈는 직접 보완" in body, body)
+
+
 def test_reminder_bats_are_confirm_first() -> None:
     install = (WS_TEMPLATE / "launch" / "install-reminder.bat").read_text(encoding="ascii")
     uninstall = (WS_TEMPLATE / "launch" / "uninstall-reminder.bat").read_text(encoding="ascii")
@@ -126,6 +194,8 @@ def test_reminder_bats_are_confirm_first() -> None:
 def main() -> None:
     test_briefing_with_fixtures()
     test_empty_briefing_says_none()
+    test_weekly_report_with_fixtures()
+    test_empty_weekly_says_none()
     test_reminder_bats_are_confirm_first()
     print(f"\nALL {PASS} CHECKS PASSED (secretary briefing)")
 

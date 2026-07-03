@@ -103,6 +103,14 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "pending": [],
         "keywords": ["회의록", "회의 정리", "미팅 정리", "회의 내용", "meeting minutes", "미팅노트"],
     },
+    "weekly_report": {
+        "description": "지난 7일의 audit/schedule/artifacts 기록으로 주간보고 초안 생성",
+        "status": "locally_validated",
+        "artifact_kinds": ["document"],
+        "outputs": ["weekly_<YYYYMMDD>.md"],
+        "pending": [],
+        "keywords": ["주간보고", "주간 보고", "위클리", "weekly"],
+    },
     "matlab_automation": {
         "description": "시험 데이터 후처리용 MATLAB 스크립트 scaffold 생성",
         "status": "scaffold_available",

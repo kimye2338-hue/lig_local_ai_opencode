@@ -88,6 +88,21 @@ def _audit_path() -> Path:
     return Path(os.environ.get("LIG_AUDIT_DIR") or audit.AUDIT_DIR) / audit.AUDIT_FILE
 
 
+def _parse_ts(value: Any) -> datetime | None:
+    text = str(value or "")
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _within_last_days(day: datetime | None, now: datetime, days: int = 7) -> bool:
+    if day is None:
+        return False
+    start = (now - timedelta(days=days)).date()
+    return start <= day.date() <= now.date()
+
+
 def audit_yesterday_summary(now: datetime) -> str:
     path = _audit_path()
     if not path.exists():
@@ -146,5 +161,127 @@ def build_briefing(now: datetime | None = None) -> tuple[Path, str]:
     ]
     text = "\n".join(lines)
     path = RESULTS / "reports" / f"briefing_{current.strftime('%Y%m%d')}.md"
+    atomic_write_text(path, text)
+    return path, text
+
+
+def _weekly_audit_rows(now: datetime) -> tuple[list[str], Path]:
+    path = _audit_path()
+    if not path.exists():
+        return [], path
+    rows = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        ts = _parse_ts(row.get("ts"))
+        if not _within_last_days(ts, now):
+            continue
+        rows.append(row)
+    if not rows:
+        return [], path
+    by_kind: dict[str, int] = {}
+    tasks: list[str] = []
+    for row in rows:
+        kind = str(row.get("kind") or "unknown")
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+        task = str(row.get("task") or "").strip()
+        if task and task not in tasks:
+            tasks.append(task[:80])
+    lines = [f"- 총 {len(rows)}건: " + ", ".join(f"{k} {v}건" for k, v in sorted(by_kind.items()))]
+    for task in tasks[:5]:
+        lines.append(f"- 대표 task: {task}")
+    return lines, path
+
+
+def _weekly_done_schedule(now: datetime) -> list[str]:
+    rows = []
+    for item in schedule_store.list_items("all", now=now):
+        if item.get("status") != "done":
+            continue
+        due = _due_datetime(item)
+        if not _within_last_days(due, now):
+            continue
+        rows.append(f"- {item.get('due', '')} [{item.get('category', '기타')}] {item.get('title', '')}")
+    return rows
+
+
+def _weekly_next_schedule(now: datetime) -> list[str]:
+    end = now + timedelta(days=7)
+    rows = []
+    for item in schedule_store.list_items("all", now=now):
+        if item.get("status") != "open":
+            continue
+        due = _due_datetime(item)
+        if due is None or not (now.date() <= due.date() <= end.date()):
+            continue
+        rows.append(f"- {item.get('due', '')} [{item.get('category', '기타')}] {item.get('title', '')}")
+    return rows
+
+
+def _weekly_artifacts(now: datetime) -> tuple[list[str], Path]:
+    root = RESULTS / "artifacts"
+    if not root.exists():
+        return [], root
+    files = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        try:
+            mtime = datetime.fromtimestamp(path.stat().st_mtime)
+        except OSError:
+            continue
+        if _within_last_days(mtime, now):
+            try:
+                rel = path.relative_to(root)
+            except ValueError:
+                rel = Path(path.name)
+            files.append(str(rel))
+    if not files:
+        return [], root
+    lines = [f"- 생성/수정 파일 {len(files)}개"]
+    for name in files[:8]:
+        lines.append(f"- 대표 산출물: {name}")
+    return lines, root
+
+
+def build_weekly_report(now: datetime | None = None) -> tuple[Path, str]:
+    current = now or _briefing_now()
+    audit_lines, audit_path = _weekly_audit_rows(current)
+    done_lines = _weekly_done_schedule(current)
+    next_lines = _weekly_next_schedule(current)
+    artifact_lines, artifact_root = _weekly_artifacts(current)
+    schedule_path = schedule_store.schedule_path()
+    date_label = current.strftime("%Y-%m-%d")
+    lines = [
+        f"# Weekly Report Draft {date_label}",
+        "",
+        "- 상태: locally generated draft — 기록 기반 초안입니다.",
+        "- 자료 원천:",
+        f"  - audit: `{audit_path}`",
+        f"  - schedule: `{schedule_path}`",
+        f"  - artifacts: `{artifact_root}`",
+        "",
+        "## 수행 업무",
+        *(audit_lines or ["없음"]),
+        "",
+        "## 완료 일정",
+        *(done_lines or ["없음"]),
+        "",
+        "## 다음 주 예정",
+        *(next_lines or ["없음"]),
+        "",
+        "## 생성 산출물",
+        *(artifact_lines or ["없음"]),
+        "",
+        "## 보완 필요",
+        "TODO: 정성 성과/이슈는 직접 보완",
+        "",
+    ]
+    text = "\n".join(lines)
+    path = RESULTS / "reports" / f"weekly_{current.strftime('%Y%m%d')}.md"
     atomic_write_text(path, text)
     return path, text
