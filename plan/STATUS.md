@@ -10,7 +10,7 @@
 | P00-02 | OpenCode 공식 문서 연동 조사 | **fable** | — | INTERNET | READY | | |
 | P09-01 | LLM provider 프로필/env 완전 오버라이드 | codex | — | ANY | APPROVED | plan/reports/P09-01-r2.md | plan/reviews/P09-01-r2.md |
 | P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | APPROVED | plan/reports/P09-02-r1.md | plan/reviews/P09-02-r1.md |
-| P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | IN-PROGRESS | | |
+| P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | AWAITING-REVIEW | plan/reports/P09-03-r1.md | |
 | P10-01 | git 히스토리 내부 hostname purge | fable | — | FABLE-ONLY | READY | | |
 | P11-01 | weak-model capability-floor 하네스 | codex | P09-03 | ANY | BLOCKED | | |
 | P11-02 | floor 실측 + 파서/프롬프트 보강 | codex | P11-01 | LOCAL-LLM | BLOCKED | | |
