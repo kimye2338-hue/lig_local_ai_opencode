@@ -21,6 +21,10 @@ WS_TEMPLATE = Path(__file__).resolve().parents[1]
 DEFAULT_BASE_URL = "http://127.0.0.1:11434/v1"
 PASS = 0
 
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 
 def check(label: str, cond: bool, detail: str = "") -> None:
     global PASS
@@ -110,11 +114,13 @@ def main() -> None:
     check("real scenario 2 creates new_note.md", note.exists(), out2)
     check("created file has requested text", "local llm smoke ok" in note.read_text(encoding="utf-8", errors="replace").lower())
 
-    r3 = run_agent("가능한 도구만 사용해서 현재 폴더를 확인하고 done.md를 만들어줘", env)
+    r3 = run_agent("cad_export 도구로 도면을 내보내줘. 그 도구가 없으면 가능한 도구로 마무리하고 done.md를 만들어줘", env)
     out3 = output_text(r3)
     copy_diag(tmp, "recovery")
     check("real scenario 3 exits 0", r3.returncode == 0, out3)
     check("real scenario 3 reaches normal completion", "결과: completed" in out3, out3)
+    done = root / "done.md"
+    check("real scenario 3 creates done.md", done.exists(), out3)
     check("diagnostics copied", (tmp / "smoke_diagnostics").exists())
 
     diag = json.loads((tmp / "diag" / "runtime-last.json").read_text(encoding="utf-8"))
