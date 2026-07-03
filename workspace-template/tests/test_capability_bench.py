@@ -205,6 +205,13 @@ def main() -> None:
           "agentops.py" in fb["next_exact_command"]
           and "document" in fb["artifact_kinds"], str(fb["artifact_kinds"]))
 
+    md_plan = plan_task("이 보고서를 정리해서 요약.md로 저장해줘")
+    md_caps = {c["id"] for c in md_plan["capabilities"]}
+    check("markdown filename does not route to MATLAB",
+          "matlab_automation" not in md_caps, str(md_plan["capabilities"]))
+    check("markdown filename does not plan MATLAB artifact",
+          "matlab_script" not in md_plan["artifact_kinds"], str(md_plan["artifact_kinds"]))
+
     schedule_plan = plan_task("금요일까지 진동시험 보고서 마감 일정 등록해줘")
     check("schedule request routes to schedule_management",
           [c["id"] for c in schedule_plan["capabilities"]] == ["schedule_management"],

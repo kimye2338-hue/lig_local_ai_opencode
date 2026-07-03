@@ -101,7 +101,7 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "artifact_kinds": ["matlab_script"],
         "outputs": [".m"],
         "pending": ["app validation pending: MATLAB 2024a에서 -batch 실행 검증"],
-        "keywords": ["매트랩", "matlab", "후처리", "플롯", "그래프 그려", ".m"],
+        "keywords": ["매트랩", "matlab", "후처리", "플롯", "그래프 그려", ".m 스크립트", ".m 파일"],
     },
     "office_cad_automation": {
         "description": "Office/CAD 앱 자동화 (SolidWorks/Excel/Word/PowerPoint/HWP) — 매크로/절차 산출물",
