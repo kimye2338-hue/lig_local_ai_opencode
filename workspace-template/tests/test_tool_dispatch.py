@@ -7,12 +7,13 @@ from __future__ import annotations
 
 import sys
 import tempfile
+import json
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from agent_ops.mock_transport import MOCK_ENV, make_mock_transport  # noqa: E402
-from agent_ops.tool_dispatch import ToolDispatcher, run_agent_loop, tool_definitions  # noqa: E402
+from agent_ops.tool_dispatch import AGENT_SYSTEM_PROMPT, ToolDispatcher, run_agent_loop, tool_definitions  # noqa: E402
 
 PASS = 0
 
@@ -38,6 +39,9 @@ def main() -> None:
     defs = tool_definitions()
     names = {x["function"]["name"] for x in defs}
     check("tool_definitions covers registry", "read_file" in names and "replace_in_file" in names and len(names) == 7)
+    prompt_schema_bytes = len(AGENT_SYSTEM_PROMPT.encode("utf-8"))
+    prompt_schema_bytes += len(json.dumps(defs, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    check("prompt and schema stay under 2.3KB", prompt_schema_bytes <= 2300, str(prompt_schema_bytes))
 
     # --- write then read (Korean path + content) ---
     r = d.dispatch({"name": "write_file", "arguments": {"path": "메모/노트.md", "content": "첫 줄\n둘째 줄\n"}})

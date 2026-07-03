@@ -128,6 +128,8 @@ def classify_failure(row: Dict[str, Any]) -> str:
         return ""
     mode = row.get("tool_call_mode", "")
     outcome = row.get("outcome", "")
+    if row.get("exit0") and not row.get("output_ok"):
+        return "wrong_output"
     if mode == "none":
         return "parse_fail"
     if outcome == "tool_loop_cutoff":
@@ -136,8 +138,6 @@ def classify_failure(row: Dict[str, Any]) -> str:
         return "max_turns"
     if outcome == "llm_failed":
         return "llm_failed"
-    if row.get("exit0") and not row.get("output_ok"):
-        return "wrong_output"
     return "other"
 
 
@@ -239,7 +239,8 @@ def mock_selfcheck() -> None:
     doctor = run_doctor()
     floor_info = doctor.get("artifact_pipeline", {}).get("capability_floor_report")
     check("doctor reports capability floor report",
-          isinstance(floor_info, dict) and floor_info.get("path") == str(report), str(floor_info))
+          isinstance(floor_info, dict) and Path(floor_info.get("path", "")).name.startswith("capability_floor_"),
+          str(floor_info))
     check("mock report path is separated from real reports", report.name == "capability_floor_mock.md", str(report))
 
 

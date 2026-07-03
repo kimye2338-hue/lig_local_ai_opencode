@@ -55,13 +55,13 @@ REGISTRY: Dict[str, Dict[str, Any]] = {
 }
 
 _PARAM_DESCRIPTIONS = {
-    "path": "workspace-relative file or directory path",
-    "content": "text content (UTF-8)",
+    "path": "relative path",
+    "content": "UTF-8 text",
     "old": "exact text to replace",
     "new": "replacement text",
-    "count": "max replacements (default: all)",
-    "query": "substring to search for",
-    "pattern": "glob pattern, e.g. **/*.md",
+    "count": "max replacements",
+    "query": "search text",
+    "pattern": "glob, e.g. **/*.md",
 }
 
 
@@ -193,7 +193,8 @@ class ToolDispatcher:
 AGENT_SYSTEM_PROMPT = (
     "You are a local file agent operating inside a workspace. "
     "Use the provided tools to complete the task. All paths are relative to "
-    "the workspace root. When the task is complete, reply with a plain-text "
+    "the workspace root. For file tasks, use tools before answering. Copy filenames exactly. "
+    "When the task is complete, reply with a plain-text "
     "summary and no tool call."
 )
 
