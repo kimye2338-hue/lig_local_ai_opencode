@@ -64,6 +64,8 @@ def main() -> None:
     check("ambiguous asks question", ambiguous.get("ok") is False and "날짜를 다시" in ambiguous.get("question", ""))
     empty = store.parse_due("", now=NOW)
     check("empty asks question", empty.get("ok") is False and "예:" in empty.get("question", ""))
+    no_due_word = store.parse_due("언제까지인지 모르는 일", now=NOW)
+    check("single-character weekday inside words is not a due date", no_due_word.get("ok") is False, str(no_due_word))
 
     first = store.add("금요일 14시 진동시험 보고서 마감", "금요일 14시", now=NOW)
     check("add returns item", first.get("ok") and first["item"]["id"] == 1, str(first))
@@ -101,7 +103,7 @@ def main() -> None:
     cli_env["LIG_SCHEDULE_DIR"] = str(cli_tmp / "schedule")
     cmd = ["py", "-3.11", str(Path(__file__).resolve().parents[1] / "agent_ops" / "agentops.py"), "schedule"]
 
-    add = subprocess.run(cmd + ["add", "금요일 14시 진동시험 보고서 마감"],
+    add = subprocess.run(cmd + ["add", "오늘 14시 진동시험 보고서 마감"],
                          cwd=str(Path(__file__).resolve().parents[1]), env=cli_env,
                          capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
     check("CLI add exits 0", add.returncode == 0 and "등록됨:" in add.stdout, add.stdout + add.stderr)
@@ -120,6 +122,27 @@ def main() -> None:
     check("CLI ambiguous add exits 2 with guidance",
           bad_cli.returncode == 2 and "기한을 인식하지 못했습니다" in (bad_cli.stdout + bad_cli.stderr),
           bad_cli.stdout + bad_cli.stderr)
+    no_due_cli = subprocess.run(cmd + ["add", "언제까지인지 모르는 일"], cwd=str(Path(__file__).resolve().parents[1]),
+                                env=cli_env, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                timeout=60)
+    check("CLI no-due word with 일 exits 2",
+          no_due_cli.returncode == 2 and "기한을 인식하지 못했습니다" in (no_due_cli.stdout + no_due_cli.stderr),
+          no_due_cli.stdout + no_due_cli.stderr)
+    title_cases = [
+        ("금형 부품 검토 7월 8일까지", "금형 부품 검토"),
+        ("수정사항 반영 내일까지", "수정사항 반영"),
+        ("월간 보고 7월 10일까지 제출", "월간 보고 제출"),
+    ]
+    for idx, (raw, expected_title) in enumerate(title_cases, start=2):
+        added = subprocess.run(cmd + ["add", raw], cwd=str(Path(__file__).resolve().parents[1]), env=cli_env,
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+        check(f"CLI preserves title words case {idx}", added.returncode == 0 and expected_title in added.stdout,
+              added.stdout + added.stderr)
+    stored = json.loads((cli_tmp / "schedule" / "schedule.json").read_text(encoding="utf-8"))["items"]
+    titles = [item["title"] for item in stored]
+    check("CLI stored 금형 title intact", "금형 부품 검토" in titles, str(titles))
+    check("CLI stored 수정사항 title intact", "수정사항 반영" in titles, str(titles))
+    check("CLI stored 월간 title intact", "월간 보고 제출" in titles, str(titles))
     denied = subprocess.run(cmd + ["remove", "sch_0001"], input="n\n",
                             cwd=str(Path(__file__).resolve().parents[1]), env=cli_env,
                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)

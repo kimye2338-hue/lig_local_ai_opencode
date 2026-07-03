@@ -17,18 +17,20 @@ SOURCES = {"manual", "mail", "meeting"}
 QUESTION = "날짜를 다시 말씀해 주세요 (예: 내일 오후 3시, 금요일 14시, 7월 15일 09:30)"
 WEEKDAYS = {
     "월요일": 0,
-    "월": 0,
     "화요일": 1,
-    "화": 1,
     "수요일": 2,
-    "수": 2,
     "목요일": 3,
-    "목": 3,
     "금요일": 4,
-    "금": 4,
     "토요일": 5,
-    "토": 5,
     "일요일": 6,
+}
+SHORT_WEEKDAYS = {
+    "월": 0,
+    "화": 1,
+    "수": 2,
+    "목": 3,
+    "금": 4,
+    "토": 5,
     "일": 6,
 }
 CATEGORY_KEYWORDS = {
@@ -168,10 +170,15 @@ def parse_due(text: str, now: Optional[datetime] = None) -> Dict[str, Any]:
 
     if day is None:
         next_week = "다음주" in compact or "다음 주" in date_text
-        for name, target in sorted(WEEKDAYS.items(), key=lambda item: -len(item[0])):
+        for name, target in WEEKDAYS.items():
             if name in compact:
                 day = _weekday_date(base, target, next_week=next_week)
                 break
+    if day is None:
+        short = re.search(r"(이번주|다음주|다음\s+주|오는)\s*([월화수목금토일])(?:\s|$)", date_text)
+        if short:
+            prefix = re.sub(r"\s+", "", short.group(1))
+            day = _weekday_date(base, SHORT_WEEKDAYS[short.group(2)], next_week=prefix == "다음주")
 
     if day is None:
         return {"ok": False, "question": QUESTION}
