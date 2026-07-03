@@ -6,11 +6,10 @@ Artifact *generation* (artifact_generators.py) is separated from app
 while running them inside SolidWorks/Office/Chrome/HWP is added here later
 as independent adapters — without touching generators or the planner.
 
-Each adapter declares what it would automate, what it needs (dependency /
-app install / company network), and its validation status. Nothing here
-claims to execute anything yet: every adapter is a skeleton and stays
+Each adapter declares what it automates, what it needs (dependency / app
+install / company network), and its validation status. Adapters stay
 "app validation pending" (or company validation pending) until proven on
-a machine that has the app.
+a machine that has the app; proven adapters carry a `validated` note.
 
 Adding a real adapter later:
   1) implement `execute(artifact_path, options) -> dict` in its module
@@ -43,9 +42,10 @@ ADAPTERS: Dict[str, Dict[str, Any]] = {
     "browser": {
         "description": "Chrome 실제 제어 (CDP/selenium/playwright)",
         "consumes": ["browser_script"],
-        "available": False,
+        "available": True,
         "requires": ["Chrome", "CDP는 추가 설치 불필요; selenium/playwright는 dependencies.json 'browser-automation-wheels'"],
-        "pending": "real browser validation pending; 사내 시스템 로그인은 company validation pending",
+        "validated": "local Chrome CDP, 2026-07-03",
+        "pending": "사내 시스템 로그인은 company validation pending",
         "execute": browser_cdp.execute,
     },
     "hwp": {
@@ -65,6 +65,7 @@ def adapter_summary() -> Dict[str, Any]:
             "description": spec["description"],
             "consumes": spec["consumes"],
             "available": spec["available"],
+            "validated": spec.get("validated", ""),
             "pending": spec["pending"],
         }
         for adapter_id, spec in ADAPTERS.items()

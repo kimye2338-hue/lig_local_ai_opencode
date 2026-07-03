@@ -46,7 +46,10 @@ def chrome_9222_available() -> bool:
 
 def main() -> None:
     browser_spec = ADAPTERS["browser"]
-    check("browser adapter keeps available false", browser_spec["available"] is False)
+    check("browser adapter is locally validated", browser_spec["available"] is True
+          and browser_spec.get("validated", "").startswith("local Chrome CDP, "))
+    check("browser adapter keeps company login pending",
+          "company validation pending" in browser_spec["pending"])
     check("browser adapter exposes execute", browser_spec["execute"] is browser_cdp.execute)
     check("declared actions include required four",
           set(browser_cdp.ACTIONS) == {"open_url", "get_title", "extract_text", "screenshot"})

@@ -479,8 +479,14 @@ def main() -> None:
     # --- adapter skeleton: execution side is declared but honestly pending ---
     check("adapters cover generated artifact kinds",
           {"vba_macro", "browser_script"} <= {k for a in ADAPTERS.values() for k in a["consumes"]})
-    check("no adapter claims availability without app validation",
-          all(not a["available"] and "pending" in a["pending"] for a in adapter_summary().values()))
+    summary = adapter_summary()
+    check("browser availability requires validation evidence",
+          summary["browser"]["available"] is True
+          and summary["browser"]["validated"].startswith("local Chrome CDP, ")
+          and "company validation pending" in summary["browser"]["pending"])
+    check("non-browser adapters stay unavailable without app validation",
+          all(not a["available"] and "pending" in a["pending"]
+              for adapter_id, a in summary.items() if adapter_id != "browser"))
 
     # --- CLI: plan --make-artifacts end to end in an isolated workspace ---
     ws = tmp / "작업공간"
