@@ -10,10 +10,12 @@
 ## 목표
 CLI 배치형 어댑터 2종 — COM보다 안정적인 경로. subprocess 기반이라 stdlib만으로 가능.
 
-> **probe 실측 (2026-07-03, 회사 PC)**: MATLAB R2024a 경로 확인됨
-> (`C:\Program Files\MATLAB\R2024a\bin\matlab.exe`). **accoreconsole은 표준 경로에
-> 미발견** — AutoCAD 부분은 사용자에게 설치 여부/경로 확인 후 진행하고, 확인 전에는
-> env `ACCORECONSOLE_EXE` 오버라이드 + "미발견 안내" 경로만 구현.
+> **probe 실측 + 사용자 확인 (2026-07-03, 회사 PC)**: MATLAB R2024a 경로 확인
+> (`C:\Program Files\MATLAB\R2024a\bin\matlab.exe`). AutoCAD는 **Mechanical 2019,
+> 비표준 경로 `C:\AutoCAD 2019\`** — 사용자는 `acad.exe /p LIGNEX1 /product ACADM`
+> 바로가기로 실행. 구현 지침: exe 탐색에 `C:\AutoCAD*\accoreconsole.exe` 포함(probe_env
+> 반영됨), accoreconsole 호출 시 `/product ACADM` 컨텍스트가 필요한지 회사 실측으로 확인,
+> 프로필/제품 인자는 env(`ACAD_PROFILE`, `ACAD_PRODUCT`)로 받되 기본값을 위 실측값으로.
 
 ## 작업 항목
 1. `agent_ops/adapters/matlab_batch.py`:

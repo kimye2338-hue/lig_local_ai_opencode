@@ -152,8 +152,12 @@ def run_probe() -> dict:
         report["apps"]["chrome"] = {"installed": found, "path": _mask_path(chrome)}
     report["apps"]["matlab_exe"] = _first_glob(
         [r"C:\Program Files\MATLAB\R20*\bin\matlab.exe"])
+    # 실측(2026-07-03): 회사 AutoCAD Mechanical 2019는 C:\AutoCAD 2019\ 비표준 경로.
     report["apps"]["accoreconsole_exe"] = _first_glob(
-        [r"C:\Program Files\Autodesk\AutoCAD*\accoreconsole.exe"])
+        [r"C:\AutoCAD*\accoreconsole.exe",
+         r"C:\Program Files\Autodesk\AutoCAD*\accoreconsole.exe"])
+    report["apps"]["acad_exe"] = _first_glob(
+        [r"C:\AutoCAD*\acad.exe", r"C:\Program Files\Autodesk\AutoCAD*\acad.exe"])
     report["apps"]["fluent_exe"] = _first_glob(
         [r"C:\Program Files\ANSYS Inc\v*\fluent\ntbin\win64\fluent.exe"])
     try:
@@ -161,7 +165,75 @@ def run_probe() -> dict:
         report["pywin32"] = True
     except ImportError:
         report["pywin32"] = False
+    report["proxy_env"] = {k: bool(os.environ.get(k))
+                           for k in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
+                                     "http_proxy", "https_proxy")}
+    report["opencode"] = _opencode_probe()
     return report
+
+
+def _opencode_probe() -> dict:
+    """OpenCode 기동 지연 진단: 잔류 프로세스, 구버전 proxy(8765), exe 위치,
+    `--version` 소요 시간(cold/warm), autoupdate 설정 존재 여부.
+
+    과거 실측 원인 3종(진단 스크립트 대기 / 잔류 proxy·프로세스 / 업데이트 확인)을
+    한 번에 판별하기 위한 데이터 수집 — 판단은 결과를 보고 한다.
+    """
+    import shutil as _sh
+    import socket
+    import subprocess
+    import time as _t
+    info: dict = {}
+    exe = _sh.which("opencode") or ""
+    if not exe:
+        cand = Path.home() / "OpenCodeLIG" / "bin" / "opencode.exe"
+        if cand.exists():
+            exe = str(cand)
+    info["exe"] = _mask_path(exe)
+    if exe:
+        timings = []
+        for label in ("cold", "warm"):
+            t0 = _t.time()
+            try:
+                subprocess.run([exe, "--version"], capture_output=True, timeout=90)
+                timings.append({label: round(_t.time() - t0, 1)})
+            except subprocess.TimeoutExpired:
+                timings.append({label: "timeout(>90s)"})
+                break
+            except Exception as e:
+                timings.append({label: f"error:{type(e).__name__}"})
+                break
+        info["version_cmd_seconds"] = timings
+    try:
+        out = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq opencode.exe", "/FO", "CSV", "/NH"],
+            capture_output=True, timeout=15, text=True).stdout
+        info["leftover_opencode_processes"] = out.lower().count("opencode.exe")
+    except Exception:
+        info["leftover_opencode_processes"] = "확인 실패"
+    try:  # 구버전 proxy 잔류 여부 (신버전은 proxy를 쓰지 않음)
+        with socket.create_connection(("127.0.0.1", 8765), timeout=1):
+            info["legacy_proxy_8765"] = "리스닝 중 (구버전 proxy 잔류 의심)"
+    except Exception:
+        info["legacy_proxy_8765"] = "없음"
+    configs = {}
+    for label, p in [
+            ("workspace_opencode_json", Path.home() / "OpenCodeLIG" / "workspace" / "opencode.json"),
+            ("home_opencode_json", Path.home() / ".config" / "opencode" / "opencode.json"),
+            ("home_opencode_jsonc", Path.home() / ".config" / "opencode" / "opencode.jsonc")]:
+        if p.exists():
+            head = p.read_text(encoding="utf-8", errors="replace")[:2000]
+            configs[label] = {"exists": True, "autoupdate_set": "autoupdate" in head}
+        else:
+            configs[label] = {"exists": False}
+    info["configs"] = configs
+    # 구버전 흔적: lig_diag / proxy 스크립트가 워크스페이스에 있는지 (main 아티팩트 판별)
+    ws = Path.home() / "OpenCodeLIG" / "workspace"
+    info["legacy_files"] = {
+        "lig_diag": bool(list(ws.glob("**/lig_diag*.py"))) if ws.exists() else False,
+        "capabilities_py(신버전 표식)": (ws / "agent_ops" / "capabilities.py").exists() if ws.exists() else False,
+    }
+    return info
 
 
 def _to_markdown(r: dict) -> str:
@@ -175,6 +247,10 @@ def _to_markdown(r: dict) -> str:
         lines.append(f"- {app}: {json.dumps(sec, ensure_ascii=False)}")
     lines += ["", "> AccessVBOM=1 이면 매크로 자동 주입 가능. 0/키 없음이면 수동 import 경로 사용.",
               "> policy_* 키가 있으면 그룹 정책 강제 — 개인 설정 변경 불가."]
+    lines += ["", "## OpenCode 기동 진단", "",
+              f"- proxy env 설정 여부: {json.dumps(r.get('proxy_env', {}), ensure_ascii=False)}"]
+    for key, value in r.get("opencode", {}).items():
+        lines.append(f"- {key}: {json.dumps(value, ensure_ascii=False)}")
     return "\n".join(lines)
 
 
