@@ -18,7 +18,7 @@
 | P12-02 | 브라우저 CDP 어댑터 + chrome-debug.bat | codex | P12-01 | ANY | AWAITING-REVIEW | plan/reports/P12-02-r1.md | |
 | P12-03 | CDP 실측 + available 전환 | codex | P12-02 | CHROME | BLOCKED | | |
 | P13-01 | approval(승인 게이트) + audit(감사 로그) 모듈 | codex | — | ANY | APPROVED | plan/reports/P13-01-r1.md | plan/reviews/P13-01-r1.md |
-| P13-02 | `work` 오케스트레이터 subcommand E2E | codex | P13-01 | ANY | IN-PROGRESS | | |
+| P13-02 | `work` 오케스트레이터 subcommand E2E | codex | P13-01 | ANY | AWAITING-REVIEW | plan/reports/P13-02-r1.md | |
 | P14-01 | schedule store + 결정적 날짜 파서 | codex | — | ANY | READY | | |
 | P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | BLOCKED | | |
 | P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | BLOCKED | | |
@@ -44,6 +44,7 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-03 P13-02 AWAITING-REVIEW (Codex). 보고서: plan/reports/P13-02-r1.md. 신규 work command 테스트 포함 전체 14파일 368 checks 통과.
 - 2026-07-03 P13-02 IN-PROGRESS (Codex). 시작 HEAD: c61e0db.
 - 2026-07-03 P12-02 AWAITING-REVIEW (Codex). 보고서: plan/reports/P12-02-r1.md. 신규 browser adapter 테스트 포함 전체 13파일 통과.
 - 2026-07-03 P12-02 IN-PROGRESS (Codex). 시작 HEAD: d0e0b56.
