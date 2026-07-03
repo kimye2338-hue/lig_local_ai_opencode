@@ -622,21 +622,36 @@ def _meeting_decisions(sentences: List[str]) -> List[str]:
     return [s for s in sentences if any(m in s for m in markers)]
 
 
+_OWNER_DATE_LIKE = re.compile(r"^\d|^\D*\d|[월일주후시]$")
+
+
+def _extract_owner(sentence: str) -> str:
+    m = re.search(r"담당[:：]?\s*([A-Za-z0-9_가-힣]+)", sentence)
+    if m and not _OWNER_DATE_LIKE.search(m.group(1)):
+        return m.group(1)
+    m = re.search(r"([가-힣]{2,4})\s*담당", sentence)
+    if m:
+        return m.group(1)
+    return "확인 필요"
+
+
 def _meeting_actions(sentences: List[str]) -> List[Dict[str, str]]:
     rows: List[Dict[str, str]] = []
     for sentence in sentences:
         if not any(marker in sentence for marker in ("하기로", "까지", "담당", "액션", "조치")):
             continue
-        owner = "확인 필요"
-        m_owner = re.search(r"담당[:：]?\s*([A-Za-z0-9_가-힣]+)", sentence)
-        if m_owner:
-            owner = m_owner.group(1)
+        owner = _extract_owner(sentence)
         due = "확인 필요"
         m_due = re.search(r"((?:\d{4}-\d{1,2}-\d{1,2})|(?:\d{1,2}월\s*\d{1,2}일)|(?:오늘|내일|모레|글피|이번주\s*[월화수목금토일]|다음주\s*[월화수목금토일]|[월화수목금토일]요일)|(?:\d+\s*(?:일|주|주일)\s*후))\s*까지?", sentence)
         if m_due:
             due = m_due.group(1)
         todo = sentence
-        todo = re.sub(r"담당[:：]?\s*[A-Za-z0-9_가-힣]+", "", todo).strip(" ,")
+        if owner != "확인 필요":
+            todo = re.sub(rf"{re.escape(owner)}\s*담당[:：]?", "", todo)
+            todo = re.sub(r"담당[:：]?\s*[A-Za-z0-9_가-힣]+", "", todo)
+        if due != "확인 필요":
+            todo = todo.replace(due, "")
+        todo = re.sub(r"\s+", " ", todo).strip(" ,.")
         rows.append({"todo": todo, "owner": owner, "due": due, "source": sentence})
     return rows
 

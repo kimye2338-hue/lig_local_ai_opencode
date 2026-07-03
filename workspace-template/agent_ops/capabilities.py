@@ -101,7 +101,7 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "artifact_kinds": ["meeting_minutes"],
         "outputs": ["회의록.md"],
         "pending": [],
-        "keywords": ["회의록", "회의 정리", "미팅 정리", "회의 내용", "minutes"],
+        "keywords": ["회의록", "회의 정리", "미팅 정리", "회의 내용", "meeting minutes", "미팅노트"],
     },
     "matlab_automation": {
         "description": "시험 데이터 후처리용 MATLAB 스크립트 scaffold 생성",

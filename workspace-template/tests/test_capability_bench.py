@@ -212,6 +212,10 @@ def main() -> None:
           "matlab_automation" not in md_caps, str(md_plan["capabilities"]))
     check("markdown filename does not plan MATLAB artifact",
           "matlab_script" not in md_plan["artifact_kinds"], str(md_plan["artifact_kinds"]))
+    mm_neg = plan_task("5 minutes 후에 알려줘")
+    check("english minutes time expression does not route to meeting_minutes",
+          "meeting_minutes" not in {c["id"] for c in mm_neg["capabilities"]}
+          and "meeting_minutes" not in mm_neg["artifact_kinds"], str(mm_neg))
 
     schedule_plan = plan_task("금요일까지 진동시험 보고서 마감 일정 등록해줘")
     check("schedule request routes to schedule_management",
@@ -510,6 +514,8 @@ def main() -> None:
     check("meeting minutes extracts decision and action",
           "브라켓 두께" in minutes and "도면 수정" in minutes and "김대리" in minutes,
           minutes[:1200])
+    check("meeting action owner is a person or 확인 필요, never a date fragment",
+          "| 김대리 |" in minutes and "| 7월 |" not in minutes, minutes[:1200])
     check("meeting minutes suggests schedule command without auto registration",
           "agentops.py schedule add" in minutes and "자동 등록은 하지 않습니다" in minutes,
           minutes[:1200])
