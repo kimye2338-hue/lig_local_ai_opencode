@@ -15,7 +15,7 @@
 | P10-01 | git 히스토리 내부 hostname purge | fable | — | FABLE-ONLY | READY | | |
 | P11-A | lig_runtime native function calling(tools) 경로 | codex | P09-02 | ANY | APPROVED | plan/reports/P11-A-r1.md | plan/reviews/P11-A-r1.md |
 | P11-01 | weak-model capability-floor 하네스 | codex | P09-03, P11-A | ANY | APPROVED | plan/reports/P11-01-r1.md | plan/reviews/P11-01-r1.md |
-| P11-02 | floor 실측 + 파서/프롬프트 보강 | codex | P11-01 | LOCAL-LLM | IN-PROGRESS | | |
+| P11-02 | floor 실측 + 파서/프롬프트 보강 | codex | P11-01 | LOCAL-LLM | AWAITING-REVIEW | plan/reports/P11-02-r1.md | |
 | P12-01 | stdlib WebSocket 미니 클라이언트 | codex | — | ANY | APPROVED | plan/reports/P12-01-r1.md | plan/reviews/P12-01-r1.md |
 | P12-02 | 브라우저 CDP 어댑터 + chrome-debug.bat | codex | P12-01 | ANY | APPROVED | plan/reports/P12-02-r1.md | plan/reviews/P12-02-r1.md |
 | P12-03 | CDP 실측 + available 전환 | codex | P12-02 | CHROME | APPROVED | plan/reports/P12-03-r1.md | plan/reviews/P12-03-r1.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P11-02 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P11-02-r1.md. floor report 경로 분리, 약모델 프롬프트 보강, qwen2.5:7b-instruct 최종 20/30(66.7%) 및 전체 19개 테스트 파일 exit 0.
 
 - 2026-07-04 P11-02 IN-PROGRESS (Codex). 시작 HEAD: 8713266.
 
