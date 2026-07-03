@@ -87,6 +87,54 @@ def main() -> None:
           and "<GATEWAY>" in body, body[:300])
     check("stdout also masked", "FAKESECRET1234" not in out3)
 
+    # --- gateway 404 -> discovery mode probes path variants, still masked ---
+    import http.server
+    import threading
+
+    class _H404(http.server.BaseHTTPRequestHandler):
+        def _reply(self):
+            body = b'{"detail": "Not Found", "hint": "try /v1/chat/completions"}'
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            self._reply()
+
+        def do_POST(self):
+            self._reply()
+
+        def log_message(self, *args):
+            pass
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _H404)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    fake404 = tmp / "fake404.env"
+    fake404.write_text(f"LIG_GATEWAY_BASE_URL=http://127.0.0.1:{port}/gw\n"
+                       "LIG_API_KEY=FAKEKEY9999\n", encoding="utf-8")
+    out_dir2 = tmp / "gw404"
+    env4 = dict(env)
+    env4.update({"LIG_API_ENV_FILE": str(fake404), "PROBE_OUT_DIR": str(out_dir2)})
+    env4.pop("LIG_PROVIDER_PROFILE", None)
+    r4 = subprocess.run(["py", "-3.11", str(WS_TEMPLATE / "agent_ops" / "probe_gateway.py")],
+                        env=env4, capture_output=True, timeout=180)
+    srv.shutdown()
+    gw404_files = list(out_dir2.glob("probe_gateway_*.json"))
+    check("404 gateway still completes and writes a result",
+          r4.returncode == 0 and gw404_files,
+          r4.stderr.decode("utf-8", errors="replace")[:300])
+    body4 = gw404_files[0].read_text(encoding="utf-8")
+    check("404 response body is captured (route hints preserved)",
+          '"http_status": 404' in body4 and "try /v1/chat/completions" in body4, body4[:400])
+    check("discovery mode lists path variants",
+          '"discovery"' in body4 and body4.count("chat/completions") >= 3
+          and '"discovery_hint"' in body4, body4[:400])
+    check("discovery output masks key and host",
+          "FAKEKEY9999" not in body4 and f"127.0.0.1:{port}" not in body4)
+
     print(f"\nALL {PASS} CHECKS PASSED (probes)")
 
 

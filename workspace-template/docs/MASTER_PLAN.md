@@ -53,7 +53,7 @@ company validation pending / security cleanup pending`
 
 | PC | 사양 | 역할 |
 |----|------|------|
-| 사내 업무 PC | i7-14700K / RAM 64GB / RTX 2000 Ada 16GB / SSD 1TB + HDD 2TB / **Windows 11** | 운영. gateway API 사용. (16GB VRAM → 비상용 로컬 14B Q4 서빙도 가능 — 백업 옵션) |
+| 사내 업무 PC | i7-14700K / **RAM 128GB(실측)** / RTX 2000 Ada 16GB / SSD 1TB + HDD 2TB / **Windows 10 19044·21H2(실측 — 사용자 답변과 다름, probe 우선)** / Python 3.11.3 + pywin32 설치됨(실측) | 운영. gateway API 사용. (16GB VRAM+128GB RAM → 비상용 로컬 GGUF 서빙 여유 큼) |
 | 집 개발 PC | Ryzen 3500X / RAM 16GB / RTX 2060 Super 8GB / SSD 1TB / **Windows 10** | 개발/선검증. 로컬 실측 모델: **Qwen2.5-7B-Instruct Q4** (8GB VRAM 상한 기준) |
 
 ### 1.3 사내 소프트웨어 (버전 고정 — 호환성 기준)
@@ -502,6 +502,9 @@ Security cleanup status: / New HEAD commit: / Next exact command:
 | 리스크 | 가능성 | 대비 (반영 위치) |
 |--------|--------|-----------------|
 | gateway 스펙 변경 | 중 | env 완전 오버라이드(P9) — 코드 수정 없이 흡수 |
+| **gateway 라우트 404 (실측 2026-07-03)** | **현실화** | 기본 라우트 경로가 실제와 다름 — probe-gateway v2 discovery 모드로 올바른 경로 자동 탐색 후 lig-api.env만 수정 (probe/results/probe_gateway_company_20260703.json) |
+| VBProject COM 차단 | ~~높음~~ **해소(실측)** | 회사 Excel AccessVBOM=1 + 정책 잠금 없음 → P15-02는 자동 주입이 1차 경로 (probe/results/probe_env_company_20260703.md) |
+| AutoCAD accoreconsole 미발견 (실측) | 신규 | 표준 경로에 없음 — 설치 여부/경로 사용자 확인 후 P16-02 진행 (env `ACCORECONSOLE_EXE`로 흡수 가능) |
 | EXAONE tool-call 형식 특이 | 중 | P19 1일차 실측+파서 보강 절차, Qwen3.6 fallback 자동 |
 | gateway 장애/점검 | 중 | 사내 PC 16GB VRAM 로컬 GGUF 백업 서빙(P17 반입) |
 | VBProject COM 차단 | 높음 | P15 이중 경로(COM 데이터 작업 + 수동 import 안내 강등) |

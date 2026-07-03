@@ -11,6 +11,11 @@
 Excel COM 실행 어댑터 — 원본 불가침(항상 사본), 실패 시 프로세스 정리, VBProject 차단 시
 정직한 강등.
 
+> **probe 실측 (2026-07-03, 회사 PC)**: Excel AccessVBOM=1 + VBAWarnings=1 + 정책 잠금
+> 없음 (probe/results/probe_env_company_20260703.md) → `run_macro_file`의 VBProject
+> 자동 주입을 **1차 경로**로 구현하라. manual_import 강등 경로는 다른 PC 대비용으로 유지.
+> pywin32는 회사 PC에 이미 설치됨.
+
 ## 작업 항목
 1. `agent_ops/adapters/excel_com.py`:
    - pywin32는 **optional import**: 없으면 모든 호출이

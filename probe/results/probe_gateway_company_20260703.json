@@ -1,0 +1,33 @@
+{
+  "probe": "gateway",
+  "version": 1,
+  "timestamp": "2026-07-03 16:01:11",
+  "source": "회사 PC, 사용자 제공",
+  "profile": "company_gateway",
+  "config": {
+    "secret_file_found": true,
+    "gateway_url_set": true,
+    "api_key_set": true
+  },
+  "routes": [
+    {
+      "route": "lig-coding",
+      "endpoint": "<GATEWAY>/ai_infra/llm_api/EXAONE-4.5-33B-vibe_coding_think_off/v1",
+      "model": "EXAONE-4.5-33B",
+      "basic": {"ok": false, "error": "<HTTPError 404: 'Not Found'>"}
+    },
+    {
+      "route": "lig-chat",
+      "endpoint": "<GATEWAY>/ai_infra/llm_api/EXAONE-4.5-33B-default_think_off/v1",
+      "model": "EXAONE-4.5-33B",
+      "basic": {"ok": false, "error": "<HTTPError 404: 'Not Found'>"}
+    },
+    {
+      "route": "lig-fallback",
+      "endpoint": "<GATEWAY>/ai_infra/llm_api/Qwen3.6-27B-vibe_coding_think_off/v1",
+      "model": "Qwen3.6-27B",
+      "basic": {"ok": false, "error": "<HTTPError 404: 'Not Found'>"}
+    }
+  ],
+  "analysis": "네트워크 도달 O (연결 오류 아님), 경로 404 — 라우트 경로/모델명 표기가 실제 gateway와 다름. probe v2의 discovery 모드로 재실측 필요. 수정은 lig-api.env 편집만으로 가능 (P09-01 env 오버라이드)."
+}

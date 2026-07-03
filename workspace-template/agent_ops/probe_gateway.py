@@ -78,6 +78,60 @@ def _post(base_url: str, api_key: str, payload: dict, timeout: int):
     return int((time.time() - t0) * 1000), body
 
 
+def _try_url(url: str, api_key: str, secrets: list, timeout: int,
+             method: str = "GET", payload: dict = None) -> dict:
+    """One discovery attempt: record status + masked body sample, never raise."""
+    try:
+        data = json.dumps(payload).encode("utf-8") if payload else None
+        req = urllib.request.Request(
+            url, data=data, method=method,
+            headers={"Content-Type": "application/json",
+                     **({"Authorization": f"Bearer {api_key}"} if api_key else {})})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return {"status": resp.status,
+                    "body": _mask(resp.read(600).decode("utf-8", errors="replace"), secrets)}
+    except urllib.error.HTTPError as exc:
+        return {"status": exc.code,
+                "body": _mask(exc.read(600).decode("utf-8", errors="replace"), secrets)}
+    except Exception as exc:
+        return {"status": "error", "body": _mask(repr(exc), secrets)[:200]}
+
+
+def discover_paths(gateway_root: str, route_base: str, model: str,
+                   api_key: str, secrets: list, timeout: int) -> list:
+    """When the configured path 404s, systematically try common variants so
+    the user learns the correct lig-api.env values from one run.
+
+    Every attempt is recorded with masked path + status + body sample —
+    404 bodies often name the valid routes, which is exactly what we need.
+    """
+    chat_payload = {"model": model, "max_tokens": 8,
+                    "messages": [{"role": "user", "content": "ping"}]}
+    root = gateway_root.rstrip("/")
+    base = route_base.rstrip("/")
+    no_v1 = base[:-3] if base.endswith("/v1") else base
+    candidates = [
+        ("POST", base + "/chat/completions", chat_payload),      # 설정값 그대로 (기준)
+        ("POST", no_v1 + "/chat/completions", chat_payload),     # 라우트에 /v1 없음
+        ("POST", root + "/v1/chat/completions", chat_payload),   # 모델이 payload로만 구분
+        ("POST", root + "/chat/completions", chat_payload),
+        ("GET", base + "/models", None),                          # 모델 목록 (경로 힌트)
+        ("GET", no_v1 + "/models", None),
+        ("GET", root + "/v1/models", None),
+        ("GET", root + "/models", None),
+        ("GET", root, None),                                      # 루트 응답 (안내 페이지/목록)
+    ]
+    results = []
+    seen = set()
+    for method, url, payload in candidates:
+        if url in seen:
+            continue
+        seen.add(url)
+        outcome = _try_url(url, api_key, secrets, timeout, method, payload)
+        results.append({"method": method, "path": _route_only(url), **outcome})
+    return results
+
+
 def probe_route(name: str, provider: dict, api_key: str, secrets: list) -> dict:
     result = {"route": name, "endpoint": _route_only(provider["base_url"]),
               "model": provider["model"]}
@@ -93,6 +147,24 @@ def probe_route(name: str, provider: dict, api_key: str, secrets: list) -> dict:
             "messages": [{"role": "user", "content": "1+1은? 숫자만."}]}, timeout)
         result["basic"] = {"ok": True, "latency_ms": ms,
                            "sample": _mask(body, secrets)}
+    except urllib.error.HTTPError as exc:
+        # 404 등 HTTP 오류: 응답 본문에 올바른 라우트 힌트가 있을 수 있다.
+        detail = exc.read(600).decode("utf-8", errors="replace")
+        result["basic"] = {"ok": False, "http_status": exc.code,
+                           "error": _mask(repr(exc), secrets),
+                           "body_sample": _mask(detail, secrets)}
+        if exc.code == 404:
+            gateway_root = os.environ.get("LIG_GATEWAY_BASE_URL") or ""
+            if not gateway_root:
+                from agent_ops.lig_providers import load_lig_env as _lle
+                gateway_root = _lle().get("LIG_GATEWAY_BASE_URL", "")
+            result["discovery"] = discover_paths(
+                gateway_root or base, base, provider["model"],
+                api_key, secrets, min(timeout, 15))
+            result["discovery_hint"] = ("status 200/400/422가 나온 path가 올바른 형태입니다. "
+                                        "lig-api.env의 LIG_ROUTE_*/LIG_GATEWAY_BASE_URL을 그 형태로 수정하세요 "
+                                        "(코드 수정 불필요).")
+        return result
     except Exception as exc:
         result["basic"] = {"ok": False, "error": _mask(repr(exc), secrets)}
         return result  # 기본 호출 실패면 나머지 생략
