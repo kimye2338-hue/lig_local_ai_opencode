@@ -25,7 +25,7 @@
 | P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | APPROVED | plan/reports/P14-02-r2.md | plan/reviews/P14-02-r2.md |
 | P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | APPROVED | plan/reports/P14-03-r1.md | plan/reviews/P14-03-r1.md |
 | P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | APPROVED | plan/reports/P14-04-r2.md | plan/reviews/P14-04-r2.md |
-| P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | READY | | |
+| P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | IN-PROGRESS | | |
 | P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | APPROVED | plan/reports/P15-01-r1.md | plan/reviews/P15-01-r1.md |
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | APPROVED | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r2.md |
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | READY | | |
