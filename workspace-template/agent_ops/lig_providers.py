@@ -21,10 +21,14 @@ from typing import Any, Dict, Optional
 SECRET_ENV_PATH = Path(os.environ.get("LIG_API_ENV_FILE") or (Path.home() / "OpenCodeLIG_USERDATA" / "secrets" / "lig-api.env"))
 DIAG_DIR = Path(os.environ.get("LIG_DIAG_DIR") or (Path.home() / "OpenCodeLIG_USERDATA" / "diagnostics"))
 
+# 실측(2026-07-03): 라우트에는 "/gateway/" 접두가 필요하다 — 없으면 리버스 프록시가
+# 백엔드로 넘기지 않고 80포트 웹서버가 404를 반환한다 (probe/results/ 2차 실측 +
+# 옛 저장 설정 실증). default_think_off 형태가 원본 실증이며, vibe_coding/Qwen 라우트
+# 존재 여부는 회사 재실측으로 확인한다 (다르면 lig-api.env에서 오버라이드).
 _ROUTE_DEFAULTS = {
-    "lig-coding": ("LIG_ROUTE_CODING", "/EXAONE-4.5-33B-vibe_coding_think_off/v1", "LIG_MODEL_CODING", "EXAONE-4.5-33B"),
-    "lig-chat": ("LIG_ROUTE_CHAT", "/EXAONE-4.5-33B-default_think_off/v1", "LIG_MODEL_CHAT", "EXAONE-4.5-33B"),
-    "lig-fallback": ("LIG_ROUTE_FALLBACK", "/Qwen3.6-27B-vibe_coding_think_off/v1", "LIG_MODEL_FALLBACK", "Qwen3.6-27B"),
+    "lig-coding": ("LIG_ROUTE_CODING", "/gateway/EXAONE-4.5-33B-vibe_coding_think_off/v1", "LIG_MODEL_CODING", "EXAONE-4.5-33B"),
+    "lig-chat": ("LIG_ROUTE_CHAT", "/gateway/EXAONE-4.5-33B-default_think_off/v1", "LIG_MODEL_CHAT", "EXAONE-4.5-33B"),
+    "lig-fallback": ("LIG_ROUTE_FALLBACK", "/gateway/Qwen3.6-27B-vibe_coding_think_off/v1", "LIG_MODEL_FALLBACK", "Qwen3.6-27B"),
 }
 
 _PLACEHOLDER_MARKERS = ("REPLACE_WITH", "PUT_INTERNAL", "CHANGEME")
