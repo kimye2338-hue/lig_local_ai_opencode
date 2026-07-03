@@ -32,7 +32,7 @@
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | BLOCKED | | |
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | BLOCKED | | |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | BLOCKED | | |
-| P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | IN-PROGRESS | | |
+| P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | AWAITING-REVIEW | plan/reports/P17-01-r1.md | |
 | P17-02 | 의존성 prefetch + SHA256 확정 | codex | P16-04 | INTERNET | BLOCKED | | |
 | P17-03 | 반입 번들 build + setup.bat + 체크리스트 | codex | P17-02 | ANY | BLOCKED | | |
 | P17-04 | 오프라인 설치 리허설 (네트워크 차단) | human+codex | P17-03 | HUMAN | BLOCKED | | |
@@ -44,6 +44,7 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-03 P17-01 AWAITING-REVIEW (Codex). 보고서: plan/reports/P17-01-r1.md. optional xlsx ingest 포함 전체 15파일 431 checks 통과.
 - 2026-07-03 P17-01 IN-PROGRESS (Codex). 시작 HEAD: 88b87ba.
 - 2026-07-03 P15-01 AWAITING-REVIEW (Codex). 보고서: plan/reports/P15-01-r1.md. Office 2016 quality 규칙 포함 전체 15파일 427 checks 통과.
 - 2026-07-03 P15-01 IN-PROGRESS (Codex). 시작 HEAD: 8baf6ca.
