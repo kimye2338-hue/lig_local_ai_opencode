@@ -12,11 +12,11 @@
 로컬 LLM으로 시나리오 10종×3회를 자동 실행해 tool-call 성공률/실패 유형을 집계하는
 하네스를 만든다 (실측 자체는 P11-02).
 
-> **실측 반영 (2026-07-03)**: 회사 gateway 응답에 `tool_calls` 필드 실존 (vLLM 계열,
-> probe/results/ r3) → **native function calling 지원 가능성 높음**. 하네스는 두 경로를
-> 모두 측정 가능해야 한다: (A) 현행 프롬프트 텍스트 파싱, (B) OpenAI tools 파라미터
-> native 경로 (lig_runtime에 tools 전달 옵션이 없으면 이 작업에서 옵션만 추가 — 기본은
-> A 유지). P00-03 결과가 오면 어느 쪽을 기본으로 할지 Fable이 결정한다.
+> **실측 확정 (2026-07-03, company_check)**: 회사 gateway가 **OpenAI native function
+> calling을 완전 지원** — EXAONE이 read_file을 `tool_calls`로 반환, finish_reason=
+> "tool_calls" (probe/results/company_check_20260703.md). **결정: native tools 경로가
+> 1차**다. 하네스는 native 경로 성공률을 우선 측정하고, 텍스트 파싱은 fallback으로만
+> 유지한다. 선행 P11-A(아래) 완료 후 진행.
 
 ## 먼저 읽기
 - `tests/test_real_llm_smoke.py` (P09-03 산출 — 서버 감지/SKIP 패턴 재사용)

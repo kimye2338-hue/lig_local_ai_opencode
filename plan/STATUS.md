@@ -13,7 +13,8 @@
 | P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | APPROVED | plan/reports/P09-02-r1.md | plan/reviews/P09-02-r1.md |
 | P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | AWAITING-REVIEW | plan/reports/P09-03-r1.md | |
 | P10-01 | git 히스토리 내부 hostname purge | fable | — | FABLE-ONLY | READY | | |
-| P11-01 | weak-model capability-floor 하네스 | codex | P09-03 | ANY | BLOCKED | | |
+| P11-A | lig_runtime native function calling(tools) 경로 | codex | P09-02 | ANY | READY | | |
+| P11-01 | weak-model capability-floor 하네스 | codex | P09-03, P11-A | ANY | BLOCKED | | |
 | P11-02 | floor 실측 + 파서/프롬프트 보강 | codex | P11-01 | LOCAL-LLM | BLOCKED | | |
 | P12-01 | stdlib WebSocket 미니 클라이언트 | codex | — | ANY | APPROVED | plan/reports/P12-01-r1.md | plan/reviews/P12-01-r1.md |
 | P12-02 | 브라우저 CDP 어댑터 + chrome-debug.bat | codex | P12-01 | ANY | APPROVED | plan/reports/P12-02-r1.md | plan/reviews/P12-02-r1.md |
@@ -45,6 +46,7 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-03 company_check 종합 실측 (사용자): gateway **native function calling 완전 지원**(tool_calls 반환) + 전 앱 COM/MATLAB/Chrome 실동작 성공 + Excel VBProject 접근 가능. Fable: 리스크 5종 해소, **P11-A(native tools 경로) 신설·READY**, P11-01은 P11-A 선행 추가, MASTER_PLAN 리스크 갱신. 결과 probe/results/company_check_20260703.md.
 - 2026-07-03 P12-03 AWAITING-REVIEW (Codex). 보고서: plan/reports/P12-03-r1.md. Chrome CDP live 4 actions + 전체 17 테스트 파일 447 checks/1 skip 통과.
 
 - 2026-07-03 P12-03 IN-PROGRESS (Codex). 시작 HEAD: 34cc6ad.

@@ -502,9 +502,12 @@ Security cleanup status: / New HEAD commit: / Next exact command:
 | 리스크 | 가능성 | 대비 (반영 위치) |
 |--------|--------|-----------------|
 | gateway 스펙 변경 | 중 | env 완전 오버라이드(P9) — 코드 수정 없이 흡수 |
-| **gateway 라우트 404** | **해소 — 3라우트 200 (실측 3차)** | `/gateway/` 접두 반영 후 EXAONE coding/chat + Qwen fallback 전부 200. gateway 연결·기본 응답은 company validated. tool-call 실동작은 P11/P19 실측 대기 (probe/results/probe_gateway_company_20260703_r3.md) |
-| VBProject COM 차단 | ~~높음~~ **해소(실측)** | 회사 Excel AccessVBOM=1 + 정책 잠금 없음 → P15-02는 자동 주입이 1차 경로 (probe/results/probe_env_company_20260703.md) |
-| AutoCAD accoreconsole 미발견 | **해소(실측)** | `C:\AutoCAD 2019\accoreconsole.exe` 존재 확인 (Mechanical 2019) — P16-02 배치 자동화 경로 확정 |
+| **gateway 라우트 404** | **해소 — 3라우트 200** | `/gateway/` 접두 반영 후 전부 200 (company_check 2026-07-03) |
+| **EXAONE tool-call 신뢰성** | ~~최대 미지수~~ **해소(실측)** | gateway가 **OpenAI native function calling 완전 지원** (tool_calls_present=True) → 텍스트 파싱 의존 제거, P11-A native 경로 1차. 파서 리스크 소멸 |
+| VBProject COM 차단 | ~~높음~~ **해소(실측)** | Excel VBProject 접근 실동작 성공 (company_check) → P15-02 자동 주입 확정 |
+| 앱 COM 실동작 (Office/HWP/SW) | ~~app validation pending~~ **연결 확인(실측)** | Outlook/HWP/SolidWorks COM 접속 + MATLAB -batch 실행(22s) + Chrome CDP 전부 성공. 실기 작업 로직만 남음 |
+| AutoCAD accoreconsole | **해소(실측)** | `C:\AutoCAD 2019\accoreconsole.exe` 확인 (Mechanical 2019) |
+| OpenCode 느린 창 | 추적 중 | exe는 빠름(cold 1.3s) — 원인은 TUI 초기화. 현재 구 런처 사용 중(PURE/플러그인차단 env 미적용) → 강화 런처 재설치 후 재측정 |
 | EXAONE tool-call 형식 특이 | 중 | P19 1일차 실측+파서 보강 절차, Qwen3.6 fallback 자동 |
 | gateway 장애/점검 | 중 | 사내 PC 16GB VRAM 로컬 GGUF 백업 서빙(P17 반입) |
 | VBProject COM 차단 | 높음 | P15 이중 경로(COM 데이터 작업 + 수동 import 안내 강등) |

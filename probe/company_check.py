@@ -99,10 +99,13 @@ def _load_env() -> dict:
 
 def _isolated(name: str, timeout: int) -> dict:
     """위험 검사를 하위 프로세스로 격리 실행하고 타임아웃으로 회수."""
+    child_env = dict(os.environ)
+    child_env["PYTHONUTF8"] = "1"            # 자식 stdout을 UTF-8로 (한글 깨짐 방지)
+    child_env["PYTHONIOENCODING"] = "utf-8"
     try:
         r = subprocess.run([sys.executable, os.path.abspath(__file__), "--run", name],
                            capture_output=True, timeout=timeout, text=True,
-                           encoding="utf-8", errors="replace")
+                           encoding="utf-8", errors="replace", env=child_env)
     except subprocess.TimeoutExpired:
         return {"ok": False, "status": f"timeout(>{timeout}s) — 이 검사가 멈춤/대기 상태"}
     except Exception as exc:
@@ -119,7 +122,13 @@ def _isolated(name: str, timeout: int) -> dict:
 
 
 def _emit(payload: dict) -> None:
-    sys.stdout.write("<<<RESULT>>>" + json.dumps(payload, ensure_ascii=False) + "<<<END>>>")
+    # UTF-8 바이트로 직접 써서 콘솔 코드페이지(cp949)와 무관하게 한글 보존.
+    data = ("<<<RESULT>>>" + json.dumps(payload, ensure_ascii=False) + "<<<END>>>")
+    try:
+        sys.stdout.buffer.write(data.encode("utf-8"))
+        sys.stdout.buffer.flush()
+    except Exception:
+        sys.stdout.write(data)
 
 
 # =================================================================

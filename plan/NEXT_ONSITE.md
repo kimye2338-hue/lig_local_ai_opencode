@@ -45,7 +45,16 @@ OpenCode 기동 시간 / 앱·정책 전수). 사용법은 `probe/COMPANY_CHECK.
 - 4·5번이 실패하면 그 diagnostics가 바로 P11-02(파서 보강)의 실측 입력이다 —
   실패 로그가 성공만큼 중요하니 그대로 반출.
 
+## 남은 회사 실측 (company_check로 대부분 해소됨 — 이제 이것만)
+
+1. **강화 런처 기동 시간**: 새 아티팩트(PR #8 브랜치) 재설치 → RUN_OPENCODE_LIG.bat로
+   TUI를 띄워 체감 속도 확인 (현재 구 런처라 느림 추정). company_check로 env 적용 여부 재확인.
+2. **real agent E2E 1건**: `run-agent.bat --mode real --task "메모.txt 읽고 요약 저장"`
+   (native tools 경로가 P11-A로 붙은 뒤면 그 실동작까지). 성공/실패 로그 반출.
+3. **work 한 명령 E2E 1건**: `work --task "..." --input 메모.txt --mode real --yes`.
+
 ## 이력
 
-- 2026-07-03: probe env/gateway 3회 왕복 완료 — gateway 3라우트 200(연결 company
-  validated), Excel AccessVBOM=1, accoreconsole 확정. (r1~r3 결과는 probe/results/)
+- 2026-07-03: company_check 종합 실측 완료 — gateway native function calling 지원 확정,
+  전 앱 COM/MATLAB/Chrome 실동작 성공, Excel 자동주입 가능. 리스크 대부분 해소.
+- 2026-07-03: probe env/gateway 3회 왕복 — gateway 3라우트 200, /gateway/ 접두 확정.
