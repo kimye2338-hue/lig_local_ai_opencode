@@ -82,6 +82,27 @@ py -3.11 ..\agent_ops\agentops.py plan --task "Excel 매크로 만들어줘" --m
   앱 실행 연동 상태는 `app_adapters` 섹션, 계획/품질/enrich 상태는
   `artifact_pipeline` 섹션 참고 (실제 앱 실행은 아직 전부 pending).
 
+## 5. 로컬 LLM으로 real 모드 검증 (Ollama, locally validated 대상)
+
+집 PC나 별도 검증 PC에 Ollama가 이미 설치되어 있을 때만 수행한다. 이 절은 회사 gateway 검증이 아니라 `local_openai` 프로필 실측이다.
+
+```bat
+ollama pull qwen2.5:7b-instruct
+set LIG_PROVIDER_PROFILE=local_openai
+set LIG_LOCAL_BASE_URL=http://127.0.0.1:11434/v1
+set LIG_LOCAL_MODEL=qwen2.5:7b-instruct
+run-agent.bat --mode real --task "메모.txt 파일을 읽고 요약해서 요약.md로 저장해줘"
+```
+
+- 7B가 느리거나 VRAM/RAM이 부족하면 `qwen2.5:3b-instruct`로 낮추고 보고서에 모델 변경을 기록한다.
+- `diag.bat`의 `llm_endpoints` 섹션에서 프로필, route 설정 여부, 로컬 endpoint 도달 여부를 확인한다. secret 값과 내부 host 원문은 출력하지 않는다.
+- 자동 회귀용 스모크 테스트는 다음 명령이다. 서버가 없으면 SKIP+exit 0으로 끝나며 실패로 보지 않는다.
+
+```bat
+cd /d %USERPROFILE%\OpenCodeLIG\workspace
+py -3.11 tests\test_real_llm_smoke.py
+```
+
 ## 4. 문제 발생 시
 
 ```bat
