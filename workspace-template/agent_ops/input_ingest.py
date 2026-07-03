@@ -24,7 +24,12 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-SUPPORTED_SUFFIXES = {".md", ".txt", ".csv", ".tsv", ".log", ".py", ".bas", ".bat", ".json"}
+try:
+    import openpyxl  # type: ignore
+except ImportError:  # optional dependency; xlsx degrades to unsupported
+    openpyxl = None  # type: ignore
+
+SUPPORTED_SUFFIXES = {".md", ".txt", ".csv", ".tsv", ".xlsx", ".log", ".py", ".bas", ".bat", ".json"}
 MAX_BYTES_FULL = 200_000   # analyze at most this much per file
 MAX_FILES = 50             # directory scan cap
 _PREVIEW_CHARS = 300
@@ -60,6 +65,44 @@ def _csv_facts(text: str, delimiter: str) -> Tuple[List[str], List[str]]:
     if notable:
         facts.append(f"이상/주의 행 {len(notable)}건 감지")
     return facts, notable
+
+
+def _xlsx_facts(path: Path, max_rows: int = 2000) -> Tuple[List[str], List[str], str]:
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)  # type: ignore[union-attr]
+    ws = wb.worksheets[0]
+    sheet_names = wb.sheetnames
+    rows = []
+    for idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
+        if idx > max_rows:
+            break
+        values = ["" if cell is None else str(cell).strip() for cell in row]
+        if any(values):
+            rows.append(values)
+    if not rows:
+        facts = [f"XLSX 첫 시트 '{ws.title}' 빈 시트"]
+        if len(sheet_names) > 1:
+            facts.append(f"시트 {len(sheet_names)}개: {', '.join(sheet_names[:8])}")
+        return facts, [], ""
+    header, data = rows[0], rows[1:]
+    facts = [f"XLSX 첫 시트 '{ws.title}' {len(data)}행 × {len(header)}열 "
+             f"(컬럼: {', '.join(h for h in header if h)})"]
+    if len(sheet_names) > 1:
+        facts.append(f"시트 {len(sheet_names)}개: {', '.join(sheet_names[:8])}")
+    if ws.max_row and ws.max_row > max_rows:
+        facts.append(f"대용량 XLSX: 앞 {max_rows:,}행만 분석 (전체 {ws.max_row:,}행)")
+    notable = []
+    for row in data:
+        joined = " ".join(row).lower()
+        if any(marker in joined for marker in _ABNORMAL_MARKERS):
+            notable.append(" / ".join(c for c in row if c)[:120])
+    if notable:
+        facts.append(f"이상/주의 행 {len(notable)}건 감지")
+    preview = "\n".join(" | ".join(c for c in row if c) for row in rows[:8])[:_PREVIEW_CHARS]
+    try:
+        wb.close()
+    except Exception:
+        pass
+    return facts, notable, preview
 
 
 def _log_facts(text: str) -> Tuple[List[str], List[str]]:
@@ -136,6 +179,22 @@ def ingest_inputs(paths: Sequence[Any], max_files: int = MAX_FILES) -> Dict[str,
         if suffix not in SUPPORTED_SUFFIXES:
             unsupported.append({"name": path.name,
                                 "reason": f"확장자 {suffix or '(없음)'} 미지원 — 텍스트 계열(MD/TXT/CSV/LOG/PY/BAS/BAT/JSON)만 직접 읽음"})
+            continue
+        if suffix == ".xlsx":
+            if openpyxl is None:
+                unsupported.append({"name": path.name,
+                                    "reason": "openpyxl 미설치 (dependencies.json 'office-doc-wheels')"})
+                continue
+            try:
+                size = path.stat().st_size
+                facts, notable, preview = _xlsx_facts(path)
+            except Exception as exc:
+                errors.append(f"{path.name}: XLSX 읽기 실패 {exc!r}"[:200])
+                continue
+            files.append({"name": path.name, "path": str(path), "size_bytes": size,
+                          "type": "xlsx", "facts": facts,
+                          "notable": [f"{path.name}: {n}" for n in notable],
+                          "preview": preview})
             continue
         try:
             size = path.stat().st_size

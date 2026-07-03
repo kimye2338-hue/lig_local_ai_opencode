@@ -26,6 +26,7 @@ from agent_ops.capabilities import (CAPABILITIES, ARTIFACT_KIND_INFO, classify_t
 from agent_ops.artifact_generators import (GENERATORS, generate_artifacts, classify_mail,
                                            build_artifact_context)
 from agent_ops.artifact_quality import _OFFICE2016_BANNED, validate_artifact_set
+from agent_ops import input_ingest
 from agent_ops.input_ingest import ingest_inputs
 from agent_ops.adapters import ADAPTERS, adapter_summary
 
@@ -360,6 +361,50 @@ def main() -> None:
     secret_file.write_text("api_key = SECRET_VALUE_123\n일반 내용 줄\n", encoding="utf-8")
     check("ingest masks secret-like lines before summarizing",
           "SECRET_VALUE_123" not in json.dumps(ingest_inputs([str(secret_file)]), ensure_ascii=False))
+    xlsx_path = input_dir / "시험결과.xlsx"
+    if input_ingest.openpyxl is not None:
+        wb = input_ingest.openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "결과"
+        ws.append(["항목", "측정값", "기준상한", "판정"])
+        ws.append(["치수A", 12.4, 12.5, "합격"])
+        ws.append(["치수B", 13.9, 12.5, "불합격"])
+        ws.append(["경도", 45, 40, "초과"])
+        wb.create_sheet("메모")
+        wb.save(xlsx_path)
+        ing_xlsx = ingest_inputs([str(xlsx_path)])
+        xlsx_facts = " ".join(ing_xlsx["files"][0]["facts"])
+        check("xlsx ingest path used openpyxl", ing_xlsx["files"][0]["type"] == "xlsx", str(ing_xlsx))
+        check("xlsx facts mirror CSV rows columns and sheets",
+              "3행" in xlsx_facts and "판정" in xlsx_facts and "시트 2개" in xlsx_facts,
+              xlsx_facts)
+        check("xlsx ingest flags abnormal rows",
+              any("치수B" in n for n in ing_xlsx["notable_items"]) and any("초과" in n for n in ing_xlsx["notable_items"]),
+              str(ing_xlsx["notable_items"]))
+        ctx_xlsx = build_artifact_context("시험 결과 엑셀 읽고 보고서 만들어줘",
+                                          plan_task("시험 결과 엑셀 읽고 보고서 만들어줘"), ing_xlsx)
+        out_xlsx = generate_artifacts("시험 결과 엑셀 읽고 보고서 만들어줘", ["document"],
+                                      out_dir=tmp / "ground_xlsx", context=ctx_xlsx)
+        doc_xlsx = Path(out_xlsx["files"][0]).read_text(encoding="utf-8")
+        check("xlsx input-grounded document reflects file facts",
+              out_xlsx["input_grounded"] and "시험결과.xlsx" in doc_xlsx and "치수B" in doc_xlsx,
+              doc_xlsx[:800])
+        print("INFO  xlsx ingest branch: openpyxl available")
+    else:
+        xlsx_path.write_bytes(b"not a real workbook")
+        ing_xlsx = ingest_inputs([str(xlsx_path)])
+        reason = " ".join(u["reason"] for u in ing_xlsx["unsupported"])
+        check("xlsx ingest without openpyxl is unsupported not failed",
+              not ing_xlsx["ok"] and "openpyxl 미설치" in reason, str(ing_xlsx))
+        ctx_xlsx = build_artifact_context("시험 결과 엑셀 읽고 보고서 만들어줘",
+                                          plan_task("시험 결과 엑셀 읽고 보고서 만들어줘"), ing_xlsx)
+        out_xlsx = generate_artifacts("시험 결과 엑셀 읽고 보고서 만들어줘", ["document"],
+                                      out_dir=tmp / "ground_xlsx", context=ctx_xlsx)
+        doc_xlsx = Path(out_xlsx["files"][0]).read_text(encoding="utf-8")
+        check("xlsx unsupported limitation reaches document",
+              "openpyxl 미설치" in doc_xlsx and "시험결과.xlsx" in doc_xlsx,
+              doc_xlsx[:800])
+        print("INFO  xlsx ingest branch: openpyxl unavailable")
 
     # --- input-grounded scenario 1: test-result CSV -> report + slides ---
     task_g1 = "시험 결과 파일 읽고 이상값 정리해서 보고서와 PPT 초안 만들어줘"
