@@ -30,6 +30,22 @@ _ROUTE_DEFAULTS = {
 _PLACEHOLDER_MARKERS = ("REPLACE_WITH", "PUT_INTERNAL", "CHANGEME")
 _VALID_PROFILES = ("company_gateway", "local_openai")
 _SHELL_OVERRIDE_KEYS = ("LIG_PROVIDER_PROFILE", "LIG_LOCAL_BASE_URL", "LIG_LOCAL_MODEL")
+_ROUTE_CAPABILITY_MAP = {
+    "lig-coding": {
+        "macro_generation",
+        "office_cad_automation",
+        "browser_automation",
+        "file_ops",
+        "spreadsheet_generation",
+    },
+    "lig-chat": {
+        "document_generation",
+        "presentation_generation",
+        "web_mail_assistant",
+        "meeting_minutes",
+        "mail_report",
+    },
+}
 
 
 def load_lig_env(path: Optional[Path] = None) -> Dict[str, str]:
@@ -66,6 +82,26 @@ def get_profile(env: Optional[Dict[str, str]] = None) -> str:
     env = _with_shell_overrides(env)
     profile = (env.get("LIG_PROVIDER_PROFILE") or "company_gateway").strip()
     return profile if profile in _VALID_PROFILES else "company_gateway"
+
+
+def route_reason(capability_ids: list) -> str:
+    caps = [str(c) for c in (capability_ids or [])]
+    for route, known in _ROUTE_CAPABILITY_MAP.items():
+        for cap_id in caps:
+            if cap_id in known:
+                return cap_id
+    return "default"
+
+
+def select_route(capability_ids: list) -> str:
+    """Map planned capability ids to the provider route used for the first call."""
+    reason = route_reason(capability_ids)
+    if reason == "default":
+        return "lig-coding"
+    for route, known in _ROUTE_CAPABILITY_MAP.items():
+        if reason in known:
+            return route
+    return "lig-coding"
 
 
 def build_providers(env: Optional[Dict[str, str]] = None) -> Dict[str, Dict[str, str]]:
@@ -115,7 +151,7 @@ def validate_config(env: Optional[Dict[str, str]] = None, path: Optional[Path] =
         "providers": {name: {"route_set": bool(p["base_url"]), "model": p["model"]} for name, p in providers.items()},
     }
     if raw_profile and raw_profile not in _VALID_PROFILES:
-        report["profile_warning"] = "unknown profile; using company_gateway"
+        report["profile_warning"] = "알 수 없는 프로필입니다. company_gateway를 사용합니다."
     if profile == "local_openai":
         report["ready"] = all(_is_real(p["base_url"]) and _is_real(p["model"]) for p in providers.values())
     else:

@@ -212,18 +212,22 @@ def cmd_agent(args):
     from agent_ops.core import ROOT as WS_ROOT
     from agent_ops.tool_dispatch import run_agent_loop
     from agent_ops.lig_providers import DIAG_DIR, SECRET_ENV_PATH, validate_config
+    from agent_ops.capabilities import plan_task
 
     task = (args.task or "").strip()
     if not task:
         print("작업 내용이 없습니다. --task \"작업 설명\" 을 지정하세요.", file=sys.stderr)
         return 2
+    plan = plan_task(task)
+    capability_ids = [cap["id"] for cap in plan.get("capabilities", [])]
 
     if args.mode == "mock":
         from agent_ops.mock_transport import MOCK_ENV, make_mock_transport
         print("[mock 모드] 회사 API 없이 파이프라인만 검증합니다 (실제 모델 응답 아님).")
         result = run_agent_loop(task, WS_ROOT, env=MOCK_ENV,
                                 transport=make_mock_transport(),
-                                max_turns=args.max_turns)
+                                max_turns=args.max_turns,
+                                capability_ids=capability_ids)
     else:
         cfg = validate_config()
         if not cfg.get("ready"):
@@ -234,7 +238,8 @@ def cmd_agent(args):
             print("  회사 PC에서 lig-api.env를 채운 뒤 다시 실행하세요 (company validation pending).", file=sys.stderr)
             return 2
         print("[real 모드] LIG gateway로 실제 요청을 보냅니다.")
-        result = run_agent_loop(task, WS_ROOT, max_turns=args.max_turns)
+        result = run_agent_loop(task, WS_ROOT, max_turns=args.max_turns,
+                                capability_ids=capability_ids)
 
     out = RESULTS / "llm_responses" / "agent_cli_last.md"
     atomic_write_text(out, result.get("final_content", ""))

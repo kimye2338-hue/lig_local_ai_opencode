@@ -52,14 +52,14 @@ def main() -> None:
     py = ["py", "-3.11", str(WS_TEMPLATE / "agent_ops" / "agentops.py")]
 
     # --- mock mode via CLI ---
-    r = run(py + ["agent", "--mode", "mock", "--task", "한글 스모크: 요약 파일을 만들어줘"], env)
+    r = run(py + ["agent", "--mode", "mock", "--task", "한글 문서 작성해줘"], env)
     out = r.stdout.decode("utf-8", errors="replace")
     check("mock CLI exits 0", r.returncode == 0, out + r.stderr.decode("utf-8", errors="replace"))
     check("mock CLI reports completed", "completed" in out, out)
     check("mock CLI labels mock mode", "mock" in out and "실제 모델 응답" in out, out)
     result_file = tmp / "작업공간" / "모의_결과" / "작업_요약.md"
     check("mock run created Korean output file", result_file.exists())
-    check("output embeds the user task", "한글 스모크" in result_file.read_text(encoding="utf-8"))
+    check("output embeds the user task", "한글 문서 작성" in result_file.read_text(encoding="utf-8"))
     saved = tmp / "작업공간" / "agent_ops" / "results" / "llm_responses" / "agent_cli_last.md"
     check("final answer saved for user", saved.exists() and "모의 실행이 완료" in saved.read_text(encoding="utf-8"))
 
@@ -68,6 +68,9 @@ def main() -> None:
     check("agent-loop diagnostics written", loop_diag.exists())
     diag_data = json.loads(loop_diag.read_text(encoding="utf-8"))
     check("diagnostics show 2 tool executions", len(diag_data.get("tool_results", [])) == 2, str(diag_data))
+    runtime_diag = tmp / "diag" / "runtime-last.json"
+    runtime_data = json.loads(runtime_diag.read_text(encoding="utf-8"))
+    check("mock agent routes document task to chat", runtime_data.get("route_selected") == "lig-chat" and runtime_data.get("route_reason") == "document_generation", str(runtime_data))
 
     # --- real mode without config: clear failure, exit 2 ---
     r2 = run(py + ["agent", "--mode", "real", "--task", "아무 작업"], env)

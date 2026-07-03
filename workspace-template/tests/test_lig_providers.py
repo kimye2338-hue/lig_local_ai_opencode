@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from agent_ops.lig_providers import build_providers, decide_fallback, load_lig_env, record_fallback, validate_config  # noqa: E402
+from agent_ops.lig_providers import build_providers, decide_fallback, load_lig_env, record_fallback, select_route, validate_config  # noqa: E402
 
 PASS = 0
 ENV_OVERRIDE_KEYS = ("LIG_PROVIDER_PROFILE", "LIG_LOCAL_BASE_URL", "LIG_LOCAL_MODEL")
@@ -78,6 +78,7 @@ with tempfile.TemporaryDirectory() as td:
     # 8. Unknown profile falls back safely and reports a warning
     rep = validate_config(env={"LIG_PROVIDER_PROFILE": "typo_profile"}, path=tmp / "absent.env")
     check("bad profile -> company fallback", rep["profile"] == "company_gateway" and "profile_warning" in rep and rep["ready"] is False, str(rep))
+    check("profile warning is Korean", "알 수 없는" in rep["profile_warning"], str(rep))
 
     # 9. Validation report stays secret-free even with local/company hosts configured
     local_env = {"LIG_PROVIDER_PROFILE": "local_openai", "LIG_LOCAL_BASE_URL": "http://127.0.0.1:11434/v1", "LIG_LOCAL_MODEL": "qwen-local"}
@@ -101,7 +102,12 @@ with tempfile.TemporaryDirectory() as td:
     for key in ENV_OVERRIDE_KEYS:
         os.environ.pop(key, None)
 
-    # 11. Fallback policy decisions
+    # 11. Capability route selection
+    check("macro capability -> coding route", select_route(["macro_generation"]) == "lig-coding")
+    check("document capability -> chat route", select_route(["document_generation"]) == "lig-chat")
+    check("unknown capability -> coding route", select_route(["unknown_capability"]) == "lig-coding")
+
+    # 12. Fallback policy decisions
     check("timeout first -> retry", decide_fallback("http_timeout", 1, "lig-coding")["action"] == "retry")
     check("timeout exhausted -> switch", decide_fallback("http_timeout", 2, "lig-coding")["action"] == "switch_fallback")
     check("4xx -> stop", decide_fallback("http_4xx", 1, "lig-coding")["action"] == "stop")
@@ -110,7 +116,7 @@ with tempfile.TemporaryDirectory() as td:
     check("no loop on last provider", decide_fallback("provider_unreachable", 1, "lig-fallback")["action"] == "local_fallback")
     check("unknown trigger -> stop", decide_fallback("weird_new_error", 1, "lig-coding")["action"] == "stop")
 
-    # 12. Fallback record written with required fields
+    # 13. Fallback record written with required fields
     out = record_fallback("lig-coding", "lig-fallback", "http_timeout", 2, "recovered", diag_dir=tmp / "diag")
     data = json.loads(out.read_text(encoding="utf-8"))
     need = {"provider_initial", "provider_final", "fallback_trigger", "fallback_attempts", "fallback_result"}

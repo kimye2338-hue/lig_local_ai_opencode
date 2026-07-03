@@ -31,7 +31,7 @@ def check(label: str, cond: bool, detail: str = "") -> None:
 
 ENV = {
     "LIG_GATEWAY_BASE_URL": "http://10.9.9.9/gw",
-    "LIG_API_KEY": "sk-fake-secret-9999",
+    "LIG_API_KEY": "FAKE_SECRET_9999",
     "LIG_DEFAULT_PROVIDER": "lig-coding",
 }
 MSGS = [{"role": "user", "content": "파일을 읽어줘"}]
@@ -123,10 +123,26 @@ with tempfile.TemporaryDirectory() as td:
     r = call_llm(MSGS, env=ENV, transport=t, diag_dir=diag)
     check("unreachable both -> terminal", not r["ok"] and r["outcome"] in ("stop", "local_fallback") and r["provider_final"] == "lig-fallback", str(r))
 
-    # 12. Diagnostics written, secrets redacted
+    # 12. Capability route selection: macro/code work -> lig-coding
+    t = scripted(resp("macro ok"))
+    r = call_llm(MSGS, env=ENV, transport=t, diag_dir=diag, capability_ids=["macro_generation"])
+    check("macro task -> coding route", r["ok"] and r["route_selected"] == "lig-coding" and r["route_reason"] == "macro_generation" and t.calls[-1]["model"] == "EXAONE-4.5-33B", str(r))
+
+    # 13. Capability route selection: document work -> lig-chat
+    t = scripted(resp("doc ok"))
+    r = call_llm(MSGS, env=ENV, transport=t, diag_dir=diag, capability_ids=["document_generation"])
+    check("document task -> chat route", r["ok"] and r["route_selected"] == "lig-chat" and r["route_reason"] == "document_generation" and "default_think_off" in t.calls[-1]["url"], str(r))
+
+    # 14. Unknown capability -> default lig-coding
+    t = scripted(resp("default ok"))
+    r = call_llm(MSGS, env=ENV, transport=t, diag_dir=diag, capability_ids=["unknown_cap"])
+    check("unknown capability -> default coding", r["ok"] and r["route_selected"] == "lig-coding" and r["route_reason"] == "default", str(r))
+
+    # 15. Diagnostics written, secrets redacted
     data = json.loads((diag / "runtime-last.json").read_text(encoding="utf-8"))
     blob = json.dumps(data) + (diag / "provider-fallback-last.json").read_text(encoding="utf-8")
-    check("diag exists w/ fields", {"provider_initial", "provider_final", "fallback_trigger", "trail"}.issubset(data), str(data.keys()))
-    check("no secret in diag", "sk-fake-secret-9999" not in blob and "10.9.9.9" not in blob, "secret leaked")
+    check("diag exists w/ fields", {"provider_initial", "provider_final", "fallback_trigger", "trail", "route_selected", "route_reason", "profile"}.issubset(data), str(data.keys()))
+    check("diag records route", data["route_selected"] == "lig-coding" and data["route_reason"] == "default" and data["profile"] == "company_gateway", str(data))
+    check("no secret in diag", "FAKE_SECRET_9999" not in blob and "10.9.9.9" not in blob, "secret leaked")
 
 print(f"\n{PASS} checks passed")

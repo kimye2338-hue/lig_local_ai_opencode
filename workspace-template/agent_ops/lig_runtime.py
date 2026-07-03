@@ -21,7 +21,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from .lig_providers import DIAG_DIR, build_providers, decide_fallback, load_lig_env, record_fallback
+from .lig_providers import DIAG_DIR, build_providers, decide_fallback, get_profile, load_lig_env, record_fallback, route_reason, select_route
 from .toolcall_parser import parse_tool_calls
 
 Transport = Callable[[str, Dict[str, Any], Dict[str, str], int], Dict[str, Any]]
@@ -80,6 +80,7 @@ def call_llm(
     transport: Optional[Transport] = None,
     max_steps: int = 8,
     diag_dir: Optional[Path] = None,
+    capability_ids: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Call the LIG gateway with retry / simplify / provider-fallback handling.
 
@@ -90,9 +91,20 @@ def call_llm(
     env = env if env is not None else load_lig_env()
     transport = transport or default_transport
     providers = build_providers(env)
-    current = provider or env.get("LIG_DEFAULT_PROVIDER", "lig-coding")
+    if provider:
+        selected = provider
+        reason = "explicit_provider"
+    elif capability_ids is not None:
+        selected = select_route(capability_ids)
+        reason = route_reason(capability_ids)
+    else:
+        selected = env.get("LIG_DEFAULT_PROVIDER", "lig-coding")
+        reason = "env_default"
+    current = selected or env.get("LIG_DEFAULT_PROVIDER", "lig-coding")
     if current not in providers:
         current = "lig-coding"
+        selected = "lig-coding"
+        reason = "default"
     initial = current
 
     available_tool_names = [t.get("function", {}).get("name") or t.get("name", "") for t in (tools or [])]
@@ -169,6 +181,9 @@ def call_llm(
         "repaired": parse.get("repaired", False),
         "provider_initial": initial,
         "provider_final": current,
+        "route_selected": selected,
+        "route_reason": reason,
+        "profile": get_profile(env),
         "fallback_trigger": last_trigger,
         "attempts": sum(attempts.values()),
         "trail": trail,

@@ -205,6 +205,7 @@ def run_agent_loop(
     transport: Optional[Callable[..., Dict[str, Any]]] = None,
     max_turns: int = 10,
     diag_dir: Optional[Path] = None,
+    capability_ids: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Minimal tool-use agent loop over call_llm + ToolDispatcher.
 
@@ -224,7 +225,8 @@ def run_agent_loop(
 
     for _ in range(max_turns):
         turns += 1
-        llm = call_llm(messages, tools=tools, env=env, transport=transport, diag_dir=diag_dir)
+        llm = call_llm(messages, tools=tools, env=env, transport=transport,
+                       diag_dir=diag_dir, capability_ids=capability_ids)
         if not llm["ok"]:
             outcome = "llm_failed"
             final_content = llm.get("content", "")
