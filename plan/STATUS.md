@@ -30,7 +30,7 @@
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | AWAITING-REVIEW | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r1.md |
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | BLOCKED | | |
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | BLOCKED | | |
-| P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | IN-PROGRESS | | |
+| P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | AWAITING-REVIEW | plan/reports/P16-01-r1.md | |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | BLOCKED | | |
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | BLOCKED | | |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | BLOCKED | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P16-01 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P16-01-r1.md. matlab_automation capability + matlab_script 생성/품질/입력 반영 추가, 전체 19개 테스트 파일 exit 0.
 
 - 2026-07-04 P16-01 IN-PROGRESS (Codex). 시작 HEAD: 4629876.
 
