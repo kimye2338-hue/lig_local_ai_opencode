@@ -99,8 +99,9 @@ def main() -> None:
         excel_com.win32com = original_win32com
 
     audit_file = tmp_root / "audit" / "audit.jsonl"
-    check("excel adapter writes audit", audit_file.exists() and "excel_com" in audit_file.read_text(encoding="utf-8"),
-          str(audit_file))
+    audit_text = audit_file.read_text(encoding="utf-8") if audit_file.exists() else ""
+    check("excel adapter writes audit", "excel_com" in audit_text, str(audit_file))
+    check("close action is audited without options", "excel_com.close" in audit_text, audit_text)
 
     if excel_com._PYWIN32_ERROR:
         print(f"\nSKIP Excel COM live checks - skipped, not failed; ALL {PASS} STATIC CHECKS PASSED (office adapters)")

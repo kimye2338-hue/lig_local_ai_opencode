@@ -211,6 +211,5 @@ def execute(action: str, options: Dict[str, Any]) -> Dict[str, Any]:
             result = {"ok": True}
     except Exception as exc:
         result = {"ok": False, "error": f"{action_name} failed: {exc.__class__.__name__}"}
-    if action_name != "close" or opts:
-        _audit(action_name, opts, result)
+    _audit(action_name, opts, result)
     return result
