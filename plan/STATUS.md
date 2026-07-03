@@ -11,14 +11,14 @@
 | P00-03 | 회사 real-mode 실측 팩 (NEXT_ONSITE.md) | **human** | — | COMPANY | READY | | |
 | P09-01 | LLM provider 프로필/env 완전 오버라이드 | codex | — | ANY | APPROVED | plan/reports/P09-01-r2.md | plan/reviews/P09-01-r2.md |
 | P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | APPROVED | plan/reports/P09-02-r1.md | plan/reviews/P09-02-r1.md |
-| P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | AWAITING-REVIEW | plan/reports/P09-03-r1.md | |
+| P09-03 | real-LLM 스모크 테스트 + doctor + 실측 | codex | P09-02 | LOCAL-LLM(옵션) | CHANGES-REQUESTED | plan/reports/P09-03-r1.md | plan/reviews/P09-03-r1.md |
 | P10-01 | git 히스토리 내부 hostname purge | fable | — | FABLE-ONLY | READY | | |
 | P11-A | lig_runtime native function calling(tools) 경로 | codex | P09-02 | ANY | READY | | |
 | P11-01 | weak-model capability-floor 하네스 | codex | P09-03, P11-A | ANY | BLOCKED | | |
 | P11-02 | floor 실측 + 파서/프롬프트 보강 | codex | P11-01 | LOCAL-LLM | BLOCKED | | |
 | P12-01 | stdlib WebSocket 미니 클라이언트 | codex | — | ANY | APPROVED | plan/reports/P12-01-r1.md | plan/reviews/P12-01-r1.md |
 | P12-02 | 브라우저 CDP 어댑터 + chrome-debug.bat | codex | P12-01 | ANY | APPROVED | plan/reports/P12-02-r1.md | plan/reviews/P12-02-r1.md |
-| P12-03 | CDP 실측 + available 전환 | codex | P12-02 | CHROME | AWAITING-REVIEW | plan/reports/P12-03-r1.md | |
+| P12-03 | CDP 실측 + available 전환 | codex | P12-02 | CHROME | APPROVED | plan/reports/P12-03-r1.md | plan/reviews/P12-03-r1.md |
 | P13-01 | approval(승인 게이트) + audit(감사 로그) 모듈 | codex | — | ANY | APPROVED | plan/reports/P13-01-r1.md | plan/reviews/P13-01-r1.md |
 | P13-02 | `work` 오케스트레이터 subcommand E2E | codex | P13-01 | ANY | APPROVED | plan/reports/P13-02-r1.md | plan/reviews/P13-02-r1.md |
 | P14-01 | schedule store + 결정적 날짜 파서 | codex | — | ANY | APPROVED | plan/reports/P14-01-r1.md | plan/reviews/P14-01-r1.md |
@@ -46,6 +46,7 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-03 Fable 배치 리뷰 3차: P12-03 **APPROVED** (리뷰 환경 Chromium headless CDP로 4 actions 독립 재현 성공), P09-03 **CHANGES-REQUESTED** (시나리오③ unknown-tool 복원 + r2는 실행 증거 필수 — reviews/P09-03-r1.md). 재검증: 전 17 테스트 파일 중 14개 405 checks + smoke SKIP 통과(리눅스 리뷰 환경), Windows 전용 3개(agent_cli/encoding_paths/probes)는 두 diff 무접촉 확인으로 대체. P11-01 BLOCKED 유지.
 - 2026-07-03 company_check 종합 실측 (사용자): gateway **native function calling 완전 지원**(tool_calls 반환) + 전 앱 COM/MATLAB/Chrome 실동작 성공 + Excel VBProject 접근 가능. Fable: 리스크 5종 해소, **P11-A(native tools 경로) 신설·READY**, P11-01은 P11-A 선행 추가, MASTER_PLAN 리스크 갱신. 결과 probe/results/company_check_20260703.md.
 - 2026-07-03 P12-03 AWAITING-REVIEW (Codex). 보고서: plan/reports/P12-03-r1.md. Chrome CDP live 4 actions + 전체 17 테스트 파일 447 checks/1 skip 통과.
 
