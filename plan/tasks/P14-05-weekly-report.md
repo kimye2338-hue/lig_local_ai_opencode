@@ -11,6 +11,15 @@
 지난 7일의 audit log + 완료 일정 + 생성 산출물로 "이번 주 한 일" 초안을 자동 생성 —
 연구원 사무업무 체감 효과가 가장 큰 비서 기능.
 
+## 리뷰 반영 (r1→r2) — reviews/P14-05-r1.md 필수 수정 1건 (r2 단일 진실 소스)
+
+1. **키워드 경계화**: `capabilities.py`의 `weekly_report.keywords`에서 bare `"weekly"`를
+   `"weekly report"`로 교체. `biweekly` 같은 상위어에 substring 오라우팅되지 않아야 함.
+   bench negative check 추가: `plan_task("biweekly 회의 잡아줘")`가 weekly_report로
+   라우팅되지 않음. (검증 코드는 reviews/P14-05-r1.md "되는 방법" 그대로.)
+
+> 나머지(3개 원천 반영/초안 TODO/기록-only 집계/document kind 재사용)는 r1에서 확인됨 — 유지.
+
 ## 작업 항목
 1. `capabilities.py`에 `weekly_report` 등록 (§5): keywords 주간보고, 주간 보고, 위클리,
    weekly. artifact_kinds: ["document"] 재사용 (전용 kind 불필요).

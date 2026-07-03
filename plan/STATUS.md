@@ -25,7 +25,7 @@
 | P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | APPROVED | plan/reports/P14-02-r2.md | plan/reviews/P14-02-r2.md |
 | P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | APPROVED | plan/reports/P14-03-r1.md | plan/reviews/P14-03-r1.md |
 | P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | APPROVED | plan/reports/P14-04-r2.md | plan/reviews/P14-04-r2.md |
-| P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | AWAITING-REVIEW | plan/reports/P14-05-r1.md | |
+| P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | CHANGES-REQUESTED | plan/reports/P14-05-r1.md | plan/reviews/P14-05-r1.md |
 | P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | APPROVED | plan/reports/P15-01-r1.md | plan/reviews/P15-01-r1.md |
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | APPROVED | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r2.md |
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | READY | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 Fable 리뷰 10차: **P14-05 r1 CHANGES-REQUESTED**(영어 키워드 `weekly` bare substring이 `biweekly 회의 잡아줘` 오라우팅 — `.m`/`minutes`에 이은 3번째 동류, hard gate라 동일 기준 적용. 되는 방법=`weekly`→`weekly report` 경계화+negative check, 리뷰어 실측 검증 — reviews/P14-05-r1.md). 확인: 3개 원천(audit/schedule/artifacts) 반영·기간 필터·초안 TODO E2E 정상, audit `task` 필드 실스키마 일치. 재검증: 20개 중 17개 exit 0(bench 190=192−openpyxl 2), Windows 전용 3개 diff 무접촉. 피드백: bare 영어 키워드 self-check 습관화. Codex 다음: **P14-05 r2 → P18-02 → P15-03 → P16-02**.
 
 - 2026-07-04 **P10-01 APPROVED (Fable 실행)**: 내부 gateway hostname을 git-filter-repo로 전 히스토리 치환(194 커밋 재작성). 백업 미러 2벌 후 **전 16개 브랜치(main·rebuild/ 포함) force-push** → 재클론 검증 **브랜치·main·활성 PR #8 전부 hostname 0회**, 원커밋 67e0028·be6e7d1 소멸. **잔여**: 원커밋 be9f981이 닫힌 PR #1/#2/#4의 `refs/pull/*` 서버 스냅샷에만 도달 가능(클라이언트 재작성 불가 — read-only ref). 완전 제거는 소유자의 닫힌 PR 삭제 또는 서버 gc 필요(플랫폼 측, 세션 밖). 전 브랜치 재작성으로 **모든 열린 세션은 재클론/hard-reset 필요**. 상세: reviews/P10-01-r1.md. 로컬 rebuild/는 재작성본으로 동기화 완료.
 
