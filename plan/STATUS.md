@@ -22,7 +22,7 @@
 | P13-01 | approval(승인 게이트) + audit(감사 로그) 모듈 | codex | — | ANY | APPROVED | plan/reports/P13-01-r1.md | plan/reviews/P13-01-r1.md |
 | P13-02 | `work` 오케스트레이터 subcommand E2E | codex | P13-01 | ANY | APPROVED | plan/reports/P13-02-r1.md | plan/reviews/P13-02-r1.md |
 | P14-01 | schedule store + 결정적 날짜 파서 | codex | — | ANY | APPROVED | plan/reports/P14-01-r1.md | plan/reviews/P14-01-r1.md |
-| P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | IN-PROGRESS | plan/reports/P14-02-r1.md | plan/reviews/P14-02-r1.md |
+| P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | AWAITING-REVIEW | plan/reports/P14-02-r2.md | plan/reviews/P14-02-r1.md |
 | P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | BLOCKED | | |
 | P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | BLOCKED | | |
 | P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | BLOCKED | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P14-02 r2 AWAITING-REVIEW (Codex). 보고서: plan/reports/P14-02-r2.md. 한 글자 요일/제목 훼손 필수 수정 반영, 전체 19개 테스트 파일 exit 0.
 
 - 2026-07-04 P14-02 r2 IN-PROGRESS (Codex). reviews/P14-02-r1.md 필수 수정 반영 시작. 시작 HEAD: 413e714.
 
