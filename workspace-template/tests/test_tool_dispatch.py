@@ -11,7 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from agent_ops.tool_dispatch import ToolDispatcher, tool_definitions  # noqa: E402
+from agent_ops.mock_transport import MOCK_ENV, make_mock_transport  # noqa: E402
+from agent_ops.tool_dispatch import ToolDispatcher, run_agent_loop, tool_definitions  # noqa: E402
 
 PASS = 0
 
@@ -99,6 +100,26 @@ def main() -> None:
     check("dispatch history recorded", (diag / "tool-dispatch-history.jsonl").exists() and (diag / "tool-dispatch-last.json").exists())
     history = (diag / "tool-dispatch-history.jsonl").read_text(encoding="utf-8")
     check("history logs root cause categories", "path_escape" in history and "unknown_tool" in history)
+
+    inner = make_mock_transport()
+    seen_payloads = []
+
+    def capturing(url, payload, headers, timeout):
+        seen_payloads.append(payload)
+        return inner(url, payload, headers, timeout)
+
+    result = run_agent_loop("메모를 작성해줘", ws, env=MOCK_ENV,
+                            transport=capturing, diag_dir=diag)
+    final_msgs = seen_payloads[-1]["messages"]
+    assistant_tcs = [tc for m in final_msgs
+                     if m.get("role") == "assistant" and m.get("tool_calls")
+                     for tc in m["tool_calls"]]
+    tool_ids = [m.get("tool_call_id") for m in final_msgs if m.get("role") == "tool"]
+    check("mock agent loop completed", result["ok"], str(result))
+    check("assistant tool_calls carry self-issued id",
+          assistant_tcs and all(tc.get("id") and tc["id"] != "N/A" for tc in assistant_tcs))
+    check("tool msgs tool_call_id matches assistant ids",
+          tool_ids == [tc["id"] for tc in assistant_tcs])
 
     print(f"\nALL {PASS} CHECKS PASSED (tool dispatch)")
 

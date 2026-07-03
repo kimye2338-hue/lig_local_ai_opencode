@@ -23,8 +23,9 @@ MOCK_OUTPUT_FILE = "모의_결과/작업_요약.md"
 
 
 def _tool_response(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-    return {"choices": [{"message": {"content": "", "tool_calls": [
-        {"type": "function", "function": {"name": name,
+    # Reproduce the measured gateway shape: id is "N/A", so product code self-issues ids.
+    return {"choices": [{"finish_reason": "tool_calls", "message": {"content": "", "tool_calls": [
+        {"id": "N/A", "type": "function", "function": {"name": name,
                                           "arguments": json.dumps(args, ensure_ascii=False)}}
     ]}}]}
 

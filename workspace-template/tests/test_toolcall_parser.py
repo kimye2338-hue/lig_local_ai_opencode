@@ -28,7 +28,7 @@ def check(label: str, cond: bool, detail: str = "") -> None:
 # 1. Clean structured OpenAI tool_calls
 r = parse_tool_calls({"choices": [{"message": {"content": "", "tool_calls": [
     {"id": "1", "type": "function", "function": {"name": "read_file", "arguments": '{"path": "a.txt"}'}}]}}]})
-check("structured ok", r["parse_status"] == "ok" and r["tool_calls"] == [{"name": "read_file", "arguments": {"path": "a.txt"}}], str(r))
+check("structured ok", r["parse_status"] == "ok" and r["tool_calls"] == [{"name": "read_file", "arguments": {"path": "a.txt"}, "id": "1"}], str(r))
 
 # 2. Legacy function_call shape
 r = parse_tool_calls({"choices": [{"message": {"content": "", "function_call": {"name": "ls", "arguments": "{}"}}}]})
@@ -73,5 +73,18 @@ check("string arguments", r["tool_calls"][0]["arguments"] == {"path": "a.py"}, s
 # 12. Structured field present but garbage -> error recorded, no crash
 r = parse_tool_calls({"choices": [{"message": {"content": "", "tool_calls": [{"type": "function"}]}}]})
 check("garbage structured", r["parse_status"] in ("none", "failed") and r["errors"], str(r))
+
+r = parse_tool_calls({"choices": [{"message": {"content": "", "tool_calls": [
+    {"id": "N/A", "type": "function",
+     "function": {"name": "read_file", "arguments": "{\"path\": \"a.txt\"}"}}]}}]},
+    available_tools=["read_file"])
+check("native id N/A -> empty string", r["tool_calls"][0]["id"] == "")
+r2 = parse_tool_calls({"choices": [{"message": {"content": "", "tool_calls": [
+    {"id": "call_abc", "type": "function",
+     "function": {"name": "read_file", "arguments": "{}"}}]}}]})
+check("native real id preserved", r2["tool_calls"][0]["id"] == "call_abc")
+r3 = parse_tool_calls('{"tool_calls": [{"name": "read_file", "arguments": {"path": "b.txt"}}]}')
+check("text-repaired call has empty id",
+      bool(r3["tool_calls"]) and r3["tool_calls"][0].get("id", "") == "")
 
 print(f"\n{PASS} checks passed")

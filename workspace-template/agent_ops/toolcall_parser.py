@@ -6,7 +6,7 @@ plain text, or mixed natural language + JSON. This module normalizes all of
 those into a single shape and reports how far recovery had to go, so the
 runtime can decide: accept / retry with tighter instruction / fall back.
 
-Normalized tool call: {"name": str, "arguments": dict}
+Normalized tool call: {"name": str, "arguments": dict, "id": str}
 
 parse_status values:
   ok        - structured tool_calls field parsed cleanly
@@ -96,6 +96,10 @@ def _normalize_one(obj: Any) -> Optional[Dict[str, Any]]:
     """Accept the many shapes weak models emit for a single tool call."""
     if not isinstance(obj, dict):
         return None
+    raw_id = obj.get("id")
+    call_id = raw_id.strip() if isinstance(raw_id, str) else ""
+    if call_id.upper() == "N/A":
+        call_id = ""
     # OpenAI shape: {"function": {"name":..., "arguments":...}}
     if isinstance(obj.get("function"), dict):
         obj = obj["function"]
@@ -107,7 +111,7 @@ def _normalize_one(obj: Any) -> Optional[Dict[str, Any]]:
     )
     if args is None:
         return None
-    return {"name": name.strip(), "arguments": args}
+    return {"name": name.strip(), "arguments": args, "id": call_id}
 
 
 def _normalize_many(obj: Any) -> List[Dict[str, Any]]:

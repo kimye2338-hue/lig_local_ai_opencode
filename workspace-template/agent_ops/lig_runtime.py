@@ -182,12 +182,15 @@ def call_llm(
         outcome = "stop"
         last_trigger = last_trigger or "max_steps_exceeded"
 
+    tool_call_mode = {"ok": "native", "repaired": "text_fallback"}.get(
+        parse.get("parse_status", ""), "none")
     result = {
         "ok": outcome == "ok",
         "outcome": outcome,
         "content": content,
         "tool_calls": parse.get("tool_calls", []),
         "parse_status": parse.get("parse_status", ""),
+        "tool_call_mode": tool_call_mode,
         "repaired": parse.get("repaired", False),
         "provider_initial": initial,
         "provider_final": current,

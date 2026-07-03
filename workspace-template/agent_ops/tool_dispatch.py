@@ -236,13 +236,14 @@ def run_agent_loop(
             outcome = "completed"
             final_content = llm.get("content", "")
             break
+        call_ids = ["call_%d_%d" % (turns, i + 1) for i in range(len(calls))]
         messages.append({"role": "assistant", "content": llm.get("content", "") or "",
-                         "tool_calls": [{"type": "function", "function": {
+                         "tool_calls": [{"id": call_ids[i], "type": "function", "function": {
                              "name": c["name"],
                              "arguments": json.dumps(c.get("arguments", {}), ensure_ascii=False),
-                         }} for c in calls]})
+                         }} for i, c in enumerate(calls)]})
         cutoff = False
-        for call in calls:
+        for i, call in enumerate(calls):
             if dispatcher.repeated_failure(call):
                 outcome = "tool_loop_cutoff"
                 final_content = (f"Aborted: tool call {call.get('name')} failed repeatedly "
@@ -251,7 +252,8 @@ def run_agent_loop(
                 break
             result = dispatcher.dispatch(call)
             tool_results.append(result)
-            messages.append({"role": "tool", "name": call.get("name", ""),
+            messages.append({"role": "tool", "tool_call_id": call_ids[i],
+                             "name": call.get("name", ""),
                              "content": json.dumps(result, ensure_ascii=False)})
         if cutoff:
             break

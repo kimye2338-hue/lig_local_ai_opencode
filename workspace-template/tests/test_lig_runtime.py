@@ -73,16 +73,19 @@ with tempfile.TemporaryDirectory() as td:
     t = scripted(resp("", [{"function": {"name": "read_file", "arguments": '{"path": "a.txt"}'}}]))
     r = call_llm(MSGS, tools=TOOLS, env=ENV, transport=t, diag_dir=diag)
     check("clean structured ok", r["ok"] and r["parse_status"] == "ok" and r["provider_final"] == "lig-coding" and r["attempts"] == 0, str(r))
+    check("native tool_call_mode", r["tool_call_mode"] == "native", str(r))
 
     # 2. Fenced JSON tool call in content -> repaired, still ok
     t = scripted(resp('```json\n{"name": "read_file", "arguments": {"path": "보고서.md"}}\n```'))
     r = call_llm(MSGS, tools=TOOLS, require_tool_call=True, env=ENV, transport=t, diag_dir=diag)
     check("fenced repaired ok", r["ok"] and r["parse_status"] == "repaired" and r["tool_calls"][0]["arguments"]["path"] == "보고서.md", str(r))
+    check("text fallback tool_call_mode", r["tool_call_mode"] == "text_fallback", str(r))
 
     # 3. Timeout -> retry same provider -> success on 2nd try
     t = scripted(TransportError("http_timeout"), resp("답변입니다"))
     r = call_llm(MSGS, env=ENV, transport=t, diag_dir=diag)
     check("timeout retry ok", r["ok"] and r["attempts"] == 1 and r["provider_final"] == "lig-coding" and len(t.calls) == 2, str(r))
+    check("plain text tool_call_mode none", r["tool_call_mode"] == "none", str(r))
 
     # 4. Two timeouts -> switch to lig-fallback (Qwen) -> success
     t = scripted(TransportError("http_timeout"), TransportError("http_timeout"), resp("fallback 답변"))
@@ -146,7 +149,7 @@ with tempfile.TemporaryDirectory() as td:
     # 15. Diagnostics written, secrets redacted
     data = json.loads((diag / "runtime-last.json").read_text(encoding="utf-8"))
     blob = json.dumps(data) + (diag / "provider-fallback-last.json").read_text(encoding="utf-8")
-    check("diag exists w/ fields", {"provider_initial", "provider_final", "fallback_trigger", "trail", "route_selected", "route_reason", "profile"}.issubset(data), str(data.keys()))
+    check("diag exists w/ fields", {"provider_initial", "provider_final", "fallback_trigger", "trail", "route_selected", "route_reason", "profile", "tool_call_mode"}.issubset(data), str(data.keys()))
     check("diag records route", data["route_selected"] == "lig-coding" and data["route_reason"] == "default" and data["profile"] == "company_gateway", str(data))
     check("no secret in diag", "FAKE_SECRET_9999" not in blob and "10.9.9.9" not in blob, "secret leaked")
 
