@@ -113,7 +113,7 @@ def main() -> None:
         fake_53 = _write_fake_exe(
             tmp_root / "fake_accore_53",
             win_body="@echo off\r\npowershell -NoProfile -Command \"$b=[Text.Encoding]::Unicode.GetBytes('ErrorStatus=53'); [Console]::OpenStandardOutput().Write($b,0,$b.Length)\"\r\nexit /b 53\r\n",
-            unix_body="#!/bin/sh\nprintf '\\xff\\xfeE\\x00r\\x00r\\x00o\\x00r\\x00S\\x00t\\x00a\\x00t\\x00u\\x00s\\x00=\\x005\\x003\\x00'\nexit 53\n",
+            unix_body="#!/bin/sh\nprintf '\\377\\376E\\000r\\000r\\000o\\000r\\000S\\000t\\000a\\000t\\000u\\000s\\000=\\0005\\0003\\000'\nexit 53\n",
         )
         os.environ["ACCORECONSOLE_EXE"] = str(fake_53)
         exit53 = autocad_batch.execute(str(dwg), str(scr), {"timeout_s": 30})
