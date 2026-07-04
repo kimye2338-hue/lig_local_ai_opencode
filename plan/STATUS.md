@@ -32,7 +32,7 @@
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | APPROVED | plan/reports/P15-04-r1.md | plan/reviews/P15-04-r1.md |
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | APPROVED | plan/reports/P16-02-r3.md | plan/reviews/P16-02-r3.md |
-| P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | AWAITING-REVIEW | plan/reports/P16-03-r1.md | |
+| P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | CHANGES-REQUESTED | plan/reports/P16-03-r1.md | plan/reviews/P16-03-r1.md |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | READY | | |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
 | P17-02 | 의존성 prefetch + SHA256 확정 | codex | P16-04 | INTERNET | BLOCKED | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 Fable 리뷰 17차: **P16-03 r1 CHANGES-REQUESTED**(키워드 `해석`(일상어)+`journal` 광범위 매칭 → `이 데이터 해석해줘`·`회의 내용 해석`·`journal 정리` 등이 fluent_journal/ansys_script 스퓨리어스 생성. `.m`/`minutes`/`weekly`에 이은 4번째지만 `해석`은 일상어라 영향 최대. **task 스펙이 그 키워드를 지정한 결함이라 task도 Fable 정정**. 되는 방법=도메인어만(ansys/fluent/시뮬레이션/메카니컬/…+cfd/fea)+negative check, 리뷰어 실측 — reviews/P16-03-r1.md). 확인: fluent_journal/ansys_script 골격·공학책임 경고 quality 강제·fluent available=False·부재안내·테스트 POSIX 이식성(36 checks) 전부 정상. 재검증: 22개 중 19개 exit 0(bench 203, Windows 전용 3개만 RED). 피드백: 한국어 일상어 키워드가 영어보다 위험. Codex 다음: **P16-03 r2 → P18-02 → P16-04**.
 
 - 2026-07-04 P16-03 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P16-03-r1.md. simulation_automation capability + fluent_journal/ansys_script artifact kind + fluent_batch adapter 추가, batch adapters 37 checks/capability bench 203 checks/전체 22개 테스트 파일 통과. hard gate: artifact kind 추가로 리뷰 전 auto-advance 중단.
 
