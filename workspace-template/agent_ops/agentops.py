@@ -674,6 +674,15 @@ def cmd_schedule(args):
             return 2
         print("삭제됨: %s" % _schedule_display_id(item_id))
         return 0
+    if action == "sync-outlook":
+        from agent_ops.adapters import outlook_com
+        result = outlook_com.execute("sync_calendar", {"days": args.days})
+        if not result.get("ok"):
+            print(result.get("error") or "Outlook 동기화 실패", file=sys.stderr)
+            return 2
+        print("Outlook 동기화: 추가 %d건, 중복/제외 %d건" % (
+            len(result.get("added", [])), int(result.get("skipped", 0))))
+        return 0
     return 2
 
 
@@ -725,6 +734,7 @@ def main(argv=None):
     sp = sched.add_parser("today"); sp.set_defaults(func=cmd_schedule)
     sp = sched.add_parser("done"); sp.add_argument("id"); sp.set_defaults(func=cmd_schedule)
     sp = sched.add_parser("remove"); sp.add_argument("id"); sp.add_argument("--yes", action="store_true"); sp.set_defaults(func=cmd_schedule)
+    sp = sched.add_parser("sync-outlook"); sp.add_argument("--days", type=int, default=7); sp.set_defaults(func=cmd_schedule)
     sub.add_parser("briefing").set_defaults(func=cmd_briefing)
     sub.add_parser("weekly").set_defaults(func=cmd_weekly)
     p = sub.add_parser("safety-check"); p.add_argument("text", nargs="*"); p.set_defaults(func=cmd_safety_check)

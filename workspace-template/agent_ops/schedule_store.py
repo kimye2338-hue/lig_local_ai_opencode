@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from .core import atomic_write_json, now as now_text
 
 CATEGORIES = {"회의", "보고", "시험", "개인", "기타"}
-SOURCES = {"manual", "mail", "meeting"}
+SOURCES = {"manual", "mail", "meeting", "outlook"}
 QUESTION = "날짜를 다시 말씀해 주세요 (예: 내일 오후 3시, 금요일 14시, 7월 15일 09:30)"
 WEEKDAYS = {
     "월요일": 0,

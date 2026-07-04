@@ -13,12 +13,16 @@ from pathlib import Path
 tmp_root = Path(tempfile.mkdtemp(prefix="office_adapter_test_"))
 os.environ["AGENTOPS_ROOT"] = str(tmp_root)
 os.environ["LIG_AUDIT_DIR"] = str(tmp_root / "audit")
+os.environ["LIG_SCHEDULE_DIR"] = str(tmp_root / "schedule")
 
 WS_TEMPLATE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WS_TEMPLATE))
 
 from agent_ops.adapters import ADAPTERS  # noqa: E402
 from agent_ops.adapters import excel_com  # noqa: E402
+from agent_ops.adapters import outlook_com  # noqa: E402
+from agent_ops import schedule_store  # noqa: E402
+from agent_ops.artifact_generators import classify_mail  # noqa: E402
 
 PASS = 0
 
@@ -37,6 +41,12 @@ def main() -> None:
     office = ADAPTERS["office"]
     check("office adapter remains unavailable", office["available"] is False)
     check("office adapter exposes execute", office.get("execute") is excel_com.execute)
+    outlook = ADAPTERS["outlook"]
+    check("outlook adapter remains unavailable", outlook["available"] is False)
+    check("outlook adapter exposes execute", outlook.get("execute") is outlook_com.execute)
+    check("outlook actions keep send non-public",
+          set(outlook_com.ACTIONS) == {"read_calendar", "sync_calendar", "read_inbox"}
+          and "send_mail" not in outlook_com.ACTIONS, str(outlook_com.ACTIONS))
     check("excel actions fixed", set(excel_com.ACTIONS) == {
         "open_copy", "read_range", "write_range", "run_macro_file", "save", "close"})
     check("no original-open API exposed", "open" not in excel_com.ACTIONS and "open_original" not in excel_com.ACTIONS)
@@ -44,6 +54,15 @@ def main() -> None:
     bad = excel_com.execute("no_such_action", {})
     check("unknown action returns ok false", bad["ok"] is False and "unknown action" in bad["error"], str(bad))
     check("unknown action lists available actions", "open_copy" in bad.get("available_actions", []), str(bad))
+    bad_outlook = outlook_com.execute("no_such_action", {})
+    check("outlook unknown action returns ok false",
+          bad_outlook["ok"] is False and "read_calendar" in bad_outlook.get("available_actions", []),
+          str(bad_outlook))
+
+    if outlook_com._PYWIN32_ERROR:
+        absent = outlook_com.execute("read_calendar", {"days": 1})
+        check("outlook absence path explains pywin32",
+              absent["ok"] is False and "pywin32 미설치" in absent.get("error", ""), str(absent))
 
     if excel_com._PYWIN32_ERROR:
         for action in ("open_copy", "read_range", "write_range", "run_macro_file", "save"):
@@ -102,6 +121,60 @@ def main() -> None:
     audit_text = audit_file.read_text(encoding="utf-8") if audit_file.exists() else ""
     check("excel adapter writes audit", "excel_com" in audit_text, str(audit_file))
     check("close action is audited without options", "excel_com.close" in audit_text, audit_text)
+
+    items = [
+        {"title": "설계 리뷰", "start": "2026-07-05 10:00", "end": "2026-07-05 11:00"},
+        {"title": "설계 리뷰", "start": "2026-07-05 10:00", "end": "2026-07-05 11:00"},
+        {"title": "", "start": "2026-07-06 10:00", "end": "2026-07-06 11:00"},
+    ]
+    synced = outlook_com.sync_to_schedule(items)
+    check("outlook sync adds unique schedule item",
+          synced["ok"] and len(synced["added"]) == 1 and synced["skipped"] == 2, str(synced))
+    stored = schedule_store.list_items("all")
+    check("outlook sync marks source outlook",
+          len(stored) == 1 and stored[0]["source"] == "outlook", str(stored))
+    synced_again = outlook_com.sync_to_schedule(items[:1])
+    check("outlook sync skips duplicate title due",
+          synced_again["ok"] and not synced_again["added"] and synced_again["skipped"] == 1, str(synced_again))
+
+    original_outlook_error = outlook_com._PYWIN32_ERROR
+    original_outlook_pythoncom = outlook_com.pythoncom
+    original_outlook_win32com = outlook_com.win32com
+
+    class FakeOutlookPythoncom:
+        def CoInitialize(self):
+            return None
+
+        def CoUninitialize(self):
+            return None
+
+    class FakeClient:
+        def GetActiveObject(self, _name):
+            raise RuntimeError("Outlook is closed")
+
+    class FakeWin32:
+        client = FakeClient()
+
+    try:
+        outlook_com._PYWIN32_ERROR = ""
+        outlook_com.pythoncom = FakeOutlookPythoncom()
+        outlook_com.win32com = FakeWin32()
+        missing_outlook = outlook_com._active_outlook()
+        check("outlook closed asks user to start Outlook",
+              missing_outlook["ok"] is False and "Outlook을 먼저 실행" in missing_outlook.get("error", ""),
+              str(missing_outlook))
+    finally:
+        outlook_com._PYWIN32_ERROR = original_outlook_error
+        outlook_com.pythoncom = original_outlook_pythoncom
+        outlook_com.win32com = original_outlook_win32com
+
+    inbox_item = {"from": "팀장", "subject": "결재 요청", "body": "금요일까지 승인 부탁드립니다."}
+    check("outlook inbox item fits mail classifier",
+          classify_mail(inbox_item) == "결재/승인", str(inbox_item))
+    send = outlook_com.send_mail("user@example.com", "테스트", "본문")
+    check("outlook send_mail fails closed dangerous",
+          send["ok"] is False and send.get("risk") == "dangerous" and "기본 비노출" in send.get("error", ""),
+          str(send))
 
     if excel_com._PYWIN32_ERROR:
         print(f"\nSKIP Excel COM live checks - skipped, not failed; ALL {PASS} STATIC CHECKS PASSED (office adapters)")

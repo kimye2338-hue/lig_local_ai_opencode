@@ -153,6 +153,14 @@ def main() -> None:
                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
     check("CLI remove --yes deletes item", removed.returncode == 0 and "삭제됨: sch_0001" in removed.stdout,
           removed.stdout + removed.stderr)
+    outlook_env = dict(cli_env)
+    outlook_env["LIG_OUTLOOK_COM_DISABLE"] = "1"
+    outlook = subprocess.run(cmd + ["sync-outlook", "--days", "1"],
+                             cwd=str(Path(__file__).resolve().parents[1]), env=outlook_env,
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    check("CLI sync-outlook absence exits 2 with guidance",
+          outlook.returncode == 2 and "pywin32 미설치" in (outlook.stdout + outlook.stderr),
+          outlook.stdout + outlook.stderr)
 
     print(f"\nALL {PASS} CHECKS PASSED (schedule store)")
 
