@@ -60,6 +60,7 @@ def main() -> None:
           str(bad_outlook))
 
     if outlook_com._PYWIN32_ERROR:
+        # AGENTOPS_ROOT is a data root here; child subprocess must import from code root.
         absent = outlook_com.execute("read_calendar", {"days": 1})
         check("outlook absence path explains pywin32",
               absent["ok"] is False and "pywin32 미설치" in absent.get("error", ""), str(absent))

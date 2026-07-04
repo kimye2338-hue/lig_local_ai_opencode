@@ -34,6 +34,7 @@ ACTIONS = ("read_calendar", "sync_calendar", "read_inbox")
 INTERNAL_ACTIONS = ("send_mail",)
 DEFAULT_TIMEOUT = 30
 OUTLOOK_NOT_RUNNING = "Outlook이 실행 중이 아닙니다 — Outlook을 먼저 실행한 뒤 다시 시도하세요"
+CODE_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _missing_pywin32() -> Dict[str, Any]:
@@ -152,8 +153,9 @@ def _run_child(action: str, options: Dict[str, Any]) -> Dict[str, Any]:
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONPATH"] = str(CODE_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     try:
-        result = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, timeout=timeout, env=env)
+        result = subprocess.run(cmd, cwd=str(CODE_ROOT), capture_output=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": f"Outlook 응답 없음({timeout}s) — 보안 프롬프트가 떠 있는지 확인"}
     out = (result.stdout or b"").decode("utf-8", errors="replace").strip()
