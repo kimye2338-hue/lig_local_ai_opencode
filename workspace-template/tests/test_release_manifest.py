@@ -63,6 +63,9 @@ def main() -> None:
     check("manifest has no secret-like tokens",
           not any(t in blob for t in ("api_key", "bearer ", "secret=", "password")), "token found")
 
+    # bundle build check always runs (does not need prefetch/)
+    _check_bundle_build()
+
     # file existence only when prefetch/ populated
     present = list(PREFETCH.glob("*")) if PREFETCH.exists() else []
     if not present:
@@ -79,6 +82,39 @@ def main() -> None:
         check(f"prefetch sha256 matches: {entry['filename']}", h == entry["sha256"], h)
 
     print(f"\nALL {PASS} CHECKS PASSED (release manifest)")
+
+
+def _check_bundle_build() -> None:
+    """Run release/build_bundle.py into a tmp dir and validate the zip + manifest."""
+    import importlib.util
+    import tempfile
+    import zipfile
+
+    bb_path = REPO_ROOT / "release" / "build_bundle.py"
+    check("build_bundle.py exists", bb_path.exists(), str(bb_path))
+    spec = importlib.util.spec_from_file_location("build_bundle", bb_path)
+    bb = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bb)
+
+    out = Path(tempfile.mkdtemp(prefix="bundle_test_"))
+    zip_path = bb.build("testdate", out)
+    check("bundle zip created", zip_path.exists() and zip_path.suffix == ".zip", str(zip_path))
+    with zipfile.ZipFile(zip_path) as zf:
+        names = zf.namelist()
+        check("bundle has MANIFEST_SHA256.txt", "MANIFEST_SHA256.txt" in names, str(names[:5]))
+        check("bundle includes workspace-template source",
+              any(n.startswith("workspace-template/agent_ops/") for n in names), str(len(names)))
+        check("bundle includes plan board", any(n == "plan/STATUS.md" for n in names), "no STATUS")
+        # manifest lists a sha256 per archived file (minus the manifest itself)
+        manifest = zf.read("MANIFEST_SHA256.txt").decode("utf-8")
+        hash_lines = [ln for ln in manifest.splitlines() if ln and not ln.startswith("#")]
+        archived = [n for n in names if n != "MANIFEST_SHA256.txt"]
+        check("manifest has one sha256 line per archived file",
+              len(hash_lines) == len(archived), f"{len(hash_lines)} vs {len(archived)}")
+        check("manifest lines are 64-hex + path",
+              all(HEX64.match(ln.split("  ")[0]) for ln in hash_lines), "bad hash line")
+    # no lig-api.env / secrets bundled
+    check("bundle carries no lig-api.env", not any("lig-api.env" in n for n in names), "leak")
 
 
 if __name__ == "__main__":

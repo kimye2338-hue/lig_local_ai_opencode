@@ -36,7 +36,7 @@
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | APPROVED | plan/reports/P16-04-r1.md | plan/reviews/P16-04-r1.md |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
 | P17-02 | 의존성 prefetch + SHA256 확정 | fable | P16-04 | INTERNET | READY(부분완료: 11/14 resolved) | plan/reports/P17-02-r1.md | |
-| P17-03 | 반입 번들 build + setup.bat + 체크리스트 | codex | P17-02 | ANY | BLOCKED | | |
+| P17-03 | 반입 번들 build + setup.bat + 체크리스트 | fable | P17-02 | ANY | READY(부분완료: source-only) | plan/reports/P17-03-r1.md | |
 | P17-04 | 오프라인 설치 리허설 (네트워크 차단) | human+codex | P17-03 | HUMAN | BLOCKED | | |
 | P18-01 | secret 스캔 pre-commit 스크립트 | codex | — | ANY | APPROVED | plan/reports/P18-01-r1.md | plan/reviews/P18-01-r1.md |
 | P18-02 | RUNBOOK + audit 순환 + doctor 운영 섹션 | fable | P13-01 | ANY | APPROVED | plan/reports/P18-02-r2.md | plan/reviews/P18-02-r2.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 **P17-03 부분완료 (Fable 직접)**: build_bundle.py(stdlib zip+MANIFEST_SHA256, secret 반입 거부) + setup.bat(오프라인 `pip --no-index`+단계별 실패처리) + BRING_IN_CHECKLIST.md 구현. test_release_manifest에 build 검증 추가 → `ALL 62 CHECKS PASSED`(295 소스 zip 실측). 완전 번들은 P17-02 잔여 3종 채운 뒤 재빌드. 23개 중 20 exit 0. reports/P17-03-r1.md.
 
 - 2026-07-04 **P17-02 부분완료 (Fable 직접)**: wheel 8종 pip 실측 SHA256 + 모델 3파일 HF LFS pointer 공식 SHA256 = **11/14 resolved**. `dependencies.json:prefetch_files` + `verify_prefetch.py`(stdlib) + `test_release_manifest.py`(54 checks, no-network) + `.gitignore release/prefetch/` 커밋. E2E: wheel 8종 prefetch/에 넣고 verify → 전부 해시 일치 OK. **잔여 3종**(llama.cpp/whisper.cpp/ffmpeg GitHub 릴리스): 클라우드 **proxy allowlist가 GitHub 릴리스 차단** → codex도 불가, **집/개발 PC에서 다운로드+certutil로 확정** 필요(해시 날조 금지). 전체 23개 중 20개 exit 0. 상세: reports/P17-02-r1.md. **사용자 결정 요청**: 3종을 집 PC에서 받을지/회사 기설치로 대체할지. P17-03은 3종 resolved 후 완전 번들.
 
