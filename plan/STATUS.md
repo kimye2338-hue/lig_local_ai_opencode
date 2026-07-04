@@ -46,6 +46,8 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-04 정책: **pip 설치 허용**(사용자 승인). PROTOCOL §3.4 개정 — 개발/집/리뷰 PC에서 필요한 라이브러리를 `pip install`로 자유롭게 설치해 SKIP 대신 실경로 검증. 가드레일: dependencies.json 등록 필수(회사는 오프라인=prefetch wheel로만 반입), 코어는 stdlib-only 유지, 어댑터/ingest는 optional-import 부재 안내 유지. 리뷰 환경에 openpyxl 설치 → bench 191→**193**(워커와 동일 분기, 이전 리뷰들의 191/193 불일치 해소). pywin32는 리눅스 배포판 없음 → COM 어댑터는 리뷰 env에서 항상 부재 경로(불가피).
+
 - 2026-07-04 Fable 리뷰 14차: **P15-04 r1 APPROVED**(office available=False 유지=hard gate, home_smoke 정직 표기, 신규파일 정책 memo_2.docx·excel 라우팅 보존 실측. 집 Excel *live* 왕복은 리뷰 env에 Excel 없어 독립재현 불가—home_smoke로 정직 스코프, Office 2016은 P19 — reviews/P15-04-r1.md). **P16-02 r1 CHANGES-REQUESTED**(테스트 이식성만: fake exe가 `.cmd`라 POSIX 하드 실패→artifact-kind hard-gate check가 리뷰 플랫폼서 실행 불가. 어댑터/artifact 실체는 리눅스 개별 실측 전부 통과: 부재안내·DWG사본 원본불변·UTF-16·exit53·autocad_script 생성/품질/QSAVE차단·available=False. 되는 방법=`.sh`/`.cmd` 분기+UTF-16 assertion만 nt가드+hard-gate check를 앞으로, 리뷰어 조각 검증 — reviews/P16-02-r1.md). 재검증: 22개 중 18개 exit 0(batch_adapters+Windows 전용 3개 RED). 피드백: OS 전용 블록 뒤에 hard-gate check 두지 말 것. Codex 다음: **P16-02 r2 → P18-02 → P16-03/04**.
 
 - 2026-07-04 P16-02 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P16-02-r1.md. matlab_batch -batch adapter + autocad_batch accoreconsole 사본 DWG adapter + autocad_script artifact kind/quality 추가, batch adapters 24 checks/capability bench 193 checks/전체 22개 테스트 파일 통과. hard gate: artifact kind 추가로 리뷰 전 auto-advance 중단.
