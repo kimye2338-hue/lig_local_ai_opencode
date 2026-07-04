@@ -16,9 +16,29 @@ Mechanical/SpaceClaim 스크립트는 **생성만** (GUI 의존 — 정직하게
 1. **키워드에서 광범위어 제거**: bare `해석`(일상어: 데이터/회의/문서 해석)과 `journal`은
    ANSYS 무관 요청을 오라우팅해 fluent_journal/ansys_script를 스퓨리어스 생성한다. 도메인
    경계어만 사용: `앤시스, ansys, 플루언트, fluent, 시뮬레이션, 메카니컬, spaceclaim,
-   icepak, cfd, fea`. bench negative check 추가: `이 데이터 해석해줘`·`journal 정리해줘`가
-   simulation_automation/fluent_journal로 라우팅되지 않음. (아래 작업 항목 1의 키워드는
-   이 정정본으로 교체됨.)
+   icepak, cfd, fea`. (아래 작업 항목 1의 키워드는 이 정정본으로 교체됨.)
+2. **일상어 negative corpus 메타 체크 신설** (`test_capability_bench.py`) — 키워드
+   오라우팅 계열(`.m`/`minutes`/`weekly`/`해석` — 4회 재발)의 **영구 방지책**. 아래 코드를
+   그대로 추가하라 (Fable이 현재 HEAD에서 실측: 기존 수정 8문장 전부 ok, P16-03 누출
+   2문장만 LEAK — 키워드 수정 후 10/10 green이 승인 조건):
+
+   ```python
+   # --- everyday-request negative corpus: no specialized capability may leak ---
+   GENERIC_CAPS = {"file_ops", "document_generation"}
+   NEGATIVE_CORPUS = [
+       "이 파일 정리해서 요약해줘", "보고서 작성해줘",
+       "회의 메모를 note.md 파일로 만들어줘", "5 minutes 후에 알려줘",
+       "biweekly 회의 잡아줘", "이 데이터 해석해줘", "journal 정리해줘",
+       "요약.md로 저장해줘", "중요한 일 목록 만들어줘", "메모를 읽고 정리해줘",
+   ]
+   for neg_task in NEGATIVE_CORPUS:
+       neg_caps = {c["id"] for c in plan_task(neg_task)["capabilities"]}
+       check(f"everyday request stays generic: {neg_task}",
+             neg_caps <= GENERIC_CAPS, str(sorted(neg_caps)))
+   ```
+
+   이후 **모든 capability 키워드 추가는 이 corpus를 통과해야** 하며, 새 일상어 오라우팅이
+   발견되면 corpus에 문장을 추가한다(체크 삭제/완화 금지).
 
 > 나머지(gen_fluent_journal/gen_ansys_script 골격·공학책임 경고 quality 강제·fluent_batch
 > 부재안내·available=False·테스트 POSIX 이식성)는 r1에서 실측 확인됨 — 유지.

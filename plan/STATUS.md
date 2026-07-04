@@ -46,6 +46,8 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-04 **Fable 5 종합 점검** (사용자 요청): 건강 — 테스트 19/22 exit 0(Windows 전용 3개 제외 전부 green), secret scan 통과, 의존성 그래프 정합, 보드 26 APPROVED/4 READY/1 CHANGES-REQ/5 BLOCKED. **결함 패턴 정량화**(리뷰 17차): 키워드 오라우팅 4회(최다)·추출 오값 2회·테스트 이식성 2회·subprocess 루트 1회 — 전부 1~3라운드 수렴, 리뷰 제시 수정코드 채택률 100%. **개선 3건**: ① 일상어 NEGATIVE_CORPUS 메타 체크 설계+실측(기존 수정 8문장 ok/현 누출 2문장만 LEAK — 이빨 확인)→P16-03 r2 요구로 영구화, 이후 키워드 재발은 리뷰 없이 bench가 차단. ② self-review 스킬에 반복 결함 체크리스트 4종 추가(워커 제출 전 자가 차단). ③ 파일럿까지 남은 경로 확정: **P16-03 r2 → P16-04 → P18-02 → P19-01**(codex, ANY) → P17-02(INTERNET)→P17-03→P17-04(HUMAN)→P19-02(COMPANY) + P00-02(fable)/P00-03(human)/Windows baseline(NEXT_ONSITE). 판정: **순항** — 코어/비서/어댑터 축 완성, 남은 것은 ANY 4건+반입 체인+실측.
+
 - 2026-07-04 Fable 리뷰 17차: **P16-03 r1 CHANGES-REQUESTED**(키워드 `해석`(일상어)+`journal` 광범위 매칭 → `이 데이터 해석해줘`·`회의 내용 해석`·`journal 정리` 등이 fluent_journal/ansys_script 스퓨리어스 생성. `.m`/`minutes`/`weekly`에 이은 4번째지만 `해석`은 일상어라 영향 최대. **task 스펙이 그 키워드를 지정한 결함이라 task도 Fable 정정**. 되는 방법=도메인어만(ansys/fluent/시뮬레이션/메카니컬/…+cfd/fea)+negative check, 리뷰어 실측 — reviews/P16-03-r1.md). 확인: fluent_journal/ansys_script 골격·공학책임 경고 quality 강제·fluent available=False·부재안내·테스트 POSIX 이식성(36 checks) 전부 정상. 재검증: 22개 중 19개 exit 0(bench 203, Windows 전용 3개만 RED). 피드백: 한국어 일상어 키워드가 영어보다 위험. Codex 다음: **P16-03 r2 → P18-02 → P16-04**.
 
 - 2026-07-04 P16-03 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P16-03-r1.md. simulation_automation capability + fluent_journal/ansys_script artifact kind + fluent_batch adapter 추가, batch adapters 37 checks/capability bench 203 checks/전체 22개 테스트 파일 통과. hard gate: artifact kind 추가로 리뷰 전 auto-advance 중단.
