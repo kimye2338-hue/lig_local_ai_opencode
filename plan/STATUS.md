@@ -33,7 +33,7 @@
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | APPROVED | plan/reports/P16-02-r3.md | plan/reviews/P16-02-r3.md |
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | APPROVED | plan/reports/P16-03-r2.md | plan/reviews/P16-03-r2.md |
-| P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | READY | | |
+| P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | IN-PROGRESS | | |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
 | P17-02 | 의존성 prefetch + SHA256 확정 | codex | P16-04 | INTERNET | BLOCKED | | |
 | P17-03 | 반입 번들 build + setup.bat + 체크리스트 | codex | P17-02 | ANY | BLOCKED | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P16-04 IN-PROGRESS (Codex). 시작 HEAD: 513641b. hwp_com + solidworks_com 어댑터 작업 시작.
 
 - 2026-07-04 Fable 리뷰 18차: **P16-03 r2 APPROVED**(bare `해석`/`journal` 제거+도메인어(cfd/fea) 채택, 리뷰 설계 NEGATIVE_CORPUS 10문장 메타 체크 그대로 회귀화. 실측: 누출 **0/10**, 양성 4건 유지, bench 213 — reviews/P16-03-r2.md). 재검증: 22개 중 19개 exit 0, Windows 전용 3개만 RED. **키워드 오라우팅 계열이 클래스 단위로 봉쇄됨**(이후 재발은 리뷰 없이 bench 차단). Codex 다음: **P16-04 → P18-02 → P19-01**.
 
