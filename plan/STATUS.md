@@ -40,12 +40,13 @@
 | P17-04 | 오프라인 설치 리허설 (네트워크 차단) | human+codex | P17-03 | HUMAN | BLOCKED | | |
 | P18-01 | secret 스캔 pre-commit 스크립트 | codex | — | ANY | APPROVED | plan/reports/P18-01-r1.md | plan/reviews/P18-01-r1.md |
 | P18-02 | RUNBOOK + audit 순환 + doctor 운영 섹션 | codex | P13-01 | ANY | AWAITING-REVIEW | plan/reports/P18-02-r1.md | |
-| P19-01 | 회사 파일럿 체크리스트/기록 양식 준비 | codex | P14-03, P15-02, P16-02 | ANY | READY | | |
+| P19-01 | 회사 파일럿 체크리스트/기록 양식 준비 | codex | P14-03, P15-02, P16-02 | ANY | IN-PROGRESS | | |
 | P19-02 | 회사 파일럿 12종 실측 | human+fable | P19-01, P17-04 | COMPANY+HUMAN | BLOCKED | | |
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-04 P19-01 IN-PROGRESS (Codex). 시작 HEAD: 72137a4. 회사 파일럿 day1 문서/기록 양식/gateway smoke BAT 작업 시작.
 - 2026-07-04 P18-02 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P18-02-r1.md. RUNBOOK 7개 운영 증상 표, audit 회전(.bak) 및 doctor operations 섹션 추가. approval/audit 20 checks/doctor manual smoke/전체 22개 테스트 파일 통과.
 - 2026-07-04 P18-02 IN-PROGRESS (Codex). 시작 HEAD: 65a801d. RUNBOOK + audit 순환 + doctor 운영 섹션 작업 시작.
 
