@@ -90,6 +90,36 @@ def llm_endpoints_summary() -> dict:
     }
 
 
+def operations_summary() -> dict:
+    """Secret-free operational state: audit, schedule, runbook, reports."""
+    try:
+        from . import audit, schedule_store
+        audit_dir = Path(os.environ.get("LIG_AUDIT_DIR") or audit.AUDIT_DIR)
+        audit_file = audit_dir / audit.AUDIT_FILE
+        last_ts = ""
+        if audit_file.exists():
+            for line in audit_file.read_text(encoding="utf-8", errors="replace").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    last_ts = str(json.loads(line).get("ts") or "")
+                except Exception:
+                    pass
+        reports = sorted(RESULTS.glob("reports/work_*.md"), key=lambda p: p.stat().st_mtime, reverse=True) \
+            if (RESULTS / "reports").exists() else []
+        return {
+            "audit_file": str(audit_file),
+            "audit_size_bytes": audit_file.stat().st_size if audit_file.exists() else 0,
+            "audit_last_ts": last_ts,
+            "audit_rotated": len(list(audit_dir.glob("audit_*.jsonl.bak"))) if audit_dir.exists() else 0,
+            "schedule_items": len(schedule_store.list_items("all")),
+            "runbook": (ROOT / "docs" / "RUNBOOK.md").exists(),
+            "last_work_report": str(reports[0]) if reports else "",
+        }
+    except Exception as exc:
+        return {"error": exc.__class__.__name__}
+
+
 def run_doctor() -> dict:
     heartbeat("doctor")
     checks = {"timestamp": now(), "platform": platform_info(), "env": {"PYTHONUTF8": os.environ.get("PYTHONUTF8"), "PYTHONIOENCODING": os.environ.get("PYTHONIOENCODING"), "CHROMEDRIVER_PATH": os.environ.get("CHROMEDRIVER_PATH")}, "chromedriver": {}, "chrome_9222": {}, "encoding": {}}
@@ -125,6 +155,10 @@ def run_doctor() -> dict:
         checks["llm_endpoints"] = llm_endpoints_summary()
     except Exception as exc:
         checks["llm_endpoints"] = {"ok": False, "error_class": exc.__class__.__name__}
+    try:
+        checks["operations"] = operations_summary()
+    except Exception as exc:
+        checks["operations"] = {"error": exc.__class__.__name__}
     # User-facing agent runtime readiness (secret-free: paths + flags only).
     try:
         from .tool_dispatch import REGISTRY

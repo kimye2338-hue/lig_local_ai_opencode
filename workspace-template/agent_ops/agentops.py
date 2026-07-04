@@ -264,6 +264,10 @@ def cmd_checkpoint(args):
 
 def cmd_doctor(args):
     result = run_doctor()
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 

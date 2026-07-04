@@ -43,12 +43,34 @@ def _clean_event(event: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _max_bytes() -> int:
+    try:
+        return int(os.environ.get("LIG_AUDIT_MAX_BYTES", str(10 * 1024 * 1024)))
+    except Exception:
+        return 10 * 1024 * 1024
+
+
+def _rotate_if_needed(path: Path) -> None:
+    try:
+        if not path.exists() or path.stat().st_size < _max_bytes():
+            return
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        backup = path.with_name(f"audit_{stamp}.jsonl.bak")
+        if backup.exists():
+            backup = path.with_name(f"audit_{stamp}_{os.getpid()}.jsonl.bak")
+        path.rename(backup)
+    except Exception:
+        pass
+
+
 def record(event: Dict[str, Any]) -> None:
     """Append one audit event. Failures warn to stderr but never raise."""
     try:
         audit_dir = Path(os.environ.get("LIG_AUDIT_DIR") or AUDIT_DIR)
         audit_dir.mkdir(parents=True, exist_ok=True)
-        with (audit_dir / AUDIT_FILE).open("a", encoding="utf-8") as fh:
+        audit_path = audit_dir / AUDIT_FILE
+        _rotate_if_needed(audit_path)
+        with audit_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(_clean_event(event), ensure_ascii=False) + "\n")
     except Exception as exc:
         print(f"[WARN] audit record failed: {exc}", file=sys.stderr)

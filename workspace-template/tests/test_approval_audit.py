@@ -93,6 +93,33 @@ def main() -> None:
     check("audit redacts secret detail", "sk-test" not in text and rows[1]["detail"] == "[REDACTED]", text)
     check("audit detail capped", len(rows[0]["detail"]) <= 80 and len(rows[1]["detail"]) <= 80, str(rows))
 
+    # --- audit rotation keeps recording after backup ---
+    rotate_audit = tmp / "rotate_audit"
+    os.environ["LIG_AUDIT_DIR"] = str(rotate_audit)
+    old_max = os.environ.get("LIG_AUDIT_MAX_BYTES")
+    os.environ["LIG_AUDIT_MAX_BYTES"] = "200"
+    try:
+        for i in range(8):
+            record({
+                "run_id": f"rot-{i}",
+                "kind": "tool",
+                "name": "write_file",
+                "target": f"rot-{i}.txt",
+                "risk": "safe",
+                "verdict": "approved",
+                "detail": "rotation-check-" + ("x" * 60),
+            })
+    finally:
+        if old_max is None:
+            os.environ.pop("LIG_AUDIT_MAX_BYTES", None)
+        else:
+            os.environ["LIG_AUDIT_MAX_BYTES"] = old_max
+    rotated = list(rotate_audit.glob("audit_*.jsonl.bak"))
+    current_rows = read_jsonl(rotate_audit / "audit.jsonl")
+    check("audit rotation creates bak file", bool(rotated), str(list(rotate_audit.iterdir())))
+    check("audit keeps recording after rotation", bool(current_rows) and current_rows[-1]["run_id"] == "rot-7",
+          str(current_rows))
+
     # --- dispatch hook records audit ---
     dispatch_audit = tmp / "dispatch_audit"
     os.environ["LIG_AUDIT_DIR"] = str(dispatch_audit)
