@@ -20,7 +20,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from . import autocad_batch, browser_cdp, excel_com, fluent_batch, matlab_batch, office_convert, outlook_com
+from . import (autocad_batch, browser_cdp, excel_com, fluent_batch, hwp_com,
+               matlab_batch, office_convert, outlook_com, solidworks_com)
 
 
 def _office_execute(action: str, options: Dict[str, Any]) -> Dict[str, Any]:
@@ -38,6 +39,7 @@ ADAPTERS: Dict[str, Dict[str, Any]] = {
         "available": False,
         "requires": ["SolidWorks 설치", "pywin32 (COM 채택 시 — dependencies.json 'pywin32')"],
         "pending": "app validation pending: SolidWorks가 있는 PC에서 매크로 실행 검증",
+        "execute": solidworks_com.execute,
     },
     "office": {
         "description": "Excel/Word/PowerPoint 매크로 실행/COM 제어 및 변환",
@@ -95,6 +97,7 @@ ADAPTERS: Dict[str, Dict[str, Any]] = {
         "available": False,
         "requires": ["한글 설치", "pywin32 (HwpFrame COM)"],
         "pending": "app validation pending: 한글이 있는 PC에서 검증",
+        "execute": hwp_com.execute,
     },
 }
 
