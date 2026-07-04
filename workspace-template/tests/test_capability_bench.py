@@ -217,6 +217,9 @@ def main() -> None:
     check("english minutes time expression does not route to meeting_minutes",
           "meeting_minutes" not in {c["id"] for c in mm_neg["capabilities"]}
           and "meeting_minutes" not in mm_neg["artifact_kinds"], str(mm_neg))
+    wk_neg = plan_task("biweekly 회의 잡아줘")
+    check("biweekly does not route to weekly_report",
+          "weekly_report" not in {c["id"] for c in wk_neg["capabilities"]}, str(wk_neg))
 
     schedule_plan = plan_task("금요일까지 진동시험 보고서 마감 일정 등록해줘")
     check("schedule request routes to schedule_management",

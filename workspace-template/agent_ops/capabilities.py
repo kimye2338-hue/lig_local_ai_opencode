@@ -109,7 +109,7 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "artifact_kinds": ["document"],
         "outputs": ["weekly_<YYYYMMDD>.md"],
         "pending": [],
-        "keywords": ["주간보고", "주간 보고", "위클리", "weekly"],
+        "keywords": ["주간보고", "주간 보고", "위클리", "weekly report"],
     },
     "matlab_automation": {
         "description": "시험 데이터 후처리용 MATLAB 스크립트 scaffold 생성",
