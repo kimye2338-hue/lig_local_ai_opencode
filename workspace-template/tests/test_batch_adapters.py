@@ -6,6 +6,7 @@ Run: py -3.11 tests\\test_batch_adapters.py
 from __future__ import annotations
 
 import os
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -37,8 +38,14 @@ def check(label: str, cond: bool, detail: object = "") -> None:
         sys.exit(1)
 
 
-def _write_cmd(path: Path, body: str) -> Path:
-    path.write_text(body, encoding="utf-8")
+def _write_fake_exe(base: Path, *, win_body: str, unix_body: str) -> Path:
+    if os.name == "nt":
+        path = base.with_suffix(".cmd")
+        path.write_text(win_body, encoding="utf-8")
+    else:
+        path = base.with_suffix(".sh")
+        path.write_text(unix_body, encoding="utf-8")
+        path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IRUSR)
     return path
 
 
@@ -57,7 +64,11 @@ def main() -> None:
         check("matlab missing executable explains env/PATH",
               missing_exe["ok"] is False and "MATLAB_EXE" in missing_exe["error"], missing_exe)
 
-        fake_matlab = _write_cmd(tmp_root / "fake_matlab.cmd", "@echo off\r\necho MATLAB fake ok\r\nexit /b 0\r\n")
+        fake_matlab = _write_fake_exe(
+            tmp_root / "fake_matlab",
+            win_body="@echo off\r\necho MATLAB fake ok\r\nexit /b 0\r\n",
+            unix_body="#!/bin/sh\necho MATLAB fake ok\nexit 0\n",
+        )
         os.environ["MATLAB_EXE"] = str(fake_matlab)
         check("find_matlab uses env override", matlab_batch.find_matlab() == str(fake_matlab))
         ok_mat = matlab_batch.execute(str(script), {"timeout_s": 30})
@@ -81,9 +92,10 @@ def main() -> None:
         check("autocad missing executable explains env/PATH",
               missing_accore["ok"] is False and "ACCORECONSOLE_EXE" in missing_accore["error"], missing_accore)
 
-        fake_ok = _write_cmd(
-            tmp_root / "fake_accore_ok.cmd",
-            "@echo off\r\npowershell -NoProfile -Command \"$b=[Text.Encoding]::Unicode.GetBytes('AutoCAD 유니코드 로그'); [Console]::OpenStandardOutput().Write($b,0,$b.Length)\"\r\nexit /b 0\r\n",
+        fake_ok = _write_fake_exe(
+            tmp_root / "fake_accore_ok",
+            win_body="@echo off\r\npowershell -NoProfile -Command \"$b=[Text.Encoding]::Unicode.GetBytes('AutoCAD 유니코드 로그'); [Console]::OpenStandardOutput().Write($b,0,$b.Length)\"\r\nexit /b 0\r\n",
+            unix_body="#!/bin/sh\nprintf 'AutoCAD fake ok'\nexit 0\n",
         )
         os.environ["ACCORECONSOLE_EXE"] = str(fake_ok)
         check("find_accoreconsole uses env override", autocad_batch.find_accoreconsole() == str(fake_ok))
@@ -95,11 +107,13 @@ def main() -> None:
               "/i" in ok_cad["cmd"] and str(copy_path) in ok_cad["cmd"] and "/s" in ok_cad["cmd"], ok_cad["cmd"])
         check("autocad runs against copy path", copy_path.name.startswith("사본_") and copy_path.exists(), copy_path)
         check("autocad original dwg unchanged", dwg.read_bytes() == original_bytes)
-        check("autocad decodes utf16le stdout", "유니코드 로그" in ok_cad.get("stdout_tail", ""), ok_cad)
+        if os.name == "nt":
+            check("autocad decodes utf16le stdout", "유니코드 로그" in ok_cad.get("stdout_tail", ""), ok_cad)
 
-        fake_53 = _write_cmd(
-            tmp_root / "fake_accore_53.cmd",
-            "@echo off\r\npowershell -NoProfile -Command \"$b=[Text.Encoding]::Unicode.GetBytes('ErrorStatus=53'); [Console]::OpenStandardOutput().Write($b,0,$b.Length)\"\r\nexit /b 53\r\n",
+        fake_53 = _write_fake_exe(
+            tmp_root / "fake_accore_53",
+            win_body="@echo off\r\npowershell -NoProfile -Command \"$b=[Text.Encoding]::Unicode.GetBytes('ErrorStatus=53'); [Console]::OpenStandardOutput().Write($b,0,$b.Length)\"\r\nexit /b 53\r\n",
+            unix_body="#!/bin/sh\nprintf '\\xff\\xfeE\\x00r\\x00r\\x00o\\x00r\\x00S\\x00t\\x00a\\x00t\\x00u\\x00s\\x00=\\x005\\x003\\x00'\nexit 53\n",
         )
         os.environ["ACCORECONSOLE_EXE"] = str(fake_53)
         exit53 = autocad_batch.execute(str(dwg), str(scr), {"timeout_s": 30})
