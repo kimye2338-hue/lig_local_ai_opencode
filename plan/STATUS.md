@@ -37,7 +37,7 @@
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
 | P17-02 | 의존성 prefetch + SHA256 확정 | fable | P16-04 | INTERNET | READY(부분완료: 11/14 resolved) | plan/reports/P17-02-r1.md | |
 | P17-03 | 반입 번들 build + setup.bat + 체크리스트 | fable | P17-02 | ANY | READY(부분완료: source-only) | plan/reports/P17-03-r1.md | |
-| P17-04 | 오프라인 설치 리허설 (네트워크 차단) | human+codex | P17-03 | HUMAN | BLOCKED | | |
+| P17-04 | 오프라인 설치 리허설 (네트워크 차단) | human+codex | P17-03 | HUMAN | READY(사전점검 자동화 완료 — 사람 air-gap 실행 대기) | docs/OFFLINE_REHEARSAL.md | |
 | P18-01 | secret 스캔 pre-commit 스크립트 | codex | — | ANY | APPROVED | plan/reports/P18-01-r1.md | plan/reviews/P18-01-r1.md |
 | P18-02 | RUNBOOK + audit 순환 + doctor 운영 섹션 | fable | P13-01 | ANY | APPROVED | plan/reports/P18-02-r2.md | plan/reviews/P18-02-r2.md |
 | P19-01 | 회사 파일럿 체크리스트/기록 양식 준비 | codex | P14-03, P15-02, P16-02 | ANY | APPROVED | plan/reports/P19-01-r1.md | plan/reviews/P19-01-r1.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 **P17-04 사전점검 자동화 (Fable 직접)**: 리허설의 클라우드 가능 절반 구현 → `release/rehearsal_check.py`(stdlib) + `docs/OFFLINE_REHEARSAL.md`. **rehearsal_check**: ① build_bundle 유효 zip 실측 ② setup.bat 오프라인 안전 하드검사(`--no-index`만·network fetch/ExecutionPolicy Bypass 없음) ③ runtime-network **advisory 감사** — agent_ops `*.py`의 아웃바운드 지점 16곳을 file:line으로 나열, localhost/env=OK·나머지=REVIEW로 분류(air-gap 캡처 감시 목록). **실측 `ALL 82 PRE-FLIGHT CHECKS PASSED`**. **OFFLINE_REHEARSAL.md**: 0(자동 사전점검)→1(번들)→2(네트워크 차단)→3(설치+트래픽 캡처)→4(복구+기록) 절차, **P00-02 telemetry 갭을 3절 pktmon/netstat 캡처로 종결**하도록 연결. 남은 것은 **사람 air-gap 실행**(어댑터 차단은 기계 불가) → BLOCKED 해제 READY. 코드 변경은 release/·docs/만(하드게이트 무관).
 
 - 2026-07-04 **P00-02 APPROVED (Fable 직접)**: OpenCode 공식 문서 4항목 조사 완료 → `docs/OPENCODE_INTEGRATION.md`. **① provider**: `@ai-sdk/openai-compatible` + `{env:LIG_API_KEY}` 치환(비밀 미하드코딩) `[확인됨]`. **② 확장점**: OpenCode 플러그인 hook은 자체 프로세스 내부용, **외부 에이전트 런타임 오케스트레이션 확장점 없음** → **agent_ops 병행 CLI 노선 확정** `[확인됨]`. **③ 오프라인**: autoupdate/share/mdns 차단 `[확인됨]`, **telemetry 필드는 문서에 없음 → P17-04 네트워크 캡처로 실측 이관**. **④ permission**: TUI tool 게이트(allow/ask/deny, last-match-wins)와 agent_ops 하드 게이트는 **직교 — 둘 다 유지** `[확인됨]`. DoD 충족(항목별 출처+확인/추정 표기, 통합 권고 1개). 코드 변경 없음.
 

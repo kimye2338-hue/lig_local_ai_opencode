@@ -22,5 +22,12 @@
 - [ ] 차단 상태에서 setup→doctor→mock work→briefing 성공 (증빙)
 - [ ] 실패 항목은 수정 task 제안으로 정리 (Fable이 task화)
 
+## 진행 (2026-07-04, Fable 직접 — 클라우드 가능 절반)
+- 사전점검 자동화: `release/rehearsal_check.py`(stdlib) — 번들 빌드 검증 + setup.bat
+  오프라인 안전 하드검사 + runtime-network advisory 감사(아웃바운드 16곳 나열).
+  실측 `ALL 82 PRE-FLIGHT CHECKS PASSED`.
+- 사람 절차서: `docs/OFFLINE_REHEARSAL.md` — 0(자동 사전점검)→차단→설치+**트래픽 캡처**
+  (P00-02 telemetry 갭 종결)→복구→`P17-04-r1.md` 기록. 남은 것: **사람 air-gap 실행**.
+
 ## 금지
 - 차단 안 하고 "됐다고 가정" 금지 — 리허설의 존재 이유.
