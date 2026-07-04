@@ -10,6 +10,19 @@
 ## 목표
 CLI 배치형 어댑터 2종 — COM보다 안정적인 경로. subprocess 기반이라 stdlib만으로 가능.
 
+## 리뷰 반영 (r1→r2) — reviews/P16-02-r1.md 필수 수정 1건 (r2 단일 진실 소스)
+
+1. **`tests/test_batch_adapters.py`를 POSIX에서도 green**으로: fake 실행파일이 `.cmd`
+   (Windows 전용)라 리눅스에서 하드 실패 → 그 뒤의 artifact-kind(hard gate)·registry
+   check가 리뷰 플랫폼에서 실행 불가. 수정: (a) fake exe를 `os.name`으로 분기(POSIX는
+   `.sh`+chmod, Windows는 `.cmd` — reviews의 `_write_fake_exe`), (b) UTF-16LE stdout 내용
+   assertion만 `if os.name=="nt"` 가드, (c) **부재 안내·사본 불변·artifact-kind·registry
+   check를 OS 전용 블록 앞으로** 빼서 전 플랫폼 실행. 어댑터/artifact 코드는 r1에서 실측
+   검증됨 — 변경 금지, 테스트만 고친다.
+
+> 나머지(matlab_batch/autocad_batch 부재안내·사본 정책·UTF-16·exit53·available=False,
+> autocad_script 생성/품질/QSAVE 차단)는 r1에서 실측 확인됨 — 유지.
+
 > **실측 확정 (2026-07-03, company_check ③⑥)**:
 > - **MATLAB: -batch 실계산 성공** (mean/max 출력, ~21s 기동 포함) — 어댑터는 이 형식
 >   그대로. timeout 여유 있게(기본 300s).

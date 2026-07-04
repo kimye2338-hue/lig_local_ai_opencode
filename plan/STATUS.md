@@ -29,9 +29,9 @@
 | P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | APPROVED | plan/reports/P15-01-r1.md | plan/reviews/P15-01-r1.md |
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | APPROVED | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r2.md |
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | APPROVED | plan/reports/P15-03-r2.md | plan/reviews/P15-03-r2.md |
-| P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | AWAITING-REVIEW | plan/reports/P15-04-r1.md | |
+| P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | APPROVED | plan/reports/P15-04-r1.md | plan/reviews/P15-04-r1.md |
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
-| P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | AWAITING-REVIEW | plan/reports/P16-02-r1.md | |
+| P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | CHANGES-REQUESTED | plan/reports/P16-02-r1.md | plan/reviews/P16-02-r1.md |
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | READY | | |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | READY | | |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 Fable 리뷰 14차: **P15-04 r1 APPROVED**(office available=False 유지=hard gate, home_smoke 정직 표기, 신규파일 정책 memo_2.docx·excel 라우팅 보존 실측. 집 Excel *live* 왕복은 리뷰 env에 Excel 없어 독립재현 불가—home_smoke로 정직 스코프, Office 2016은 P19 — reviews/P15-04-r1.md). **P16-02 r1 CHANGES-REQUESTED**(테스트 이식성만: fake exe가 `.cmd`라 POSIX 하드 실패→artifact-kind hard-gate check가 리뷰 플랫폼서 실행 불가. 어댑터/artifact 실체는 리눅스 개별 실측 전부 통과: 부재안내·DWG사본 원본불변·UTF-16·exit53·autocad_script 생성/품질/QSAVE차단·available=False. 되는 방법=`.sh`/`.cmd` 분기+UTF-16 assertion만 nt가드+hard-gate check를 앞으로, 리뷰어 조각 검증 — reviews/P16-02-r1.md). 재검증: 22개 중 18개 exit 0(batch_adapters+Windows 전용 3개 RED). 피드백: OS 전용 블록 뒤에 hard-gate check 두지 말 것. Codex 다음: **P16-02 r2 → P18-02 → P16-03/04**.
 
 - 2026-07-04 P16-02 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P16-02-r1.md. matlab_batch -batch adapter + autocad_batch accoreconsole 사본 DWG adapter + autocad_script artifact kind/quality 추가, batch adapters 24 checks/capability bench 193 checks/전체 22개 테스트 파일 통과. hard gate: artifact kind 추가로 리뷰 전 auto-advance 중단.
 
