@@ -17,3 +17,6 @@ __pycache__/
 *.pyc
 *.pyo
 *.bak
+
+# mock agent output (mock_transport MOCK_OUTPUT_FILE) — not source
+모의_결과/
