@@ -33,7 +33,7 @@
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | APPROVED | plan/reports/P16-02-r3.md | plan/reviews/P16-02-r3.md |
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | APPROVED | plan/reports/P16-03-r2.md | plan/reviews/P16-03-r2.md |
-| P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | IN-PROGRESS | | |
+| P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | AWAITING-REVIEW | plan/reports/P16-04-r1.md | |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
 | P17-02 | 의존성 prefetch + SHA256 확정 | codex | P16-04 | INTERNET | BLOCKED | | |
 | P17-03 | 반입 번들 build + setup.bat + 체크리스트 | codex | P17-02 | ANY | BLOCKED | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P16-04 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P16-04-r1.md. hwp_com md_to_hwp 신규 파일 변환 adapter + solidworks_com 사본 문서 run_macro adapter 추가, office adapters 42 checks/capability bench 213 checks/전체 22개 테스트 파일 통과.
 
 - 2026-07-04 P16-04 IN-PROGRESS (Codex). 시작 HEAD: 513641b. hwp_com + solidworks_com 어댑터 작업 시작.
 
