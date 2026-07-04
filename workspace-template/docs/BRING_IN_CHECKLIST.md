@@ -5,12 +5,15 @@
 
 ## A. 반입 전 (집/개발 PC, 인터넷 있음)
 
-1. **의존성 prefetch 완료 확인** — `release/dependencies.json`의 `prefetch_files`가
-   전부 `resolved`인가?
-   - `py -3.11 release\verify_prefetch.py` → 모든 파일 `OK`.
-   - 실패 시: `PENDING_HOME_PREFETCH` 항목(llama.cpp / whisper.cpp / ffmpeg GitHub
-     릴리스)을 공식 릴리스에서 받아 `release\prefetch\`에 두고, `certutil -hashfile <파일>
-     SHA256`로 해시를 `dependencies.json`에 채운 뒤 status를 `resolved`로. 다시 verify.
+1. **의존성 prefetch 완료 확인** — `release/dependencies.json`의 `prefetch_files`
+   중 **파일럿에 필요한 wheel 8종(office/COM)** 이 전부 `resolved`인가?
+   - `py -3.11 release\verify_prefetch.py` → 대상 파일 `OK`.
+   - **파일럿은 wheel 8종만 있으면 된다.** 회사는 오프라인 내부망이지만 사내 게이트웨이
+     (`company_gateway` 프로필)가 LLM을 서빙하므로 로컬 llama.cpp/GGUF는 불필요.
+   - `deferred` 3종(llama.cpp / whisper.cpp / ffmpeg)은 **로컬서빙(`local_openai`) 또는
+     음성(P20) 채택 시에만** 필요 — 그때 집/개발 PC에서 공식 릴리스를 받아 `release\prefetch\`에
+     두고 `certutil -hashfile <파일> SHA256`로 해시를 `dependencies.json`에 채워 status를
+     `resolved`로 바꾼 뒤 build_bundle 재실행(자동 포함). 파일럿에는 건너뛴다.
 2. **번들 빌드** — `py -3.11 release\build_bundle.py --date YYYYMMDD`
    → `release\dist\OpenCodeLIG_BUNDLE_<날짜>.zip` + 내부 `MANIFEST_SHA256.txt`.
    - 실패 시: 출력의 `[ABORT]`(secret 파일 포함) 메시지를 보고 해당 파일 제거 후 재빌드.

@@ -1,5 +1,5 @@
 {
-  "$comment": "Offline dependency manifest for company-PC deployment. status: required|planned|optional|not_needed. Prefetch everything with status=required/planned while internet is available; verify SHA256 after transfer. No secrets belong in this file or in the bundle.",
+  "$comment": "Offline dependency manifest for company-PC deployment. status: required|planned|optional|not_needed|resolved|deferred. Prefetch everything with status=required/planned/resolved while internet is available; verify SHA256 after transfer. 'deferred' = not needed for the company_gateway pilot (local-serving/voice only). No secrets belong in this file or in the bundle.",
   "manifest_version": 1,
   "updated": "2026-07-04",
   "runtime_note": "agent_ops is stdlib-only by design: no pip wheels are required for the core runtime. Keep it that way when patching.",
@@ -256,35 +256,35 @@
       "name": "llama.cpp-win-cuda",
       "filename": "llama-<ver>-bin-win-cuda-x64.zip",
       "url": "https://github.com/ggml-org/llama.cpp/releases (최신 win cuda/avx2 zip — 회사 GPU에 맞춰 선택)",
-      "sha256": "PENDING_HOME_PREFETCH",
+      "sha256": "DEFERRED_NOT_IN_PILOT",
       "size": null,
       "license": "MIT",
-      "purpose": "GGUF 서빙 서버(llama-server)",
+      "purpose": "GGUF 로컬 서빙 서버(llama-server) — local_openai 프로필 전용. company_gateway 파일럿에서는 불필요.",
       "category": "binary-github",
-      "status": "PENDING_HOME_PREFETCH (proxy allowlist가 GitHub 릴리스 바이너리 차단 — 집/개발 PC에서 certutil -hashfile로 확정)"
+      "status": "deferred (파일럿 불필요 — 회사는 company_gateway 프로필로 사내 게이트웨이가 LLM 서빙. 로컬서빙(local_openai)을 채택할 때만 집/개발 PC에서 prefetch)"
     },
     {
       "name": "whisper.cpp-win",
       "filename": "whisper-bin-x64.zip",
       "url": "https://github.com/ggerganov/whisper.cpp/releases (최신 win x64 zip)",
-      "sha256": "PENDING_HOME_PREFETCH",
+      "sha256": "DEFERRED_NOT_IN_PILOT",
       "size": null,
       "license": "MIT",
-      "purpose": "음성 STT 실행기(P20)",
+      "purpose": "음성 STT 실행기(P20) — 음성 입력 도입 시점(파일럿 이후)",
       "category": "binary-github",
-      "status": "PENDING_HOME_PREFETCH (동일 사유)"
+      "status": "deferred (파일럿 불필요 — P20 음성은 파일럿 이후 순서. 그때 집/개발 PC에서 prefetch)"
     },
     {
       "name": "ffmpeg-win64",
       "filename": "ffmpeg-win64-gpl.zip",
       "url": "https://github.com/BtbN/FFmpeg-Builds/releases (win64 gpl) 또는 https://www.gyan.dev/ffmpeg/builds/",
-      "sha256": "PENDING_HOME_PREFETCH",
+      "sha256": "DEFERRED_NOT_IN_PILOT",
       "size": null,
       "license": "GPL-3.0 (gpl 빌드) / LGPL 선택 가능",
-      "purpose": "오디오 전처리(P20)",
+      "purpose": "오디오 전처리(P20) — 음성 입력 도입 시점(파일럿 이후)",
       "category": "binary-github",
-      "status": "PENDING_HOME_PREFETCH (동일 사유)"
+      "status": "deferred (파일럿 불필요 — P20 음성 종속. 음성 도입 시 whisper.cpp와 함께 prefetch)"
     }
   ],
-  "prefetch_note": "per-file manifest. status=resolved 항목은 sha256/size 확정(wheel=pip 실측, gguf/모델=HF LFS pointer 공식값). PENDING_HOME_PREFETCH 항목은 이 리뷰 환경의 proxy allowlist가 GitHub 릴리스 바이너리를 차단해 집/개발 PC에서 다운로드 후 certutil -hashfile로 확정한다. 바이너리 자체는 release/prefetch/에 두고 git 미커밋(.gitignore)."
+  "prefetch_note": "per-file manifest. status=resolved 항목은 sha256/size 확정(wheel=pip 실측, gguf/모델=HF LFS pointer 공식값). **파일럿 번들에 실제 필요한 것은 office/COM wheel 8종(전부 resolved)뿐** — 회사는 오프라인 내부망이지만 company_gateway 프로필로 사내 게이트웨이가 LLM을 서빙하므로 로컬 llama.cpp/GGUF는 파일럿에 불필요하다. status=deferred 3종(llama.cpp/whisper.cpp/ffmpeg)은 로컬서빙(local_openai) 또는 음성(P20)을 채택할 때만 집/개발 PC에서 prefetch한다(그 경로만 GitHub 릴리스 접근 필요). llm-gguf/asr-model(resolved)도 로컬서빙·음성 전용으로 파일럿 번들에는 넣지 않는다. 바이너리/모델은 release/prefetch/에 두고 git 미커밋(.gitignore)."
 }

@@ -44,6 +44,7 @@ def main() -> None:
 
     resolved = [f for f in files if str(f.get("status", "")).startswith("resolved")]
     pending = [f for f in files if "PENDING" in str(f.get("status", ""))]
+    deferred = [f for f in files if str(f.get("status", "")).startswith("deferred")]
     check("has resolved entries", bool(resolved), "0 resolved")
 
     for entry in resolved:
@@ -57,6 +58,21 @@ def main() -> None:
     for entry in pending:
         check(f"pending entry carries a reason: {entry['filename']}",
               "PENDING" in str(entry["sha256"]) and len(str(entry["status"])) > 20, str(entry))
+
+    # deferred = out of pilot scope (local-serving/voice only). Must NOT carry a
+    # fake hash, and must explain why it is deferred — so the manifest stays honest.
+    for entry in deferred:
+        check(f"deferred entry has no fake hash: {entry['filename']}",
+              not HEX64.match(str(entry["sha256"])), str(entry["sha256"]))
+        check(f"deferred entry explains why: {entry['filename']}",
+              len(str(entry["status"])) > 20, str(entry["status"]))
+
+    # Pilot scope: the office/COM wheels the pilot actually needs are all resolved,
+    # so the pilot bundle needs zero home-PC binary downloads.
+    wheels = [f for f in files if "wheels" in str(f.get("category", ""))]
+    check("all office/COM wheels resolved (pilot needs no home download)",
+          bool(wheels) and all(str(w.get("status", "")).startswith("resolved") for w in wheels),
+          str([w["filename"] for w in wheels if not str(w.get("status", "")).startswith("resolved")]))
 
     # no secrets/hosts in the manifest
     blob = json.dumps(manifest, ensure_ascii=False).lower()

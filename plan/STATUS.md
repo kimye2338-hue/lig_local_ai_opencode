@@ -35,8 +35,8 @@
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | APPROVED | plan/reports/P16-03-r2.md | plan/reviews/P16-03-r2.md |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | APPROVED | plan/reports/P16-04-r1.md | plan/reviews/P16-04-r1.md |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
-| P17-02 | 의존성 prefetch + SHA256 확정 | fable | P16-04 | INTERNET | READY(부분완료: 11/14 resolved) | plan/reports/P17-02-r1.md | |
-| P17-03 | 반입 번들 build + setup.bat + 체크리스트 | fable | P17-02 | ANY | READY(부분완료: source-only) | plan/reports/P17-03-r1.md | |
+| P17-02 | 의존성 prefetch + SHA256 확정 | fable | P16-04 | INTERNET | APPROVED (파일럿 wheel 8종 resolved; llama/whisper/ffmpeg는 deferred=파일럿 불필요) | plan/reports/P17-02-r1.md | (Fable 직접) |
+| P17-03 | 반입 번들 build + setup.bat + 체크리스트 | fable | P17-02 | ANY | APPROVED (파일럿 번들 = source + wheel 8종, 완전 빌드 가능) | plan/reports/P17-03-r1.md | (Fable 직접) |
 | P17-04 | 오프라인 설치 리허설 (네트워크 차단) | human+codex | P17-03 | HUMAN | READY(사전점검 자동화 완료 — 사람 air-gap 실행 대기) | docs/OFFLINE_REHEARSAL.md | |
 | P18-01 | secret 스캔 pre-commit 스크립트 | codex | — | ANY | APPROVED | plan/reports/P18-01-r1.md | plan/reviews/P18-01-r1.md |
 | P18-02 | RUNBOOK + audit 순환 + doctor 운영 섹션 | fable | P13-01 | ANY | APPROVED | plan/reports/P18-02-r2.md | plan/reviews/P18-02-r2.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 **P17-02/P17-03 파일럿 스코프로 종결 (Fable 직접, 사용자 확인)**: 사용자 지적("회사는 오프라인 내부망 — GitHub 어차피 불가") + 코드 근거(`lig_providers.py`: 기본 프로필 `company_gateway`가 **사내 게이트웨이로 LLM 서빙**, `local_openai`는 dev/집 대체 경로)로 판정. **차단됐던 GitHub 바이너리 3종(llama.cpp/whisper.cpp/ffmpeg)은 파일럿에 불필요** → `dependencies.json` status `PENDING_HOME_PREFETCH`→**`deferred`**(로컬서빙/음성 전용, 해당 프로필 채택 시에만 집 PC prefetch). llm-gguf/asr-model도 동일 후순위. **파일럿 번들 실필요 = office/COM wheel 8종(전부 resolved) → 집 PC 다운로드 0**. test에 deferred 검증(가짜 해시 금지·사유 명시)+wheel-all-resolved 파일럿 스코프 체크 추가 → **`ALL 66 CHECKS PASSED`**. **결과: P17-02/P17-03 사용자 결정 대기 해소, 파일럿 반입 경로 완전 자립.** 음성(P20)·로컬서빙 도입 시 3종은 그때 집 PC에서 채우면 build_bundle이 자동 포함(코드 변경 불필요).
 
 - 2026-07-04 **P17-04 사전점검 자동화 (Fable 직접)**: 리허설의 클라우드 가능 절반 구현 → `release/rehearsal_check.py`(stdlib) + `docs/OFFLINE_REHEARSAL.md`. **rehearsal_check**: ① build_bundle 유효 zip 실측 ② setup.bat 오프라인 안전 하드검사(`--no-index`만·network fetch/ExecutionPolicy Bypass 없음) ③ runtime-network **advisory 감사** — agent_ops `*.py`의 아웃바운드 지점 16곳을 file:line으로 나열, localhost/env=OK·나머지=REVIEW로 분류(air-gap 캡처 감시 목록). **실측 `ALL 82 PRE-FLIGHT CHECKS PASSED`**. **OFFLINE_REHEARSAL.md**: 0(자동 사전점검)→1(번들)→2(네트워크 차단)→3(설치+트래픽 캡처)→4(복구+기록) 절차, **P00-02 telemetry 갭을 3절 pktmon/netstat 캡처로 종결**하도록 연결. 남은 것은 **사람 air-gap 실행**(어댑터 차단은 기계 불가) → BLOCKED 해제 READY. 코드 변경은 release/·docs/만(하드게이트 무관).
 
