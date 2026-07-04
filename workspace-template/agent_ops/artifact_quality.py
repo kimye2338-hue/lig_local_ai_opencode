@@ -136,6 +136,18 @@ _KIND_RULES: Dict[str, List[Rule]] = {
         ("matlab_base_functions", "base MATLAB 함수만 사용해야 함",
          lambda t: all(name not in t for name in ("smoothdata(", "findpeaks(", "butter(", "filtfilt("))),
     ],
+    "autocad_script": [
+        ("autocad_accoreconsole_run", "accoreconsole /i 사본 dwg + /s scr 실행 방법이 명시되어야 함",
+         lambda t: "accoreconsole.exe /i <사본.dwg> /s 작업.scr" in t),
+        ("autocad_copy_policy", "원본 DWG가 아니라 사본 도면으로 실행한다는 정책이 있어야 함",
+         lambda t: "사본" in t and "/i" in t),
+        ("autocad_no_qsave_command", "원본 저장 위험이 있는 QSAVE 명령은 script에 없어야 함",
+         lambda t: not any(line.strip().upper() == "QSAVE" for line in t.splitlines())),
+        ("autocad_saveas_copy", "결과는 SAVEAS로 별도 파일에 저장해야 함",
+         lambda t: "SAVEAS" in t and "결과_사본.dwg" in t),
+        ("autocad_pending", "AutoCAD 실제 실행 검증 pending이 명시되어야 함",
+         lambda t: "app validation pending" in t and "AutoCAD 2019" in t),
+    ],
 }
 
 # Host-app-specific VBA rules, activated by the generated filename
@@ -171,6 +183,7 @@ _KIND_SUFFIXES: Dict[str, set] = {
     "browser_script": {".py"},
     "mail_report": {".md"},
     "matlab_script": {".m"},
+    "autocad_script": {".scr"},
     "meeting_minutes": {".md"},
 }
 

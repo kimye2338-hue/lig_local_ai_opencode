@@ -122,9 +122,10 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
     "office_cad_automation": {
         "description": "Office/CAD 앱 자동화 (SolidWorks/Excel/Word/PowerPoint/HWP) — 매크로/절차 산출물",
         "status": "scaffold_available",
-        "artifact_kinds": ["vba_macro", "document"],
+        "artifact_kinds": ["vba_macro", "autocad_script", "document"],
         "outputs": ["SolidWorks VBA", "Excel VBA", "자동화 절차 문서"],
         "pending": ["app validation pending: SolidWorks/Office/HWP 실제 실행",
+                    "app validation pending: AutoCAD 2019 accoreconsole 실제 실행",
                     "dependency pending: COM 제어 채택 시 pywin32"],
         "keywords": ["solidworks", "솔리드웍스", "cad", "좌표", "어셈블리", "파트",
                      "도면", "word", "워드", "한글파일", "hwp", "com 자동화"],
@@ -161,6 +162,10 @@ ARTIFACT_KIND_INFO: Dict[str, Dict[str, str]] = {
     "matlab_script": {
         "files": "작업.m",
         "purpose": "MATLAB 2024a -batch로 실행할 시험 데이터 후처리 scaffold",
+    },
+    "autocad_script": {
+        "files": "작업.scr",
+        "purpose": "AutoCAD 2019 accoreconsole에서 /i 사본 dwg와 함께 실행할 script scaffold",
     },
     "meeting_minutes": {
         "files": "회의록.md",

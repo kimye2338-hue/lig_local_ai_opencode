@@ -785,6 +785,40 @@ end
     return [path]
 
 
+def gen_autocad_script(task: str, out_dir: Path,
+                       ctx: Optional[Dict[str, Any]] = None) -> List[Path]:
+    ctx = _ensure_context(task, ctx)
+    body = f"""; AutoCAD accoreconsole script scaffold (OpenCodeLIG)
+; 요청: {task}
+; 입력: {_input_names(ctx)}
+; 실행: accoreconsole.exe /i <사본.dwg> /s 작업.scr
+; 상태: app validation pending — AutoCAD 2019 accoreconsole에서 실제 실행 검증 전
+; 사본 정책: 어댑터가 원본 DWG를 사본_*.dwg로 복사한 뒤 /i 사본 경로로만 실행합니다.
+; 원본 저장 명령 금지: 빠른 저장 명령을 넣지 말고 SAVEAS로 별도 결과 파일만 만드세요.
+; 참고: 빈 세션이 아니라 반드시 /i <사본.dwg>로 시작해야 합니다.
+
+._-LAYER
+M
+OPENCODELIG_WORK
+C
+7
+OPENCODELIG_WORK
+
+; TODO(사용자 확인): 여기에 필요한 AutoCAD 명령을 순서대로 추가하세요.
+; 예: 도면 검사, 레이어 정리, 객체 선택/변경 등. 원본 도면을 직접 저장하지 마세요.
+
+._SAVEAS
+2018
+결과_사본.dwg
+
+._QUIT
+Y
+"""
+    path = out_dir / "작업.scr"
+    atomic_write_text(path, body)
+    return [path]
+
+
 GENERATORS = {
     "vba_macro": gen_vba_macro,
     "document": gen_document,
@@ -792,6 +826,7 @@ GENERATORS = {
     "browser_script": gen_browser_script,
     "mail_report": gen_mail_report,
     "matlab_script": gen_matlab_script,
+    "autocad_script": gen_autocad_script,
     "meeting_minutes": gen_meeting_minutes,
 }
 

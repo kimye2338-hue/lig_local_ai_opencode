@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from . import browser_cdp, excel_com, office_convert, outlook_com
+from . import autocad_batch, browser_cdp, excel_com, matlab_batch, office_convert, outlook_com
 
 
 def _office_execute(action: str, options: Dict[str, Any]) -> Dict[str, Any]:
@@ -64,6 +64,22 @@ ADAPTERS: Dict[str, Dict[str, Any]] = {
         "validated": "local Chrome CDP, 2026-07-03",
         "pending": "사내 시스템 로그인은 company validation pending",
         "execute": browser_cdp.execute,
+    },
+    "matlab": {
+        "description": "MATLAB 2024a -batch 스크립트 실행",
+        "consumes": ["matlab_script"],
+        "available": False,
+        "requires": ["MATLAB 2024a 설치", "MATLAB_EXE 또는 PATH의 matlab"],
+        "pending": "app validation pending: 회사 MATLAB 2024a에서 -batch 실행 검증",
+        "execute": matlab_batch.execute,
+    },
+    "autocad": {
+        "description": "AutoCAD 2019 accoreconsole 배치 실행",
+        "consumes": ["autocad_script"],
+        "available": False,
+        "requires": ["AutoCAD 2019 accoreconsole.exe", "ACCORECONSOLE_EXE 또는 표준 설치 경로"],
+        "pending": "app validation pending: 회사 AutoCAD 2019 accoreconsole에서 /i 사본 dwg + /s scr 검증",
+        "execute": autocad_batch.execute,
     },
     "hwp": {
         "description": "한글(HWP) 문서 자동화",
