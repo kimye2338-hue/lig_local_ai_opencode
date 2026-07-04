@@ -32,7 +32,7 @@
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | APPROVED | plan/reports/P15-04-r1.md | plan/reviews/P15-04-r1.md |
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | APPROVED | plan/reports/P16-02-r3.md | plan/reviews/P16-02-r3.md |
-| P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | IN-PROGRESS | plan/reports/P16-03-r1.md | plan/reviews/P16-03-r1.md |
+| P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | AWAITING-REVIEW | plan/reports/P16-03-r2.md | plan/reviews/P16-03-r1.md |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | READY | | |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
 | P17-02 | 의존성 prefetch + SHA256 확정 | codex | P16-04 | INTERNET | BLOCKED | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P16-03 r2 AWAITING-REVIEW (Codex). 보고서: plan/reports/P16-03-r2.md. simulation_automation keywords에서 bare `해석`/`journal` 제거, everyday negative corpus 10문장 추가. capability bench 213 checks/batch adapters 37 checks/전체 22개 테스트 파일 통과.
 
 - 2026-07-04 P16-03 r2 IN-PROGRESS (Codex). reviews/P16-03-r1.md 필수 수정(simulation keyword bare `해석`/`journal` 제거 + everyday negative corpus) 반영 시작.
 
