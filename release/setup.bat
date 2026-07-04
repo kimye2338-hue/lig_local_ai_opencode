@@ -16,8 +16,9 @@ rem --- 1. Python 3.11 present? ---
 py -3.11 --version >nul 2>&1
 if errorlevel 1 (
     echo [STOP] Python 3.11 not found via 'py -3.11'.
-    echo        Install the bundled python-embed ^(release\vendor\python-embed\^) or
-    echo        company Python 3.11, then re-run setup.bat.
+    echo        Unzip bundled release\prefetch\python-3.11.9-embed-amd64.zip to
+    echo        %%USERPROFILE%%\OpenCodeLIG\python311\ or install company Python 3.11,
+    echo        then re-run setup.bat.
     exit /b 9
 )
 echo [OK] Python 3.11 present.

@@ -30,13 +30,15 @@ npm 패키지를 지정해 임의의 OpenAI 호환 게이트웨이를 등록한�
       "npm": "@ai-sdk/openai-compatible",
       "name": "LIG Local Gateway",
       "options": {
-        "baseURL": "http://<gateway-host>/gateway/v1",   // 실제 호스트는 lig-api.env, 커밋 금지
+        // 실제 라우트 형태(lig_providers.py 기본값과 동일 — 호스트는 lig-api.env, 커밋 금지):
+        // http://<gateway-host>/gateway/EXAONE-4.5-33B-vibe_coding_think_off/v1
+        "baseURL": "http://<gateway-host>/gateway/<model-route>/v1",
         "apiKey": "{env:LIG_API_KEY}"                    // 환경변수 치환 — 값은 커밋 금지
       },
       "models": {
-        "qwen-local": {
-          "name": "Qwen (local llama.cpp)",
-          "limit": { "context": 200000, "output": 65536 }
+        "EXAONE-4.5-33B": {
+          "name": "EXAONE 4.5 33B (사내 게이트웨이)",
+          "limit": { "context": 200000, "output": 65536 }   // 실제 한도는 P00-03 실측 후 보정
         }
       }
     }

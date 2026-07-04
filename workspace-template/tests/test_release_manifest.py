@@ -91,8 +91,14 @@ def main() -> None:
         return
 
     import hashlib
+    # Pilot scope mirrors verify_prefetch: local-serving/voice categories are
+    # optional (hash-verified only when present); wheels/runtime must exist.
+    non_pilot = {"llm-gguf", "asr-model", "binary-github"}
     for entry in resolved:
         target = PREFETCH / str(entry["filename"])
+        if not target.exists() and str(entry.get("category", "")) in non_pilot:
+            print(f"OPT   {entry['filename']} — pilot-optional, not prefetched (ok)")
+            continue
         check(f"prefetch file present: {entry['filename']}", target.exists(), str(target))
         h = hashlib.sha256(target.read_bytes()).hexdigest()
         check(f"prefetch sha256 matches: {entry['filename']}", h == entry["sha256"], h)

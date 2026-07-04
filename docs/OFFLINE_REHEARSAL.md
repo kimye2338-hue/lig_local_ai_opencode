@@ -30,13 +30,21 @@ py -3.11 release\rehearsal_check.py
 
 ## 1. 번들 준비 (집 PC, 인터넷 있음)
 
-1. P17-02 잔여 3종(llama.cpp / whisper.cpp / ffmpeg)을 공식 릴리스에서 받아
-   `release\prefetch\`에 두고 `certutil -hashfile`로 해시를 `dependencies.json`에
-   채운다 (status → `resolved`). `py -3.11 release\verify_prefetch.py` 전부 OK 확인.
-   - 3종을 아직 못 받았으면 **source-only 번들로도 리허설 가능** — wheel/모델 설치 단계만
-     건너뛴다(그 실패는 예상된 것으로 기록).
+> **파일럿 번들 = 소스 + office/COM wheel 8종 + python-embed.** llama.cpp/whisper.cpp/
+> ffmpeg는 `deferred`(로컬서빙·음성 전용, 파일럿 불필요) — 받지 않는다.
+
+1. **wheel 8종 + python-embed를 `release\prefetch\`에 받는다** (해시는 매니페스트에 이미 확정):
+   ```bat
+   py -3.11 -m pip download --only-binary=:all: --platform win_amd64 ^
+     --python-version 3.11 --implementation cp --abi cp311 ^
+     -d release\prefetch pywin32 openpyxl python-pptx
+   curl -L -o release\prefetch\python-3.11.9-embed-amd64.zip ^
+     https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip
+   ```
+   그다음 `py -3.11 release\verify_prefetch.py` → **전부 OK**(매니페스트의 실측 해시와
+   대조). 불일치 = 전송/버전 오류 — 받은 파일을 지우고 다시.
 2. 번들 빌드: `py -3.11 release\build_bundle.py --date <YYYYMMDD>`
-   → `release\dist\OpenCodeLIG_BUNDLE_<날짜>.zip`.
+   → `release\dist\OpenCodeLIG_BUNDLE_<날짜>.zip` (prefetch가 자동 포함됨).
 3. zip을 **다른 폴더**(가상의 "회사 PC" 루트, 예: `D:\FakeCompanyPC\`)에 복사. 원본 repo와
    섞이지 않게 완전히 분리된 경로를 쓴다.
 

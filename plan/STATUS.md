@@ -7,7 +7,7 @@
 | ID | 제목 | 담당 | 선행 | 환경 | 상태 | 보고서 | 리뷰 |
 |----|------|------|------|------|------|--------|------|
 | P00-01 | 환경 probe 실행/업로드 (probe/README.md) | **human** | — | 집+회사 | APPROVED | probe/results/ r1~r3 | 잔여는 P00-03 이관 |
-| P00-02 | OpenCode 공식 문서 연동 조사 | **fable** | — | INTERNET | APPROVED | docs/OPENCODE_INTEGRATION.md | (Fable 직접) |
+| P00-02 | OpenCode 공식 문서 연동 조사 | **fable** | — | INTERNET | APPROVED | docs/OPENCODE_INTEGRATION.md | plan/reviews/FINAL-2026-07-04.md |
 | P00-03 | 회사 real-mode 실측 팩 (NEXT_ONSITE.md) | **human** | — | COMPANY | READY | | |
 | P09-01 | LLM provider 프로필/env 완전 오버라이드 | codex | — | ANY | APPROVED | plan/reports/P09-01-r2.md | plan/reviews/P09-01-r2.md |
 | P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | APPROVED | plan/reports/P09-02-r1.md | plan/reviews/P09-02-r1.md |
@@ -35,8 +35,8 @@
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | APPROVED | plan/reports/P16-03-r2.md | plan/reviews/P16-03-r2.md |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | APPROVED | plan/reports/P16-04-r1.md | plan/reviews/P16-04-r1.md |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
-| P17-02 | 의존성 prefetch + SHA256 확정 | fable | P16-04 | INTERNET | APPROVED (파일럿 wheel 8종 resolved; llama/whisper/ffmpeg는 deferred=파일럿 불필요) | plan/reports/P17-02-r1.md | (Fable 직접) |
-| P17-03 | 반입 번들 build + setup.bat + 체크리스트 | fable | P17-02 | ANY | APPROVED (파일럿 번들 = source + wheel 8종, 완전 빌드 가능) | plan/reports/P17-03-r1.md | (Fable 직접) |
+| P17-02 | 의존성 prefetch + SHA256 확정 | fable | P16-04 | INTERNET | APPROVED (파일럿 세트 wheel 8+embed 전부 resolved; llama/whisper/ffmpeg deferred) | plan/reports/P17-02-r1.md | plan/reviews/FINAL-2026-07-04.md |
+| P17-03 | 반입 번들 build + setup.bat + 체크리스트 | fable | P17-02 | ANY | APPROVED (완전 파일럿 번들 29.4MB/307파일 실측) | plan/reports/P17-03-r1.md | plan/reviews/FINAL-2026-07-04.md |
 | P17-04 | 오프라인 설치 리허설 (네트워크 차단) | human+codex | P17-03 | HUMAN | READY(사전점검 자동화 완료 — 사람 air-gap 실행 대기) | docs/OFFLINE_REHEARSAL.md | |
 | P18-01 | secret 스캔 pre-commit 스크립트 | codex | — | ANY | APPROVED | plan/reports/P18-01-r1.md | plan/reviews/P18-01-r1.md |
 | P18-02 | RUNBOOK + audit 순환 + doctor 운영 섹션 | fable | P13-01 | ANY | APPROVED | plan/reports/P18-02-r2.md | plan/reviews/P18-02-r2.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 **★ Fable 최종검토 완결 (plan/reviews/FINAL-2026-07-04.md)**: 클라우드 가능 작업 전량 종료. 최종 패스에서 **결함 7건 발견·수정·실측**(직접 구현분 포함): 리허설 §1 stale / provider 예시 라우트 불일치 / verify_prefetch deferred 침묵·파일럿 스코프 미반영(OPT) / **python-embed 실측 해시 확정**(python.org 접근 가능 — `009d6bf7…`, 11,249,023B) / opencode-binary=CI 아티팩트 자가검증 반영 / manifest test 존재브랜치 동일결함(첫 실행에서 적발). **첫 실측 2건**: 완전 파일럿 번들 29.4MB/307파일(secret 0) + prefetch 채운 존재/해시 브랜치(ALL 88). verify E2E: **파일럿 세트 9종(wheel 8+embed) 전부 해시 일치 exit 0**. 수용 리스크 정직 기록(gateway 장애 시 로컬 백업 서빙 없음·telemetry는 P17-04 캡처). 최종 건강도: 회귀 20 green(RED 3=Windows 전용), rehearsal 83, secret scan 통과. **잔여 = 전부 사람/회사**(P17-04 실행·P00-03·P19-02·P20-01).
 
 - 2026-07-04 **P17-02/P17-03 파일럿 스코프로 종결 (Fable 직접, 사용자 확인)**: 사용자 지적("회사는 오프라인 내부망 — GitHub 어차피 불가") + 코드 근거(`lig_providers.py`: 기본 프로필 `company_gateway`가 **사내 게이트웨이로 LLM 서빙**, `local_openai`는 dev/집 대체 경로)로 판정. **차단됐던 GitHub 바이너리 3종(llama.cpp/whisper.cpp/ffmpeg)은 파일럿에 불필요** → `dependencies.json` status `PENDING_HOME_PREFETCH`→**`deferred`**(로컬서빙/음성 전용, 해당 프로필 채택 시에만 집 PC prefetch). llm-gguf/asr-model도 동일 후순위. **파일럿 번들 실필요 = office/COM wheel 8종(전부 resolved) → 집 PC 다운로드 0**. test에 deferred 검증(가짜 해시 금지·사유 명시)+wheel-all-resolved 파일럿 스코프 체크 추가 → **`ALL 66 CHECKS PASSED`**. **결과: P17-02/P17-03 사용자 결정 대기 해소, 파일럿 반입 경로 완전 자립.** 음성(P20)·로컬서빙 도입 시 3종은 그때 집 PC에서 채우면 build_bundle이 자동 포함(코드 변경 불필요).
 

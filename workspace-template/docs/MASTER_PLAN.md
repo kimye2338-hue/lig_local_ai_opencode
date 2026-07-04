@@ -369,6 +369,10 @@ audit 무결 / 기존 테스트 무손상.
    pywin32(Excel/HWP/SW/Outlook COM), openpyxl(xlsx ingest), python-pptx,
    **Qwen2.5 7B/14B GGUF + llama.cpp server exe** (사내 PC 16GB VRAM 백업 서빙용 — gateway
    장애 대비), whisper.cpp exe + ggml-medium(ko) (P20 대비 선반입), ffmpeg.
+   > **2026-07-04 스코프 갱신 (사용자 결정)**: llama.cpp/GGUF(백업 서빙)·whisper/ffmpeg(음성)는
+   > `deferred` — 파일럿은 company_gateway 프로필로 사내 게이트웨이가 서빙하므로 불필요.
+   > **gateway 장애 시 로컬 백업 서빙 없음은 수용된 리스크**(장애 = 파일럿 중단, 기록 후 재개).
+   > 파일럿 필수분(wheel 8종 + python-embed)은 전부 resolved.
 2. **xlsx ingest 확장** (openpyxl 확보 시점이 여기): `input_ingest.py`에 .xlsx 지원 —
    시트/행열/헤더/이상 행 추출을 CSV와 동일 규칙으로. openpyxl 없으면 기존대로
    unsupported (동작 저하 없음 — optional import 패턴).

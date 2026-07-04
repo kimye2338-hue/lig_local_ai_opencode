@@ -15,6 +15,10 @@ OpenCode 기동 시간 / 앱·정책 전수). 사용법은 `probe/COMPANY_CHECK.
 
 - 최신 CI 아티팩트 `LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE` (**PR #8 브랜치 런**에서
   다운로드 — main 아님!) 또는 변경 파일만 USB 반입.
+- **파일럿 전체 반입(agent_ops+wheel+python-embed)이면**: `docs/BRING_IN_CHECKLIST.md`
+  A단계대로 `release\prefetch\` 채우고(wheel 8종 pip download + python-embed —
+  전부 매니페스트 실측 해시로 verify) `build_bundle.py` → 29.4MB 번들 1개.
+  반입 전 집 리허설은 `docs/OFFLINE_REHEARSAL.md`(P17-04).
 
 ## 회사에서 실행 (순서대로, 총 ~15분)
 

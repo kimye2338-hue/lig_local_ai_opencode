@@ -6,39 +6,39 @@
   "dependencies": [
     {
       "name": "python-embeddable",
-      "version": "3.11.9 (3.11.x acceptable; company target prefers 3.11.3)",
+      "version": "3.11.9",
       "source": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip",
       "why": "Core runtime for agent_ops, diagnostics, install/repair scripts. Company PC python default must not be assumed.",
       "status": "required",
-      "bundle_path": "release/vendor/python-embed/",
-      "sha256": "PENDING_PREFETCH",
+      "bundle_path": "release/prefetch/python-3.11.9-embed-amd64.zip (prefetch_files 항목으로 이관 — 실측 해시 확정)",
+      "sha256": "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b",
       "offline_install": "unzip to %USERPROFILE%\\OpenCodeLIG\\python311\\; no registry changes needed",
       "offline_verify": "python311\\python.exe --version",
       "fallback": "company-installed Python 3.11 via py -3.11 if present"
     },
     {
       "name": "opencode-binary",
-      "version": "PENDING: pin exact version after local runtime validation",
-      "source": "official OpenCode release channel (verify licensing/redistribution before bundling)",
-      "why": "Primary agent runtime on the company PC.",
+      "version": "pinned opencode commit afff74eb + permission-mode-toggle patch",
+      "source": "GitHub Actions artifact LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE (.github/workflows/build-offline-package.yml — PR #8 브랜치 런에서 다운로드)",
+      "why": "Primary agent runtime on the company PC. CI가 소스 클론→패치→빌드→SHA256SUMS 내장까지 수행하고 installer BAT가 payload 해시를 자가 검증한다.",
       "status": "required",
-      "bundle_path": "release/vendor/opencode/",
-      "sha256": "PENDING_PREFETCH",
-      "offline_install": "copy binary; record version in diagnostics (opencode --version)",
-      "offline_verify": "opencode --version matches pinned version",
+      "bundle_path": "별도 반입물 (CI 아티팩트 zip — release/prefetch/ 경유 아님)",
+      "sha256": "SELF_VERIFIED_IN_ARTIFACT (아티팩트 내장 SHA256SUMS를 installer가 검증)",
+      "offline_install": "artifact installer BAT 실행; record version in diagnostics (opencode --version)",
+      "offline_verify": "opencode --version matches pinned commit build",
       "fallback": "none; deployment blocked without it"
     },
     {
       "name": "python-wheels",
-      "version": "n/a",
-      "source": "n/a",
-      "why": "Core agent_ops runtime is stdlib-only; no wheels needed today.",
-      "status": "not_needed",
-      "bundle_path": null,
+      "version": "see prefetch_files",
+      "source": "see prefetch_files",
+      "why": "Core agent_ops runtime is stdlib-only (불변 원칙). office/COM 어댑터용 wheel 8종은 하단 prefetch_files에서 per-file 해시로 관리 — 이 항목은 core 기준 서술.",
+      "status": "core=not_needed; adapters=see prefetch_files (8 resolved)",
+      "bundle_path": "release/prefetch/",
       "sha256": null,
-      "offline_install": null,
-      "offline_verify": "py -3.11 tests run with no pip packages installed",
-      "fallback": null
+      "offline_install": "py -3.11 -m pip install --no-index --find-links release/prefetch pywin32 openpyxl python-pptx",
+      "offline_verify": "py -3.11 tests run with no pip packages installed (core); import win32com/openpyxl/pptx (adapters)",
+      "fallback": "core는 wheel 없이 동작; 어댑터는 available=False로 안전 저하"
     },
     {
       "name": "chromedriver",
@@ -131,6 +131,17 @@
     "secret_policy": "bundle must contain no lig-api.env, no API keys, no internal hostnames; verify with a pre-zip scan"
   },
   "prefetch_files": [
+    {
+      "name": "python-embeddable",
+      "filename": "python-3.11.9-embed-amd64.zip",
+      "url": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip",
+      "sha256": "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b",
+      "size": 11249023,
+      "license": "PSF-2.0",
+      "purpose": "회사 PC 파이썬 런타임 (py -3.11 부재 시 — setup.bat [STOP] 경로)",
+      "category": "runtime-python-embed",
+      "status": "resolved"
+    },
     {
       "name": "et_xmlfile",
       "filename": "et_xmlfile-2.0.0-py3-none-any.whl",
