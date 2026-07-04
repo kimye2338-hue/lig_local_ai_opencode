@@ -27,5 +27,13 @@
   판정은 P00-03 실측 대기. 나머지 항목(provider 등록/확장점/TUI↔agent_ops)은 미착수.
 
 ## DoD
-- [ ] 4개 항목 각각 출처 있는 결론 또는 "공식 문서에 없음 — 실측 필요" 표기
-- [ ] agent_ops와의 통합 방식 권고 1개 확정
+- [x] 4개 항목 각각 출처 있는 결론 또는 "공식 문서에 없음 — 실측 필요" 표기
+- [x] agent_ops와의 통합 방식 권고 1개 확정
+
+## 완료 (2026-07-04, Fable 직접 — Codex 한도초과)
+산출물 `docs/OPENCODE_INTEGRATION.md`. 4항목 전부 출처(문서 URL) + `[확인됨]`/`[추정]` 표기.
+- 항목1 provider: `@ai-sdk/openai-compatible`, `{env:}` 치환 `[확인됨]`
+- 항목2 확장점: 외부 런타임 오케스트레이션 확장점 없음 → **병행 CLI 확정** `[확인됨]`
+- 항목3 오프라인: autoupdate/share/mdns `[확인됨]`, **telemetry는 문서에 없음 → P17-04 실측 이관**
+- 항목4 permission: TUI 게이트 ↔ agent_ops 하드 게이트 **직교, 둘 다 유지** `[확인됨]`
+통합 권고: agent_ops는 플러그인 이식 없이 별도 CLI 병행(근거 3).

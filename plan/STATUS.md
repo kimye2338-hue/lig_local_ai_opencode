@@ -7,7 +7,7 @@
 | ID | 제목 | 담당 | 선행 | 환경 | 상태 | 보고서 | 리뷰 |
 |----|------|------|------|------|------|--------|------|
 | P00-01 | 환경 probe 실행/업로드 (probe/README.md) | **human** | — | 집+회사 | APPROVED | probe/results/ r1~r3 | 잔여는 P00-03 이관 |
-| P00-02 | OpenCode 공식 문서 연동 조사 | **fable** | — | INTERNET | READY(부분 진행) | | |
+| P00-02 | OpenCode 공식 문서 연동 조사 | **fable** | — | INTERNET | APPROVED | docs/OPENCODE_INTEGRATION.md | (Fable 직접) |
 | P00-03 | 회사 real-mode 실측 팩 (NEXT_ONSITE.md) | **human** | — | COMPANY | READY | | |
 | P09-01 | LLM provider 프로필/env 완전 오버라이드 | codex | — | ANY | APPROVED | plan/reports/P09-01-r2.md | plan/reviews/P09-01-r2.md |
 | P09-02 | 작업 유형→라우트 자동 선택 + 진단 | codex | P09-01 | ANY | APPROVED | plan/reports/P09-02-r1.md | plan/reviews/P09-02-r1.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 **P00-02 APPROVED (Fable 직접)**: OpenCode 공식 문서 4항목 조사 완료 → `docs/OPENCODE_INTEGRATION.md`. **① provider**: `@ai-sdk/openai-compatible` + `{env:LIG_API_KEY}` 치환(비밀 미하드코딩) `[확인됨]`. **② 확장점**: OpenCode 플러그인 hook은 자체 프로세스 내부용, **외부 에이전트 런타임 오케스트레이션 확장점 없음** → **agent_ops 병행 CLI 노선 확정** `[확인됨]`. **③ 오프라인**: autoupdate/share/mdns 차단 `[확인됨]`, **telemetry 필드는 문서에 없음 → P17-04 네트워크 캡처로 실측 이관**. **④ permission**: TUI tool 게이트(allow/ask/deny, last-match-wins)와 agent_ops 하드 게이트는 **직교 — 둘 다 유지** `[확인됨]`. DoD 충족(항목별 출처+확인/추정 표기, 통합 권고 1개). 코드 변경 없음.
 
 - 2026-07-04 **P17-03 부분완료 (Fable 직접)**: build_bundle.py(stdlib zip+MANIFEST_SHA256, secret 반입 거부) + setup.bat(오프라인 `pip --no-index`+단계별 실패처리) + BRING_IN_CHECKLIST.md 구현. test_release_manifest에 build 검증 추가 → `ALL 62 CHECKS PASSED`(295 소스 zip 실측). 완전 번들은 P17-02 잔여 3종 채운 뒤 재빌드. 23개 중 20 exit 0. reports/P17-03-r1.md.
 
