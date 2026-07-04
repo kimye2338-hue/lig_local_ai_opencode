@@ -222,6 +222,19 @@ def main() -> None:
     check("biweekly does not route to weekly_report",
           "weekly_report" not in {c["id"] for c in wk_neg["capabilities"]}, str(wk_neg))
 
+    # --- everyday-request negative corpus: no specialized capability may leak ---
+    GENERIC_CAPS = {"file_ops", "document_generation"}
+    NEGATIVE_CORPUS = [
+        "이 파일 정리해서 요약해줘", "보고서 작성해줘",
+        "회의 메모를 note.md 파일로 만들어줘", "5 minutes 후에 알려줘",
+        "biweekly 회의 잡아줘", "이 데이터 해석해줘", "journal 정리해줘",
+        "요약.md로 저장해줘", "중요한 일 목록 만들어줘", "메모를 읽고 정리해줘",
+    ]
+    for neg_task in NEGATIVE_CORPUS:
+        neg_caps = {c["id"] for c in plan_task(neg_task)["capabilities"]}
+        check(f"everyday request stays generic: {neg_task}",
+              neg_caps <= GENERIC_CAPS, str(sorted(neg_caps)))
+
     schedule_plan = plan_task("금요일까지 진동시험 보고서 마감 일정 등록해줘")
     check("schedule request routes to schedule_management",
           [c["id"] for c in schedule_plan["capabilities"]] == ["schedule_management"],

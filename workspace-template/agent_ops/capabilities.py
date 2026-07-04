@@ -126,8 +126,8 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "outputs": ["Fluent journal (.jou)", "Mechanical/SpaceClaim script scaffold (.py)"],
         "pending": ["app validation pending: ANSYS 2024R1 Fluent -g -i 실행 검증",
                     "app validation pending: Mechanical/SpaceClaim GUI 스크립팅 콘솔 실행 검증"],
-        "keywords": ["앤시스", "ansys", "플루언트", "fluent", "해석", "시뮬레이션", "journal",
-                     "메카니컬", "spaceclaim", "icepak"],
+        "keywords": ["앤시스", "ansys", "플루언트", "fluent", "시뮬레이션",
+                     "메카니컬", "spaceclaim", "icepak", "cfd", "fea"],
     },
     "office_cad_automation": {
         "description": "Office/CAD 앱 자동화 (SolidWorks/Excel/Word/PowerPoint/HWP) — 매크로/절차 산출물",
