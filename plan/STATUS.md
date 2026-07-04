@@ -32,7 +32,7 @@
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | APPROVED | plan/reports/P15-04-r1.md | plan/reviews/P15-04-r1.md |
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | APPROVED | plan/reports/P16-02-r3.md | plan/reviews/P16-02-r3.md |
-| P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | READY | | |
+| P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | IN-PROGRESS | | |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | READY | | |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
 | P17-02 | 의존성 prefetch + SHA256 확정 | codex | P16-04 | INTERNET | BLOCKED | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P16-03 IN-PROGRESS (Codex). 시작 HEAD: 351706a. simulation_automation Fluent journal + fluent_batch 작업 시작.
 
 - 2026-07-04 Fable 리뷰 16차: **P16-02 r3 APPROVED**(리뷰 검증 octal escape `\377\376E\000…` 그대로 채택. 실측: test_batch_adapters POSIX `ALL 23 CHECKS PASSED`, hard-gate artifact-kind check가 이제 리뷰 플랫폼서 실행·통과). 재검증: **22개 중 19개 exit 0**(RED는 Windows 전용 3개뿐, batch_adapters GREEN 복귀). 선행 해제: **P19-01 READY**(P14-03·P15-02·P16-02 전부 APPROVED). 피드백: fake-exe 패턴(POSIX octal+hard-gate check 앞으로)을 P16-03/04 템플릿으로. Codex 다음: **P18-02 → P16-03 → P16-04 → P19-01**.
 
