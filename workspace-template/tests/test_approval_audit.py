@@ -120,6 +120,20 @@ def main() -> None:
     check("audit keeps recording after rotation", bool(current_rows) and current_rows[-1]["run_id"] == "rot-7",
           str(current_rows))
 
+    # --- doctor operations: runbook resolves code-relative, not data root ---
+    from agent_ops import doctor
+    old_root = os.environ.get("AGENTOPS_ROOT")
+    os.environ["AGENTOPS_ROOT"] = str(tmp / "relocated_data_root")
+    try:
+        ops = doctor.operations_summary()
+    finally:
+        if old_root is None:
+            os.environ.pop("AGENTOPS_ROOT", None)
+        else:
+            os.environ["AGENTOPS_ROOT"] = old_root
+    check("operations reports shipped runbook even with relocated data root",
+          ops.get("runbook") is True, str(ops))
+
     # --- dispatch hook records audit ---
     dispatch_audit = tmp / "dispatch_audit"
     os.environ["LIG_AUDIT_DIR"] = str(dispatch_audit)
