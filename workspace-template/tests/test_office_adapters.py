@@ -20,6 +20,7 @@ sys.path.insert(0, str(WS_TEMPLATE))
 
 from agent_ops.adapters import ADAPTERS  # noqa: E402
 from agent_ops.adapters import excel_com  # noqa: E402
+from agent_ops.adapters import office_convert  # noqa: E402
 from agent_ops.adapters import outlook_com  # noqa: E402
 from agent_ops import schedule_store  # noqa: E402
 from agent_ops.artifact_generators import classify_mail  # noqa: E402
@@ -40,7 +41,9 @@ def check(label: str, cond: bool, detail: str = "") -> None:
 def main() -> None:
     office = ADAPTERS["office"]
     check("office adapter remains unavailable", office["available"] is False)
-    check("office adapter exposes execute", office.get("execute") is excel_com.execute)
+    check("office adapter exposes execute", callable(office.get("execute")))
+    check("office home smoke is honest", "Office 2016 검증은 app validation pending" in office.get("home_smoke", ""))
+    check("office consumes document conversion", "document" in office.get("consumes", []), str(office.get("consumes")))
     outlook = ADAPTERS["outlook"]
     check("outlook adapter remains unavailable", outlook["available"] is False)
     check("outlook adapter exposes execute", outlook.get("execute") is outlook_com.execute)
@@ -49,11 +52,21 @@ def main() -> None:
           and "send_mail" not in outlook_com.ACTIONS, str(outlook_com.ACTIONS))
     check("excel actions fixed", set(excel_com.ACTIONS) == {
         "open_copy", "read_range", "write_range", "run_macro_file", "save", "close"})
+    check("office conversion actions fixed", set(office_convert.ACTIONS) == {"md_to_docx", "spec_to_pptx"})
     check("no original-open API exposed", "open" not in excel_com.ACTIONS and "open_original" not in excel_com.ACTIONS)
 
     bad = excel_com.execute("no_such_action", {})
     check("unknown action returns ok false", bad["ok"] is False and "unknown action" in bad["error"], str(bad))
     check("unknown action lists available actions", "open_copy" in bad.get("available_actions", []), str(bad))
+    bad_convert = office_convert.execute("no_such_action", {})
+    check("office conversion unknown action returns ok false",
+          bad_convert["ok"] is False and "md_to_docx" in bad_convert.get("available_actions", []),
+          str(bad_convert))
+    routed = office["execute"]("md_to_docx", {"path": str(tmp_root / "missing.md")})
+    check("office adapter routes conversion action",
+          routed["ok"] is False and ("Markdown 파일 없음" in routed.get("error", "")
+                                     or "pywin32 미설치" in routed.get("error", "")),
+          str(routed))
     bad_outlook = outlook_com.execute("no_such_action", {})
     check("outlook unknown action returns ok false",
           bad_outlook["ok"] is False and "read_calendar" in bad_outlook.get("available_actions", []),
@@ -70,12 +83,22 @@ def main() -> None:
             result = excel_com.execute(action, {"path": "missing.xlsx", "bas_path": "missing.bas"})
             check(f"{action} absence path explains pywin32", result["ok"] is False
                   and "pywin32 미설치" in result.get("error", ""), str(result))
+        for action in office_convert.ACTIONS:
+            result = office_convert.execute(action, {"path": "missing.md", "spec_path": "missing.json"})
+            check(f"{action} absence path explains pywin32", result["ok"] is False
+                  and "pywin32 미설치" in result.get("error", ""), str(result))
     else:
         missing = excel_com.execute("read_range", {"sheet": "Sheet1", "range": "A1"})
         check("read before open asks open_copy first", missing["ok"] is False and "open_copy 먼저" in missing["error"],
               str(missing))
         result = excel_com.execute("open_copy", {"path": str(tmp_root / "missing.xlsx")})
         check("open_copy missing workbook fails cleanly", result["ok"] is False and "원본 파일 없음" in result["error"], str(result))
+        missing_doc = office_convert.execute("md_to_docx", {"path": str(tmp_root / "missing.md")})
+        check("md_to_docx missing source fails cleanly",
+              missing_doc["ok"] is False and "Markdown 파일 없음" in missing_doc["error"], str(missing_doc))
+        missing_spec = office_convert.execute("spec_to_pptx", {"spec_path": str(tmp_root / "missing.json")})
+        check("spec_to_pptx missing source fails cleanly",
+              missing_spec["ok"] is False and "slide spec 파일 없음" in missing_spec["error"], str(missing_spec))
 
     bas = tmp_root / "macro.bas"
     bas.write_text("Sub Smoke()\nRange(\"A1\").Value = 42\nEnd Sub\n", encoding="utf-8")

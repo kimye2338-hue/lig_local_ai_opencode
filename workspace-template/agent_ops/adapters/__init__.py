@@ -20,7 +20,14 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from . import browser_cdp, excel_com, outlook_com
+from . import browser_cdp, excel_com, office_convert, outlook_com
+
+
+def _office_execute(action: str, options: Dict[str, Any]) -> Dict[str, Any]:
+    """Dispatch Office actions while keeping Excel copy policy unchanged."""
+    if str(action or "") in office_convert.ACTIONS:
+        return office_convert.execute(action, options)
+    return excel_com.execute(action, options)
 
 # adapter id -> spec. Keys mirror the capability registry vocabulary so
 # doctor/plan can report generation and execution status side by side.
@@ -33,12 +40,13 @@ ADAPTERS: Dict[str, Dict[str, Any]] = {
         "pending": "app validation pending: SolidWorks가 있는 PC에서 매크로 실행 검증",
     },
     "office": {
-        "description": "Excel/Word/PowerPoint 매크로 실행/COM 제어",
-        "consumes": ["vba_macro", "slide_outline"],
+        "description": "Excel/Word/PowerPoint 매크로 실행/COM 제어 및 변환",
+        "consumes": ["vba_macro", "slide_outline", "document"],
         "available": False,
         "requires": ["MS Office 설치", "pywin32 또는 python-pptx/openpyxl (dependencies.json 'office-doc-wheels')"],
         "pending": "app validation pending: Office가 있는 PC에서 매크로/변환 실행 검증",
-        "execute": excel_com.execute,
+        "home_smoke": "passed 2026-07-04 (Excel 최신) — Office 2016 검증은 app validation pending",
+        "execute": _office_execute,
     },
     "outlook": {
         "description": "Outlook 2016 일정/받은편지함 읽기 및 schedule 동기화",
@@ -75,6 +83,7 @@ def adapter_summary() -> Dict[str, Any]:
             "consumes": spec["consumes"],
             "available": spec["available"],
             "validated": spec.get("validated", ""),
+            "home_smoke": spec.get("home_smoke", ""),
             "pending": spec["pending"],
         }
         for adapter_id, spec in ADAPTERS.items()
