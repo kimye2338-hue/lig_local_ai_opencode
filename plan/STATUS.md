@@ -28,7 +28,7 @@
 | P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | APPROVED | plan/reports/P14-05-r2.md | plan/reviews/P14-05-r2.md |
 | P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | APPROVED | plan/reports/P15-01-r1.md | plan/reviews/P15-01-r1.md |
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | APPROVED | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r2.md |
-| P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | READY | | |
+| P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | IN-PROGRESS | | |
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | READY | | |
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | READY | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P15-03 IN-PROGRESS (Codex). 시작 HEAD: 0b0c7b6. Outlook COM 어댑터 read/sync/inbox/dangerous send 분류 작업 시작.
 
 - 2026-07-04 Fable 리뷰 11차: **P14-05 r2 APPROVED**(리뷰 검증 코드 `weekly`→`weekly report` + biweekly negative check 그대로 채택. 실측: biweekly·this week 차단, 양성 4건 유지 — reviews/P14-05-r2.md). 재검증: 20개 중 17개 exit 0(bench 191=193−openpyxl 2), Windows 전용 3개 diff 무접촉. P14-05는 리프 — 신규 READY 없음. Codex 다음 READY: P18-02, P15-03/04, P16-02~04. **P14 시리즈(01~05) 전부 APPROVED.**
 
