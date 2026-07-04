@@ -12,6 +12,18 @@
 운영 문서(RUNBOOK)와 최소 운영 코드(audit 회전, doctor operations)를 만든다.
 RUNBOOK의 모든 항목은 **이미 존재하는 진단 파일**과 연결한다 — 새 진단 체계 발명 금지.
 
+## 리뷰 반영 (r1→r2) — reviews/P18-02-r1.md 필수 수정 1건 (r2 단일 진실 소스)
+
+1. **doctor operations `runbook` 필드를 코드 루트 기준으로**: `doctor.py:116`이
+   `(ROOT/"docs"/"RUNBOOK.md")`를 쓰는데 `ROOT`=데이터 루트(AGENTOPS_ROOT)라 relocated
+   install에서 shipped RUNBOOK을 `false`로 오보고. 수정: `_CODE_ROOT =
+   Path(__file__).resolve().parents[1]` 후 `(_CODE_ROOT/"docs"/"RUNBOOK.md").exists()`.
+   회귀 check 추가: `AGENTOPS_ROOT`를 임시 폴더로 두고 `operations.runbook is True`.
+   (reviews/P18-02-r1.md "되는 방법" 코드 그대로. 다른 operations 필드는 데이터 루트가
+   맞으므로 변경 금지.)
+
+> 나머지(audit 회전·operations 6필드·RUNBOOK 7행 연결·secret-free)는 r1에서 실측 확인됨 — 유지.
+
 ## 작업 항목
 
 ### 1. `workspace-template/docs/RUNBOOK.md`

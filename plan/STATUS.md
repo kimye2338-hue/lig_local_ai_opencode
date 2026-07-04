@@ -33,18 +33,20 @@
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | APPROVED | plan/reports/P16-02-r3.md | plan/reviews/P16-02-r3.md |
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | APPROVED | plan/reports/P16-03-r2.md | plan/reviews/P16-03-r2.md |
-| P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | AWAITING-REVIEW | plan/reports/P16-04-r1.md | |
+| P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | APPROVED | plan/reports/P16-04-r1.md | plan/reviews/P16-04-r1.md |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
-| P17-02 | 의존성 prefetch + SHA256 확정 | codex | P16-04 | INTERNET | BLOCKED | | |
+| P17-02 | 의존성 prefetch + SHA256 확정 | codex | P16-04 | INTERNET | READY | | |
 | P17-03 | 반입 번들 build + setup.bat + 체크리스트 | codex | P17-02 | ANY | BLOCKED | | |
 | P17-04 | 오프라인 설치 리허설 (네트워크 차단) | human+codex | P17-03 | HUMAN | BLOCKED | | |
 | P18-01 | secret 스캔 pre-commit 스크립트 | codex | — | ANY | APPROVED | plan/reports/P18-01-r1.md | plan/reviews/P18-01-r1.md |
-| P18-02 | RUNBOOK + audit 순환 + doctor 운영 섹션 | codex | P13-01 | ANY | AWAITING-REVIEW | plan/reports/P18-02-r1.md | |
-| P19-01 | 회사 파일럿 체크리스트/기록 양식 준비 | codex | P14-03, P15-02, P16-02 | ANY | AWAITING-REVIEW | plan/reports/P19-01-r1.md | |
+| P18-02 | RUNBOOK + audit 순환 + doctor 운영 섹션 | codex | P13-01 | ANY | CHANGES-REQUESTED | plan/reports/P18-02-r1.md | plan/reviews/P18-02-r1.md |
+| P19-01 | 회사 파일럿 체크리스트/기록 양식 준비 | codex | P14-03, P15-02, P16-02 | ANY | APPROVED | plan/reports/P19-01-r1.md | plan/reviews/P19-01-r1.md |
 | P19-02 | 회사 파일럿 12종 실측 | human+fable | P19-01, P17-04 | COMPANY+HUMAN | BLOCKED | | |
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 Fable 리뷰 19차(3건): **P16-04 APPROVED**(hwp/solidworks available=False·부재안전·HWP 신규파일·SW 사본+무저장+manual_import·subprocess 우려 없음, 46 static 통과 — reviews/P16-04-r1.md)→**P17-02 READY**(INTERNET). **P19-01 APPROVED**(gateway-smoke.bat validate 재사용+exit2·PILOT_RECORD 12행·PILOT_DAY1 실파일 링크, BAT는 Windows 전용이라 로직 정독+워커 mock 대조 — reviews/P19-01-r1.md). **P18-02 CHANGES-REQUESTED**(소규모 1건: doctor `runbook` 필드가 데이터 ROOT 기준이라 relocated install에서 shipped RUNBOOK을 false 오보고 — P15-03과 동류 CODE_ROOT 계열. audit 회전·operations 6필드·secret-free·RUNBOOK 7행은 실측 정상. 되는 방법=`parents[1]` 코드 루트, 리뷰어 검증 — reviews/P18-02-r1.md). 재검증: 22개 중 19개 exit 0(bench 213, office 46 static, approval 20). 피드백: shipped 아티팩트=코드 루트, 사용자 데이터=데이터 루트 원칙. Codex 다음: **P18-02 r2 → P17-02(INTERNET)**.
 
 - 2026-07-04 P19-01 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P19-01-r1.md. PILOT_DAY1/PILOT_RECORD/gateway-smoke.bat 추가, 12종 업무 명령+성공 기준 사전 기입, gateway-smoke 미설정 exit 2 및 전체 22개 테스트 파일 통과.
 - 2026-07-04 P19-01 IN-PROGRESS (Codex). 시작 HEAD: 72137a4. 회사 파일럿 day1 문서/기록 양식/gateway smoke BAT 작업 시작.
