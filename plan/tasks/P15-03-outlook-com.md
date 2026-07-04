@@ -11,6 +11,20 @@
 비서 기능의 회사 연결점: Outlook 2016에서 일정을 읽어 schedule_store와 동기화하고,
 받은편지함을 mail_report 파이프라인 입력으로 잇는다. **발송은 dangerous.**
 
+## 리뷰 반영 (r1→r2) — reviews/P15-03-r1.md 필수 수정 1건 (r2 단일 진실 소스)
+
+1. **자식 subprocess가 데이터 루트가 아닌 코드 루트에서 import되게** (`outlook_com.py:_run_child`):
+   `core.ROOT`은 `AGENTOPS_ROOT`(데이터 루트)라 코드 패키지가 없을 수 있음 → `cwd=str(ROOT)`
+   로 자식을 띄우면 `-m agent_ops...` import 실패 → "no JSON"으로 read_calendar/inbox/sync가
+   전부 깨짐. 수정: 모듈 상단에 `CODE_ROOT = Path(__file__).resolve().parents[2]` 정의 후
+   `_run_child`에서 `cwd=str(CODE_ROOT)` + `env["PYTHONPATH"]=str(CODE_ROOT)+os.pathsep+...`.
+   (reviews/P15-03-r1.md "되는 방법" 코드 그대로.) `test_office_adapters.py`는 이미
+   `AGENTOPS_ROOT=tmp`(코드≠데이터)를 설정하므로, 수정 후 그 테스트가 패키지 전역 import
+   불가 환경에서도 통과해야 한다.
+
+> 나머지(GetActiveObject 전용/서브프로세스 격리/sync 중복방지/send fail-closed dangerous/
+> available=False)는 r1에서 실측 확인됨 — 유지.
+
 > **실측 반영 (2026-07-03, company_check ⑤)**: DispatchEx 새 인스턴스로
 > GetNamespace→GetDefaultFolder 접근 시 **40s hang** (프로필/보안 프롬프트 대기 추정).
 > COM 접속 자체는 성공(16.0.0.5507). **구현 지침: ① `win32com.client.GetActiveObject

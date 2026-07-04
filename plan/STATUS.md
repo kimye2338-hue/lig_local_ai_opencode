@@ -28,7 +28,7 @@
 | P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | APPROVED | plan/reports/P14-05-r2.md | plan/reviews/P14-05-r2.md |
 | P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | APPROVED | plan/reports/P15-01-r1.md | plan/reviews/P15-01-r1.md |
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | APPROVED | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r2.md |
-| P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | AWAITING-REVIEW | plan/reports/P15-03-r1.md | |
+| P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | CHANGES-REQUESTED | plan/reports/P15-03-r1.md | plan/reviews/P15-03-r1.md |
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | READY | | |
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | READY | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 Fable 리뷰 12차: **P15-03 r1 CHANGES-REQUESTED**(실측 버그: `_run_child`가 자식을 `cwd=str(ROOT)`=데이터 루트에서 띄워 `-m agent_ops...` import 실패→"no JSON"으로 read_calendar/inbox/sync 전부 깨짐. AGENTOPS_ROOT를 데이터폴더로 두면 실사용에서도 발생. `test_office_adapters.py`가 AGENTOPS_ROOT=tmp라 리뷰 env에서 RED 재현. 되는 방법=CODE_ROOT(parents[2])를 cwd+PYTHONPATH로, 리뷰어 검증 — reviews/P15-03-r1.md). 확인: GetActiveObject 전용·서브프로세스 격리·sync 중복방지(1/0)·send fail-closed dangerous·비노출·available=False 전부 실측 정상. 재검증: 20개 중 16개 exit 0(office_adapters 버그+Windows 전용 3개만 RED, bench 191/schedule 69). 피드백: 격리 subprocess는 부모 sys.path 미상속 — 코드루트를 cwd+PYTHONPATH로 명시. Codex 다음: **P15-03 r2 → P18-02 → P16-02**.
 
 - 2026-07-04 P15-03 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P15-03-r1.md. outlook_com active-instance-only read adapter + schedule sync-outlook CLI 추가, office adapters 22 checks/schedule store 69 checks/capability bench 193 checks/전체 20개 테스트 파일 통과.
 
