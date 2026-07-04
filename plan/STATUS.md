@@ -31,7 +31,7 @@
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | APPROVED | plan/reports/P15-03-r2.md | plan/reviews/P15-03-r2.md |
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | APPROVED | plan/reports/P15-04-r1.md | plan/reviews/P15-04-r1.md |
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
-| P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | CHANGES-REQUESTED | plan/reports/P16-02-r2.md | plan/reviews/P16-02-r2.md |
+| P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | IN-PROGRESS | plan/reports/P16-02-r2.md | plan/reviews/P16-02-r2.md |
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | READY | | |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | READY | | |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P16-02 r3 IN-PROGRESS (Codex). reviews/P16-02-r2.md 필수 수정(exit-53 POSIX fake stdout octal escape) 반영 시작.
 
 - 2026-07-04 Fable 리뷰 15차: **P16-02 r2 CHANGES-REQUESTED**(진척 큼: `_write_fake_exe` .sh/.cmd 분기·copy 불변·utf16 stdout nt가드 통과. 잔여 1곳: exit-53 fake의 POSIX unix_body가 `printf '\xNN'`인데 dash가 `\x` 미해석→리터럴 출력→log_tail 깨져 `ErrorStatus=53` check 실패, 파일 여전히 POSIX RED. 어댑터는 정상(ok False·exit 53·returncode 53). 되는 방법=octal `\NNN`(리뷰어 실측: ff fe 45 00…→`ErrorStatus=53`) 또는 log 내용만 nt가드 — reviews/P16-02-r2.md). 재검증: 22개 중 18개 exit 0. 피드백: 셸 printf `\x`는 비이식적, octal `\NNN` 쓸 것. Codex 다음: **P16-02 r3 → P18-02 → P16-03/04**.
 
