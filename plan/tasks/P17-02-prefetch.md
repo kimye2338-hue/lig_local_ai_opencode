@@ -11,6 +11,16 @@
 회사 반입에 필요한 모든 외부물을 실제로 내려받아 SHA256과 함께 확정한다.
 용량 제한 없음 (사용자 확정).
 
+## 진행 (2026-07-04, Fable 직접) — reports/P17-02-r1.md
+- **resolved 11/14**: wheel 8종(pip 실측 SHA256) + 모델 3파일(HF LFS pointer 공식 SHA256).
+  `release/dependencies.json:prefetch_files` + `verify_prefetch.py` + `test_release_manifest.py`
+  (+ `.gitignore release/prefetch/`) 커밋됨.
+- **잔여(home-PC only)**: GitHub 릴리스 바이너리 3종(llama.cpp win / whisper.cpp win /
+  ffmpeg win64). **클라우드 proxy allowlist가 GitHub 릴리스 다운로드를 차단**하므로
+  codex-in-cloud도 불가 — **집/개발 PC(GitHub 접근)에서 다운로드 후 `certutil -hashfile`로
+  해시 채우고** 해당 status를 resolved로 갱신하면 verify_prefetch가 그대로 검증한다.
+- P17-03(번들 build)은 이 3종까지 resolved 후 완전한 번들이 됨.
+
 > **실측 반영 (2026-07-03)**: 회사 PC에 Python 3.11.3 + pywin32가 **이미 설치**되어
 > 있음 (probe/results/ env). wheel은 재현성 위해 그대로 반입하되, setup.bat은 기존
 > 설치를 감지하면 스킵하도록.
