@@ -31,7 +31,7 @@
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | APPROVED | plan/reports/P15-03-r2.md | plan/reviews/P15-03-r2.md |
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | AWAITING-REVIEW | plan/reports/P15-04-r1.md | |
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
-| P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | IN-PROGRESS | | |
+| P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | AWAITING-REVIEW | plan/reports/P16-02-r1.md | |
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | READY | | |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | READY | | |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P16-02 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P16-02-r1.md. matlab_batch -batch adapter + autocad_batch accoreconsole 사본 DWG adapter + autocad_script artifact kind/quality 추가, batch adapters 24 checks/capability bench 193 checks/전체 22개 테스트 파일 통과. hard gate: artifact kind 추가로 리뷰 전 auto-advance 중단.
 
 - 2026-07-04 P16-02 IN-PROGRESS (Codex). 시작 HEAD: 8cc7d91. matlab -batch / AutoCAD accoreconsole subprocess 어댑터 작업 시작.
 
