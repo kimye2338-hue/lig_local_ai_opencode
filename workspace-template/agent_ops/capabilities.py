@@ -119,6 +119,16 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "pending": ["app validation pending: MATLAB 2024a에서 -batch 실행 검증"],
         "keywords": ["매트랩", "matlab", "후처리", "플롯", "그래프 그려", ".m 스크립트", ".m 파일"],
     },
+    "simulation_automation": {
+        "description": "ANSYS/Fluent 해석 실행 절차 scaffold 생성 — 공학 판단은 사용자 책임",
+        "status": "scaffold_available",
+        "artifact_kinds": ["fluent_journal", "ansys_script"],
+        "outputs": ["Fluent journal (.jou)", "Mechanical/SpaceClaim script scaffold (.py)"],
+        "pending": ["app validation pending: ANSYS 2024R1 Fluent -g -i 실행 검증",
+                    "app validation pending: Mechanical/SpaceClaim GUI 스크립팅 콘솔 실행 검증"],
+        "keywords": ["앤시스", "ansys", "플루언트", "fluent", "해석", "시뮬레이션", "journal",
+                     "메카니컬", "spaceclaim", "icepak"],
+    },
     "office_cad_automation": {
         "description": "Office/CAD 앱 자동화 (SolidWorks/Excel/Word/PowerPoint/HWP) — 매크로/절차 산출물",
         "status": "scaffold_available",
@@ -166,6 +176,14 @@ ARTIFACT_KIND_INFO: Dict[str, Dict[str, str]] = {
     "autocad_script": {
         "files": "작업.scr",
         "purpose": "AutoCAD 2019 accoreconsole에서 /i 사본 dwg와 함께 실행할 script scaffold",
+    },
+    "fluent_journal": {
+        "files": "작업.jou",
+        "purpose": "ANSYS Fluent 2024R1에서 fluent 3ddp -g -i 작업.jou -t<코어수>로 실행할 journal scaffold",
+    },
+    "ansys_script": {
+        "files": "mechanical_script.py",
+        "purpose": "ANSYS Mechanical/SpaceClaim GUI 스크립팅 콘솔에서 실행할 ACT/IronPython scaffold",
     },
     "meeting_minutes": {
         "files": "회의록.md",

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Batch adapter tests for MATLAB -batch and AutoCAD accoreconsole.
+"""Batch adapter tests for MATLAB, AutoCAD, and Fluent batch runners.
 
 Run: py -3.11 tests\\test_batch_adapters.py
 """
@@ -20,7 +20,7 @@ WS_TEMPLATE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WS_TEMPLATE))
 
 from agent_ops.adapters import ADAPTERS  # noqa: E402
-from agent_ops.adapters import autocad_batch, matlab_batch  # noqa: E402
+from agent_ops.adapters import autocad_batch, fluent_batch, matlab_batch  # noqa: E402
 from agent_ops.artifact_generators import generate_artifacts  # noqa: E402
 from agent_ops.artifact_quality import validate_artifact_set  # noqa: E402
 from agent_ops.capabilities import ARTIFACT_KIND_INFO, CAPABILITIES, plan_task  # noqa: E402
@@ -52,9 +52,11 @@ def _write_fake_exe(base: Path, *, win_body: str, unix_body: str) -> Path:
 def main() -> None:
     old_matlab = os.environ.get("MATLAB_EXE")
     old_accore = os.environ.get("ACCORECONSOLE_EXE")
+    old_fluent = os.environ.get("FLUENT_EXE")
     try:
         os.environ["MATLAB_EXE"] = ""
         os.environ["ACCORECONSOLE_EXE"] = ""
+        os.environ["FLUENT_EXE"] = ""
         missing_mat = matlab_batch.execute(str(tmp_root / "missing.m"), {})
         check("matlab missing script fails cleanly",
               missing_mat["ok"] is False and "script 파일 없음" in missing_mat["error"], missing_mat)
@@ -144,6 +146,60 @@ def main() -> None:
               ADAPTERS["matlab"]["available"] is False and ADAPTERS["matlab"].get("execute") is matlab_batch.execute)
         check("autocad adapter registered unavailable",
               ADAPTERS["autocad"]["available"] is False and ADAPTERS["autocad"].get("execute") is autocad_batch.execute)
+
+        missing_jou = fluent_batch.execute(str(tmp_root / "missing.jou"), {})
+        check("fluent missing journal fails cleanly",
+              missing_jou["ok"] is False and "journal 파일 없음" in missing_jou["error"], missing_jou)
+        journal = tmp_root / "작업.jou"
+        journal.write_text("/exit yes\n", encoding="utf-8")
+        missing_fluent = fluent_batch.execute(str(journal), {})
+        check("fluent missing executable explains env/PATH",
+              missing_fluent["ok"] is False and "FLUENT_EXE" in missing_fluent["error"], missing_fluent)
+        fake_fluent = _write_fake_exe(
+            tmp_root / "fake_fluent",
+            win_body="@echo off\r\necho Fluent fake ok\r\nexit /b 0\r\n",
+            unix_body="#!/bin/sh\necho Fluent fake ok\nexit 0\n",
+        )
+        os.environ["FLUENT_EXE"] = str(fake_fluent)
+        check("find_fluent uses env override", fluent_batch.find_fluent() == str(fake_fluent))
+        ok_fluent = fluent_batch.execute(str(journal), {"timeout_s": 30, "cores": 4})
+        check("fluent fake executable succeeds",
+              ok_fluent["ok"] is True and ok_fluent["returncode"] == 0 and "-g" in ok_fluent["cmd"],
+              ok_fluent)
+        check("fluent command uses dimension journal and core count",
+              ok_fluent["cmd"][1:5] == ["3ddp", "-g", "-i", str(journal.resolve())]
+              and ok_fluent["cmd"][-1] == "-t4", ok_fluent["cmd"])
+
+        sim_plan = plan_task("플루언트 해석 돌리는 journal 만들어줘")
+        check("simulation plan includes fluent_journal",
+              "fluent_journal" in sim_plan["artifact_kinds"], str(sim_plan["artifact_kinds"]))
+        sim_out = generate_artifacts("플루언트 해석 돌리는 journal 만들어줘",
+                                     ["fluent_journal", "ansys_script"],
+                                     out_dir=tmp_root / "simulation_artifacts")
+        check("simulation artifacts generated ok",
+              sim_out["ok"] and sim_out["quality"]["fluent_journal"]["ok"]
+              and sim_out["quality"]["ansys_script"]["ok"], str(sim_out))
+        jou_text = (tmp_root / "simulation_artifacts" / "작업.jou").read_text(encoding="utf-8")
+        ansys_text = (tmp_root / "simulation_artifacts" / "mechanical_script.py").read_text(encoding="utf-8")
+        check("fluent journal states engineering responsibility and pending",
+              "해석 세팅·수렴 판단은 사용자 책임" in jou_text and "app validation pending" in jou_text,
+              jou_text)
+        check("ansys script states GUI console and pending",
+              "GUI 스크립팅 콘솔" in ansys_text and "app validation pending" in ansys_text,
+              ansys_text)
+        bad_fluent = validate_artifact_set("fluent_journal",
+                                           [jou_text.replace("/solve/iterate 100", "")],
+                                           task="플루언트 해석 돌리는 journal 만들어줘",
+                                           filenames=["작업.jou"])
+        check("fluent quality catches missing iterate command",
+              not bad_fluent["ok"] and any(v["rule"] == "fluent_iterate" for v in bad_fluent["violations"]),
+              bad_fluent["violations"])
+        check("artifact kind metadata includes simulation kinds",
+              {"fluent_journal", "ansys_script"} <= set(ARTIFACT_KIND_INFO))
+        check("simulation capability emits both artifact kinds",
+              {"fluent_journal", "ansys_script"} <= set(CAPABILITIES["simulation_automation"]["artifact_kinds"]))
+        check("fluent adapter registered unavailable",
+              ADAPTERS["fluent"]["available"] is False and ADAPTERS["fluent"].get("execute") is fluent_batch.execute)
     finally:
         if old_matlab is None:
             os.environ.pop("MATLAB_EXE", None)
@@ -153,6 +209,10 @@ def main() -> None:
             os.environ.pop("ACCORECONSOLE_EXE", None)
         else:
             os.environ["ACCORECONSOLE_EXE"] = old_accore
+        if old_fluent is None:
+            os.environ.pop("FLUENT_EXE", None)
+        else:
+            os.environ["FLUENT_EXE"] = old_fluent
 
     print(f"\nALL {PASS} CHECKS PASSED (batch adapters)")
 

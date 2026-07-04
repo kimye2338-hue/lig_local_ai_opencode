@@ -148,6 +148,30 @@ _KIND_RULES: Dict[str, List[Rule]] = {
         ("autocad_pending", "AutoCAD 실제 실행 검증 pending이 명시되어야 함",
          lambda t: "app validation pending" in t and "AutoCAD 2019" in t),
     ],
+    "fluent_journal": [
+        ("fluent_batch_run", "fluent 3ddp -g -i 실행 방법이 명시되어야 함",
+         lambda t: "fluent 3ddp -g -i 작업.jou -t<코어수>" in t),
+        ("fluent_read_case", "case 읽기 명령이 있어야 함",
+         lambda t: "/file/read-case" in t and "CASE_FILE" in t),
+        ("fluent_iterate", "반복 계산 명령이 있어야 함",
+         lambda t: "/solve/iterate" in t),
+        ("fluent_export", "결과 export 명령이 있어야 함",
+         lambda t: "/file/export/ascii" in t),
+        ("fluent_exit", "배치 종료 명령이 있어야 함",
+         lambda t: "/exit yes" in t),
+        ("fluent_engineering_warning", "해석 세팅/수렴 판단은 사용자 책임이라는 경고가 있어야 함",
+         lambda t: "해석 세팅·수렴 판단은 사용자 책임" in t),
+        ("fluent_pending", "Fluent 실제 실행 검증 pending이 명시되어야 함",
+         lambda t: "app validation pending" in t and "ANSYS 2024R1" in t),
+    ],
+    "ansys_script": [
+        ("ansys_gui_run", "GUI 스크립팅 콘솔 실행 방법이 있어야 함",
+         lambda t: "GUI 스크립팅 콘솔" in t and "실행 방법" in t),
+        ("ansys_pending", "ANSYS 실제 GUI 실행 검증 pending이 명시되어야 함",
+         lambda t: "app validation pending" in t and "ANSYS 2024R1" in t),
+        ("ansys_engineering_warning", "해석 세팅/수렴 판단은 사용자 책임이라는 경고가 있어야 함",
+         lambda t: "해석 세팅·수렴 판단은 사용자 책임" in t),
+    ],
 }
 
 # Host-app-specific VBA rules, activated by the generated filename
@@ -184,6 +208,8 @@ _KIND_SUFFIXES: Dict[str, set] = {
     "mail_report": {".md"},
     "matlab_script": {".m"},
     "autocad_script": {".scr"},
+    "fluent_journal": {".jou"},
+    "ansys_script": {".py"},
     "meeting_minutes": {".md"},
 }
 

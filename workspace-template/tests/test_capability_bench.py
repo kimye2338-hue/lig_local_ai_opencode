@@ -54,6 +54,7 @@ BENCHMARKS = [
     ("회의록 정리해줘", "meeting_minutes", "meeting_minutes"),
     ("주간보고 초안 만들어줘", "weekly_report", "document"),
     ("시험 데이터 후처리 매트랩 스크립트 만들어줘", "matlab_automation", "matlab_script"),
+    ("플루언트 해석 돌리는 journal 만들어줘", "simulation_automation", "fluent_journal"),
 ]
 
 
@@ -264,6 +265,17 @@ def main() -> None:
           "matlab -batch" in matlab and "try" in matlab and "catch err" in matlab and "exit(1)" in matlab)
     check("MATLAB scaffold uses base processing structure",
           "readtable(INPUT_FILE)" in matlab and "varfun(@mean" in matlab and "writetable" in matlab)
+    fluent = (tmp / "simulation_automation" / "작업.jou").read_text(encoding="utf-8")
+    check("Fluent journal is batch-ready with read iterate export exit",
+          all(s in fluent for s in ["/file/read-case", "/solve/iterate", "/file/export/ascii", "/exit yes"]))
+    check("Fluent journal warns engineering judgment stays with user",
+          "해석 세팅·수렴 판단은 사용자 책임" in fluent and "app validation pending" in fluent)
+    ansys_out = generate_artifacts("ANSYS Mechanical 스크립트 만들어줘", ["ansys_script"],
+                                   out_dir=tmp / "ansys_script")
+    ansys = Path(ansys_out["files"][0]).read_text(encoding="utf-8")
+    check("ANSYS GUI script scaffold passes quality",
+          ansys_out["quality"]["ansys_script"]["ok"] and "GUI 스크립팅 콘솔" in ansys,
+          str(ansys_out["quality"]["ansys_script"]))
     check("unknown artifact kind reported, not raised",
           generate_artifacts("x", ["no_such_kind"], out_dir=tmp / "bad")["ok"] is False)
 
@@ -301,6 +313,12 @@ def main() -> None:
     check("validator catches MATLAB missing exit on error",
           not v_mat["ok"] and any(x["rule"] == "matlab_exit_on_error" for x in v_mat["violations"]),
           str(v_mat["violations"]))
+    v_fluent = validate_artifact_set("fluent_journal", [fluent.replace("/file/export/ascii", "; export missing")],
+                                     task="플루언트 해석 돌리는 journal 만들어줘",
+                                     filenames=["작업.jou"])
+    check("validator catches Fluent missing export command",
+          not v_fluent["ok"] and any(x["rule"] == "fluent_export" for x in v_fluent["violations"]),
+          str(v_fluent["violations"]))
     check("Office 2016 banned list has 21 functions", len(_OFFICE2016_BANNED) == 21, str(_OFFICE2016_BANNED))
     for fn in ("XLOOKUP", "TEXTJOIN", "LET"):
         v_office = validate_artifact_set("vba_macro", [xl + f'\nSub Bad_{fn}(): Range("A1").Formula = "={fn}(A1:A2)": End Sub\n'],

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from . import autocad_batch, browser_cdp, excel_com, matlab_batch, office_convert, outlook_com
+from . import autocad_batch, browser_cdp, excel_com, fluent_batch, matlab_batch, office_convert, outlook_com
 
 
 def _office_execute(action: str, options: Dict[str, Any]) -> Dict[str, Any]:
@@ -80,6 +80,14 @@ ADAPTERS: Dict[str, Dict[str, Any]] = {
         "requires": ["AutoCAD 2019 accoreconsole.exe", "ACCORECONSOLE_EXE 또는 표준 설치 경로"],
         "pending": "app validation pending: 회사 AutoCAD 2019 accoreconsole에서 /i 사본 dwg + /s scr 검증",
         "execute": autocad_batch.execute,
+    },
+    "fluent": {
+        "description": "ANSYS Fluent 2024R1 journal 배치 실행",
+        "consumes": ["fluent_journal"],
+        "available": False,
+        "requires": ["ANSYS Fluent 2024R1 설치", "FLUENT_EXE 또는 ANSYS Inc 표준 설치 경로"],
+        "pending": "app validation pending: 회사 ANSYS Fluent 2024R1에서 fluent 3ddp -g -i journal 검증",
+        "execute": fluent_batch.execute,
     },
     "hwp": {
         "description": "한글(HWP) 문서 자동화",

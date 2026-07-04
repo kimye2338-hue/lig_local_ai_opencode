@@ -819,6 +819,64 @@ Y
     return [path]
 
 
+def gen_fluent_journal(task: str, out_dir: Path,
+                       ctx: Optional[Dict[str, Any]] = None) -> List[Path]:
+    ctx = _ensure_context(task, ctx)
+    body = f"""; ANSYS Fluent journal scaffold (OpenCodeLIG)
+; 요청: {task}
+; 입력: {_input_names(ctx)}
+; 실행: fluent 3ddp -g -i 작업.jou -t<코어수>
+; 상태: app validation pending — ANSYS 2024R1 Fluent 실제 배치 실행 검증 전
+; 경고: 해석 세팅·수렴 판단은 사용자 책임입니다. 이 journal은 실행 절차만 자동화합니다.
+; CASE_FILE: 사용자가 실제 .cas/.cas.h5 경로로 교체하세요.
+
+/file/read-case "CASE_FILE"
+
+; TODO(사용자 확인): 물성/경계조건/모델 세팅과 수렴 기준을 업무 규격에 맞게 확인하세요.
+; TODO(사용자 확인): residual/monitor 기준은 임의 확정하지 말고 해석 담당자가 검토하세요.
+
+/solve/iterate 100
+
+; TODO(사용자 확인): export 대상 surface/field를 실제 모델에 맞게 수정하세요.
+/file/export/ascii "결과_요약.txt" () pressure velocity yes
+
+/exit yes
+"""
+    path = out_dir / "작업.jou"
+    atomic_write_text(path, body)
+    return [path]
+
+
+def gen_ansys_script(task: str, out_dir: Path,
+                     ctx: Optional[Dict[str, Any]] = None) -> List[Path]:
+    ctx = _ensure_context(task, ctx)
+    body = f'''# -*- coding: utf-8 -*-
+"""ANSYS Mechanical/SpaceClaim script scaffold (OpenCodeLIG).
+
+요청: {task}
+입력: {_input_names(ctx)}
+실행 방법:
+  - Mechanical 또는 SpaceClaim GUI 스크립팅 콘솔에서 열어 실행하세요.
+상태: app validation pending — ANSYS 2024R1 GUI 스크립팅 콘솔 실제 실행 검증 전.
+경고: 해석 세팅·수렴 판단은 사용자 책임입니다. 이 스크립트는 절차 scaffold입니다.
+"""
+
+# TODO(사용자 확인): Mechanical ACT/IronPython 또는 SpaceClaim API 컨텍스트에서 실행하세요.
+# TODO(사용자 확인): 모델 트리 이름, 하중/구속 조건, 결과 객체 이름을 실제 프로젝트에 맞게 수정하세요.
+# 예시 골격:
+# model = ExtAPI.DataModel.Project.Model
+# analysis = model.Analyses[0]
+# solution = analysis.Solution
+# solution.Solve(True)
+# TODO(사용자 확인): 결과 export 경로와 항목을 업무 규격에 맞게 확정하세요.
+
+print("ANSYS script scaffold loaded — app validation pending")
+'''
+    path = out_dir / "mechanical_script.py"
+    atomic_write_text(path, body)
+    return [path]
+
+
 GENERATORS = {
     "vba_macro": gen_vba_macro,
     "document": gen_document,
@@ -827,6 +885,8 @@ GENERATORS = {
     "mail_report": gen_mail_report,
     "matlab_script": gen_matlab_script,
     "autocad_script": gen_autocad_script,
+    "fluent_journal": gen_fluent_journal,
+    "ansys_script": gen_ansys_script,
     "meeting_minutes": gen_meeting_minutes,
 }
 
