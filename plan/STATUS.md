@@ -32,7 +32,7 @@
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | APPROVED | plan/reports/P15-04-r1.md | plan/reviews/P15-04-r1.md |
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | APPROVED | plan/reports/P16-02-r3.md | plan/reviews/P16-02-r3.md |
-| P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | CHANGES-REQUESTED | plan/reports/P16-03-r1.md | plan/reviews/P16-03-r1.md |
+| P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | IN-PROGRESS | plan/reports/P16-03-r1.md | plan/reviews/P16-03-r1.md |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | READY | | |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
 | P17-02 | 의존성 prefetch + SHA256 확정 | codex | P16-04 | INTERNET | BLOCKED | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P16-03 r2 IN-PROGRESS (Codex). reviews/P16-03-r1.md 필수 수정(simulation keyword bare `해석`/`journal` 제거 + everyday negative corpus) 반영 시작.
 
 - 2026-07-04 **Fable 5 종합 점검** (사용자 요청): 건강 — 테스트 19/22 exit 0(Windows 전용 3개 제외 전부 green), secret scan 통과, 의존성 그래프 정합, 보드 26 APPROVED/4 READY/1 CHANGES-REQ/5 BLOCKED. **결함 패턴 정량화**(리뷰 17차): 키워드 오라우팅 4회(최다)·추출 오값 2회·테스트 이식성 2회·subprocess 루트 1회 — 전부 1~3라운드 수렴, 리뷰 제시 수정코드 채택률 100%. **개선 3건**: ① 일상어 NEGATIVE_CORPUS 메타 체크 설계+실측(기존 수정 8문장 ok/현 누출 2문장만 LEAK — 이빨 확인)→P16-03 r2 요구로 영구화, 이후 키워드 재발은 리뷰 없이 bench가 차단. ② self-review 스킬에 반복 결함 체크리스트 4종 추가(워커 제출 전 자가 차단). ③ 파일럿까지 남은 경로 확정: **P16-03 r2 → P16-04 → P18-02 → P19-01**(codex, ANY) → P17-02(INTERNET)→P17-03→P17-04(HUMAN)→P19-02(COMPANY) + P00-02(fable)/P00-03(human)/Windows baseline(NEXT_ONSITE). 판정: **순항** — 코어/비서/어댑터 축 완성, 남은 것은 ANY 4건+반입 체인+실측.
 
