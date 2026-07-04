@@ -31,7 +31,7 @@
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | APPROVED | plan/reports/P15-03-r2.md | plan/reviews/P15-03-r2.md |
 | P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | APPROVED | plan/reports/P15-04-r1.md | plan/reviews/P15-04-r1.md |
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
-| P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | CHANGES-REQUESTED | plan/reports/P16-02-r1.md | plan/reviews/P16-02-r1.md |
+| P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | IN-PROGRESS | plan/reports/P16-02-r1.md | plan/reviews/P16-02-r1.md |
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | READY | | |
 | P16-04 | hwp_com + solidworks_com 어댑터 | codex | P15-02 | ANY | READY | | |
 | P17-01 | xlsx 입력 ingest (openpyxl optional) | codex | — | ANY | APPROVED | plan/reports/P17-01-r1.md | plan/reviews/P17-01-r1.md |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P16-02 r2 IN-PROGRESS (Codex). reviews/P16-02-r1.md 필수 수정(fake exe POSIX 이식성 + UTF-16 assertion nt 가드) 반영 시작.
 
 - 2026-07-04 정책: **pip 설치 허용**(사용자 승인). PROTOCOL §3.4 개정 — 개발/집/리뷰 PC에서 필요한 라이브러리를 `pip install`로 자유롭게 설치해 SKIP 대신 실경로 검증. 가드레일: dependencies.json 등록 필수(회사는 오프라인=prefetch wheel로만 반입), 코어는 stdlib-only 유지, 어댑터/ingest는 optional-import 부재 안내 유지. 리뷰 환경에 openpyxl 설치 → bench 191→**193**(워커와 동일 분기, 이전 리뷰들의 191/193 불일치 해소). pywin32는 리눅스 배포판 없음 → COM 어댑터는 리뷰 env에서 항상 부재 경로(불가피).
 
