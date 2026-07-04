@@ -25,7 +25,7 @@
 | P14-02 | schedule CLI + capability 등록 | codex | P14-01 | ANY | APPROVED | plan/reports/P14-02-r2.md | plan/reviews/P14-02-r2.md |
 | P14-03 | 아침 브리핑 + 리마인더 BAT | codex | P14-02 | ANY | APPROVED | plan/reports/P14-03-r1.md | plan/reviews/P14-03-r1.md |
 | P14-04 | 회의록(meeting_minutes) capability | codex | P14-02 | ANY | APPROVED | plan/reports/P14-04-r2.md | plan/reviews/P14-04-r2.md |
-| P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | CHANGES-REQUESTED | plan/reports/P14-05-r1.md | plan/reviews/P14-05-r1.md |
+| P14-05 | 주간보고 초안(weekly_report) | codex | P13-01, P14-02 | ANY | AWAITING-REVIEW | plan/reports/P14-05-r2.md | plan/reviews/P14-05-r1.md |
 | P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | APPROVED | plan/reports/P15-01-r1.md | plan/reviews/P15-01-r1.md |
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | APPROVED | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r2.md |
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | READY | | |
@@ -45,6 +45,10 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P14-05 r2 AWAITING-REVIEW (Codex). 보고서: plan/reports/P14-05-r2.md. weekly bare keyword를 weekly report로 경계화하고 biweekly negative bench 추가, capability bench 193 checks/secretary 37 checks/전체 20개 테스트 파일 통과.
+
+- 2026-07-04 P14-05 r2 IN-PROGRESS (Codex). reviews/P14-05-r1.md 필수 수정(weekly bare keyword 경계화 + biweekly negative bench) 반영 시작.
 
 - 2026-07-04 Fable 리뷰 10차: **P14-05 r1 CHANGES-REQUESTED**(영어 키워드 `weekly` bare substring이 `biweekly 회의 잡아줘` 오라우팅 — `.m`/`minutes`에 이은 3번째 동류, hard gate라 동일 기준 적용. 되는 방법=`weekly`→`weekly report` 경계화+negative check, 리뷰어 실측 검증 — reviews/P14-05-r1.md). 확인: 3개 원천(audit/schedule/artifacts) 반영·기간 필터·초안 TODO E2E 정상, audit `task` 필드 실스키마 일치. 재검증: 20개 중 17개 exit 0(bench 190=192−openpyxl 2), Windows 전용 3개 diff 무접촉. 피드백: bare 영어 키워드 self-check 습관화. Codex 다음: **P14-05 r2 → P18-02 → P15-03 → P16-02**.
 
