@@ -29,7 +29,7 @@
 | P15-01 | Office 2016 호환 quality 규칙 | codex | — | ANY | APPROVED | plan/reports/P15-01-r1.md | plan/reviews/P15-01-r1.md |
 | P15-02 | excel_com 어댑터 (사본 정책) | codex | P15-01, P13-01 | ANY | APPROVED | plan/reports/P15-02-r2.md | plan/reviews/P15-02-r2.md |
 | P15-03 | outlook_com 어댑터 (일정/메일 read) | codex | P15-02, P14-02 | ANY | APPROVED | plan/reports/P15-03-r2.md | plan/reviews/P15-03-r2.md |
-| P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | IN-PROGRESS | | |
+| P15-04 | word/ppt 변환 action + 집 Excel 실측 | codex | P15-02 | EXCEL | AWAITING-REVIEW | plan/reports/P15-04-r1.md | |
 | P16-01 | matlab_automation capability + .m 생성기 | codex | P15-01 | ANY | APPROVED | plan/reports/P16-01-r2.md | plan/reviews/P16-01-r2.md |
 | P16-02 | matlab -batch / AutoCAD accoreconsole 어댑터 | codex | P16-01 | ANY | READY | | |
 | P16-03 | simulation_automation (Fluent journal) + fluent_batch | codex | P16-01 | ANY | READY | | |
@@ -45,6 +45,8 @@
 | P20-01 | 음성 입력 구현 (whisper.cpp) | codex | P19-02 | ANY | BLOCKED | | |
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
+
+- 2026-07-04 P15-04 r1 AWAITING-REVIEW (Codex). 보고서: plan/reports/P15-04-r1.md. office_convert md_to_docx/spec_to_pptx 추가, 집 Excel 사본 왕복/원본 해시 불변/Word·PPT 파일 열림/프로세스 정리 실측, office adapters 29 checks/capability bench 193 checks/office live smoke 16 checks/전체 21개 테스트 파일 통과.
 
 - 2026-07-04 P15-04 IN-PROGRESS (Codex). 시작 HEAD: 2f9c3ee. Excel/Word/PowerPoint ProgID 확인 후 Office 변환 action + 집 Excel 실측 작업 시작.
 
