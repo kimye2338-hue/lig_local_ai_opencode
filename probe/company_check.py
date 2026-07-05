@@ -6,7 +6,8 @@
 
 무엇을 점검하나 (지금 기준):
   0. 현재 빌드(agent_ops) 런타임 — 이 스크립트 옆(또는 번들 workspace-template 안)에
-     agent_ops가 있으면 doctor + mock work E2E를 자동 실행. 없으면 '환경만 점검'이라 정직 표기.
+     agent_ops가 있으면 doctor + mock work E2E + (lig-api.env 있으면) real agent E2E를
+     자동 실행. 없으면 '환경만 점검'이라 정직 표기.
   1. Gateway(LLM) — 3라우트/function calling/streaming/지연/모델ID (현 _ROUTE_DEFAULTS와 동일)
   2. 앱/COM 실동작, 3. OpenCode 기동, 4. Office 매크로 정책, 5. 앱 경로, 6. 업무 시나리오 6종
 
@@ -773,6 +774,7 @@ def _find_agentops() -> str:
         cands.append(Path(env_home) / "agent_ops" / "agentops.py")
     cands += [
         here / "agent_ops" / "agentops.py",
+        here / "workspace-template" / "agent_ops" / "agentops.py",
         here.parent / "agent_ops" / "agentops.py",
         here.parent / "workspace-template" / "agent_ops" / "agentops.py",
         Path.cwd() / "agent_ops" / "agentops.py",
@@ -826,6 +828,27 @@ def probe_agentops() -> dict:
             out["mock_work_exit"] = "timeout"
         except Exception as e:
             out["mock_work_exit"] = "error"; out["mock_work_error"] = f"{type(e).__name__}: {e}"
+
+    # 3) real agent E2E — 실제 게이트웨이로 tool-use 루프 1회. 이게 "진짜 됨"의 증거.
+    #    gateway(lig-api.env) 설정 시에만. 미설정이면 정직히 생략.
+    env = _load_env()
+    gw = env.get("LIG_GATEWAY_BASE_URL", "")
+    key = env.get("LIG_API_KEY", "")
+    gw_ready = bool(gw) and "REPLACE" not in gw and bool(key) and "REPLACE" not in key
+    if not gw_ready:
+        out["real_agent_exit"] = "skipped(lig-api.env 미설정 — gateway 없이 런타임/파이프라인만 검증)"
+    elif os.environ.get("CC_QUICK") == "1":
+        out["real_agent_exit"] = "skipped(--quick)"
+    else:
+        try:
+            rc, so, se = run(["agent", "--mode", "real", "--max-turns", "4",
+                              "--task", "작업 폴더의 파일을 확인하고 한 줄로 요약해줘"], 100)
+            out["real_agent_exit"] = rc
+            out["real_agent_tail"] = _mask_path((so or se)[-900:])
+        except subprocess.TimeoutExpired:
+            out["real_agent_exit"] = "timeout"
+        except Exception as e:
+            out["real_agent_exit"] = "error"; out["real_agent_error"] = f"{type(e).__name__}: {e}"
     return out
 
 
@@ -971,12 +994,19 @@ def _md(report: dict) -> str:
     elif ao.get("found"):
         L.append(f"- agent_ops 위치: {ao.get('root')}")
         L.append(f"- **doctor 종료코드**: {ao.get('doctor_exit')} (0=정상 로드)")
-        L.append(f"- **mock work E2E**: {ao.get('mock_work_exit')} (0=파이프라인 정상)")
+        L.append(f"- **mock work E2E**: {ao.get('mock_work_exit')} (0=파이프라인 정상, gateway 불필요)")
+        L.append(f"- **real agent E2E**: {ao.get('real_agent_exit')} "
+                 f"(0=실제 게이트웨이로 tool-use 루프 성공 ← '진짜 됨'의 증거)")
         L.append("")
         L.append("doctor 출력(끝부분 — capabilities/adapters/artifact/LLM 인벤토리):")
         L.append("```")
-        L.append(str(ao.get("doctor_tail", ""))[-1400:])
+        L.append(str(ao.get("doctor_tail", ""))[-1200:])
         L.append("```")
+        if ao.get("real_agent_tail"):
+            L.append("real agent 실행 로그(끝부분):")
+            L.append("```")
+            L.append(str(ao.get("real_agent_tail", ""))[-700:])
+            L.append("```")
     else:
         L.append("- 점검 안 됨")
     L.append("")
