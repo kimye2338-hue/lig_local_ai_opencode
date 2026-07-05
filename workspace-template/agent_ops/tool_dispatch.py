@@ -121,6 +121,25 @@ def _browser_tool(action: str) -> ToolFn:
     return run
 
 
+def tool_project_info(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
+    """현재 폴더 프로필/전역 기억 진단 — 모델이 자기 컨텍스트 출처를 확인."""
+    from .project_profile import profile_diagnostics
+    return {"ok": True, "data": profile_diagnostics()}
+
+
+def tool_remember(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
+    """전역 기억에 교훈/선호를 남긴다 — 다음 작업부터 자동 recall 주입."""
+    text = str(args.get("note") or args.get("text") or "").strip()
+    if not text:
+        return {"ok": False, "error": "note is required", "root_cause_category": "missing_argument"}
+    title = str(args.get("title") or "").strip() or text[:60]
+    from .memory_manager import add_memory_event, extract_keywords
+    item = add_memory_event("lesson", title, text, status="active",
+                            priority="normal", source="agent",
+                            tags=extract_keywords(text)[:8])
+    return {"ok": True, "data": {"id": item.get("id"), "title": title}}
+
+
 REGISTRY: Dict[str, Dict[str, Any]] = {
     "read_file":       {"fn": tool_read_file,       "required": ["path"],                 "optional": [],                    "description": "Read a text file"},
     "write_file":      {"fn": tool_write_file,      "required": ["path", "content"],      "optional": [],                    "description": "Create or overwrite a text file"},
@@ -140,11 +159,15 @@ REGISTRY: Dict[str, Dict[str, Any]] = {
     "wait_for_selector":{"fn": _browser_tool("wait_for_selector"),"required": [], "optional": ["tab", "selector", "text", "timeout"], "description": "Wait until selector/text appears"},
     "select_tab":      {"fn": _browser_tool("select_tab"),       "required": [], "optional": ["tab", "index"], "description": "Activate an open debug Chrome tab"},
     "spa_map":         {"fn": _browser_tool("spa_map"),          "required": [], "optional": ["tab", "output_dir", "max_clicks", "wait_seconds"], "description": "Explore current SPA menu/clickable map"},
+    "project_info":    {"fn": tool_project_info,  "required": [],               "optional": [],                    "description": "Show folder profile + global memory paths"},
+    "remember":        {"fn": tool_remember,      "required": ["note"],         "optional": ["title"],             "description": "Save a lesson to global memory"},
 }
 
 _PARAM_DESCRIPTIONS = {
     "path": "relative path",
     "content": "UTF-8 text",
+    "title": "memory title",
+    "note": "text to remember",
     "old": "exact text to replace",
     "new": "replacement text",
     "count": "max replacements",
@@ -329,15 +352,26 @@ def run_agent_loop(
     ]
     # 복리 기억의 쐐기돌: 축적된 규칙/교훈을 '기계적으로' 주입한다.
     # 페르소나가 recall을 잊어도 같은 실수를 반복하지 않도록 — 선의가 아닌 구조.
+    # 주입 순서(제품 문서 §6.3): 전역 기억 → 폴더 프로필(기억/페르소나/규칙) → 작업.
+    inserts: List[Dict[str, Any]] = []
     try:
         from .memory_manager import extract_keywords, format_recall_for_prompt, recall
         mem = recall(keywords=extract_keywords(prompt), limit=5)
         if mem:
-            messages.insert(1, {"role": "system",
-                                "content": "이전에 축적된 사용자 규칙/교훈 — 반드시 반영:\n"
-                                           + format_recall_for_prompt(mem)})
+            inserts.append({"role": "system",
+                            "content": "이전에 축적된 사용자 규칙/교훈 — 반드시 반영:\n"
+                                       + format_recall_for_prompt(mem)})
     except Exception:  # noqa: BLE001 - 기억 주입 실패가 작업을 막으면 안 된다
         pass
+    try:
+        from .project_profile import format_context_for_prompt, load_project_context
+        project = format_context_for_prompt(load_project_context())
+        if project:
+            inserts.append({"role": "system", "content": project})
+    except Exception:  # noqa: BLE001 - 프로필 주입 실패도 작업을 막으면 안 된다
+        pass
+    for offset, msg in enumerate(inserts):
+        messages.insert(1 + offset, msg)
     tool_results: List[Dict[str, Any]] = []
     outcome = "max_turns_exceeded"
     final_content = ""

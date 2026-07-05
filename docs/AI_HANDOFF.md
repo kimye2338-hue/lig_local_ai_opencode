@@ -4,6 +4,26 @@ This is the single shared handoff file for Codex, Claude Code, Claude chat, and 
 
 ## agent_ops runtime track (2026-07-05 기준 현황)
 
+### 2026-07-05 (후속): ocd 폴더 프로필 + 전역 기억 + 패치 패키지
+
+- **`ocd` 구현 완료** (plan/tasks/FABLE-OCD-WORKSPACE-PROFILES.md): 아무 폴더에서
+  `ocd` → `.opencodelig\` 시드(있으면 절대 미덮어쓰기) → 그 폴더에서 OpenCode 실행.
+  단일 진실 소스는 `agent_ops/project_profile.py`, 런처는 `agent_ops/ocd.py` +
+  설치기 생성 `bin\ocd.bat`(+`ai.bat`, PATH 등록).
+- **컨텍스트 주입**: `run_agent_loop` 가 전역 기억 recall → 폴더 기억/페르소나/규칙
+  순으로 system 메시지 주입, 충돌 규칙(전역 선호·안전 > 로컬 페르소나, 로컬 규칙 >
+  일반 기본값, 충돌은 보고) 포함.
+- **LLM tool 노출**: `project_info`, `remember` 신규 등록 (구현≠노출 교훈 반영,
+  스키마 예산 7.8KB로 갱신 — test_tool_dispatch 주석 참고).
+- **mojibake 수정**: `core.run_cmd` 바이트 캡처 + UTF-8→CP949 폴백
+  (`encoding_ops.decode_console_bytes`).
+- **패치 패키지**: `release/build_patch.py` → `OpenCodeLIG_PATCH_<date>.zip`
+  (프로그램만 교체·변경분 백업·USERDATA 절대 불가침). 전체 설치는 기존
+  `build_bundle.py`. 회귀: test_ocd_profiles 25 + test_patch_build 21 신규,
+  전 스위트 green(리눅스에서 py셔임 포함 실측; Windows 전용 3개 제외).
+- **남은 것**: 회사 PC에서 `ocd` 실주행(새 CMD에서 PATH 반영 확인), 폴더 페르소나
+  체감 검증. 브라우저 SPA 액션은 test_browser_adapter 를 SPA 세트로 갱신 완료.
+
 - 런타임(`workspace-template/agent_ops/`)이 재구축되어 **회사 PC에서 실측 검증됨**: doctor·mock work·real agent E2E 전부 성공, 업무 시나리오 6/6 성공. 근거: `probe/results/company_check_20260705.md`.
 - 배포는 오프라인 번들 설치 — 번들 zip을 풀고 **`설치.bat`** 더블클릭 한 번으로 끝(빌드는 `release/build_bundle.py`).
 - 작업은 `plan/STATUS.md` 보드에서 관리(지시서 `plan/tasks/`, 보고서 `plan/reports/`, 리뷰 `plan/reviews/`).

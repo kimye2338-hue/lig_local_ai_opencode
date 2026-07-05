@@ -180,6 +180,23 @@ RUN_BAT = (
     "call \"%USERPROFILE%\\OpenCodeLIG\\bin\\oc.bat\" %*\r\n"
 )
 
+# ocd.bat: '현재 폴더'를 프로젝트로 여는 런처 — .opencodelig 로컬 프로필을
+# 시드하고 전역 기억을 공유한 채 OpenCode를 그 폴더에서 실행한다.
+# 로직은 전부 agent_ops/ocd.py (파이썬)에 있다. 내용은 ASCII만.
+OCD_BAT = (
+    "@echo off\r\n"
+    "set \"LIG_WS=%USERPROFILE%\\OpenCodeLIG\\workspace\"\r\n"
+    "call \"%LIG_WS%\\launch\\_py.bat\"\r\n"
+    "if errorlevel 1 exit /b 9\r\n"
+    "%PY% \"%LIG_WS%\\agent_ops\\ocd.py\" %*\r\n"
+)
+
+# ai.bat: 아무 폴더에서 `ai` 로 일일 메뉴를 연다.
+AI_BAT = (
+    "@echo off\r\n"
+    "call \"%USERPROFILE%\\OpenCodeLIG\\workspace\\launch\\menu.bat\"\r\n"
+)
+
 VERIFY_BAT = (
     "@echo off\r\n"
     "\"%USERPROFILE%\\OpenCodeLIG\\bin\\opencode.exe\" --version\r\n"
@@ -213,6 +230,22 @@ def _add_user_path(bin_dir: Path) -> None:
         print("       PATH에 등록: 새 명령창부터 아무 폴더에서 `oc` 로 실행 가능.")
     except Exception as exc:  # noqa: BLE001 - 설치는 계속
         print(f"       (PATH 등록 생략: {type(exc).__name__} — oc.bat 전체 경로로 실행하세요)")
+
+
+def install_bin_launchers(home: Path) -> Path:
+    """bin 런처(ocd/ai) 설치 + PATH 등록 — OpenCode 동봉 여부와 무관하게 항상.
+
+    ocd 는 폴더-로컬 프로필 기능의 진입점이라 agent_ops-only 설치에서도
+    (프로필 시드/진단까지는) 동작해야 한다. 기존 파일은 덮어써 갱신하지만
+    사용자 데이터(OpenCodeLIG_USERDATA)는 절대 건드리지 않는다.
+    """
+    bin_dir = home / "OpenCodeLIG" / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    _write_ascii_bat(bin_dir / "ocd.bat", OCD_BAT)
+    _write_ascii_bat(bin_dir / "ai.bat", AI_BAT)
+    _add_user_path(bin_dir)
+    print("       명령 설치: 새 명령창에서 아무 폴더든 `ocd`(그 폴더에서 비서) / `ai`(메뉴)")
+    return bin_dir
 
 
 def install_opencode(home: Path, workspace: Path) -> None:
@@ -317,6 +350,7 @@ def main(argv=None) -> int:
     gateway_env(ud, interactive=not a.no_input)
     ok &= run_doctor(workspace, ud)
     install_global_brain(home, workspace)
+    install_bin_launchers(home)
     install_opencode(home, workspace)
     seed_wiki(home, workspace)
     desktop_launcher(home)

@@ -214,25 +214,29 @@ def file_lock(name: str, timeout: float = 10.0, stale_after_seconds: int = 900):
             pass
 
 def run_cmd(args: List[str], timeout: int = 30) -> Dict[str, Any]:
+    # 바이트로 받아 UTF-8→CP949 폴백 디코드 — 한국어 Windows에서 자식 출력이
+    # 어느 코드페이지든 mojibake 없이 읽힌다 (encoding_ops.decode_console_bytes).
+    from .encoding_ops import decode_console_bytes
     try:
         cp = subprocess.run(
             args,
             cwd=str(ROOT),
             capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
             timeout=timeout,
         )
         return {
             "ok": cp.returncode == 0,
             "returncode": cp.returncode,
-            "stdout": cp.stdout[-5000:],
-            "stderr": cp.stderr[-5000:],
+            "stdout": decode_console_bytes(cp.stdout or b"")[-5000:],
+            "stderr": decode_console_bytes(cp.stderr or b"")[-5000:],
             "args": args,
         }
     except subprocess.TimeoutExpired as exc:
-        return {"ok": False, "error": "TIMEOUT", "args": args, "timeout": timeout, "stdout": str(exc.stdout or "")[-2000:], "stderr": str(exc.stderr or "")[-2000:]}
+        def _tail(stream: Any) -> str:
+            if isinstance(stream, bytes):
+                return decode_console_bytes(stream)[-2000:]
+            return str(stream or "")[-2000:]
+        return {"ok": False, "error": "TIMEOUT", "args": args, "timeout": timeout, "stdout": _tail(exc.stdout), "stderr": _tail(exc.stderr)}
     except Exception as exc:
         return {"ok": False, "error": repr(exc), "args": args}
 

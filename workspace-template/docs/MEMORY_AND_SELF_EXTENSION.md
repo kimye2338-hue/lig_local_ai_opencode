@@ -44,6 +44,9 @@ Do not:
 - overwrite `WIKI.md` if it already exists
 - reset memories during runtime patching
 - archive explicit user preferences automatically just because routine memory cleanup runs
+- overwrite existing folder-local profile files (`.opencodelig/PERSONA.md`,
+  `PROJECT_MEMORY.md`, `RULES.md`, `TASKS.md`, `profile.json`) — `ocd` seeds
+  them only when missing (`agent_ops/project_profile.py` is the single source)
 
 Allowed:
 

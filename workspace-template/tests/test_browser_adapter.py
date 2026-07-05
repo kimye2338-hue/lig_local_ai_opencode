@@ -51,8 +51,13 @@ def main() -> None:
     check("browser adapter keeps company login pending",
           "company validation pending" in browser_spec["pending"])
     check("browser adapter exposes execute", browser_spec["execute"] is browser_cdp.execute)
+    # PR #10 expanded ACTIONS with SPA tools; the original five must stay and the
+    # SPA set must be declared (declared-but-unexposed was the company-PC lesson).
     check("declared actions include required five",
-          set(browser_cdp.ACTIONS) == {"open_url", "get_title", "extract_text", "screenshot", "list_tabs"})
+          {"open_url", "get_title", "extract_text", "screenshot", "list_tabs"}.issubset(browser_cdp.ACTIONS))
+    check("declared actions include SPA set",
+          {"snapshot", "find_clickables", "click", "wait_for_selector", "select_tab",
+           "new_tab", "spa_map"}.issubset(browser_cdp.ACTIONS))
     bat = (WS_TEMPLATE / "launch" / "chrome-debug.bat").read_text(encoding="utf-8")
     check("chrome-debug.bat uses remote debugging port", "--remote-debugging-port=9222" in bat)
     check("chrome-debug.bat uses separate temp profile", "--user-data-dir=\"%OPEN_CODE_LIG_CHROME_PROFILE%\"" in bat

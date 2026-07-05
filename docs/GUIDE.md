@@ -22,6 +22,13 @@
 아무 폴더에서나 쓰려면: 그 폴더에서 cmd 열고 `oc` 입력 (설치 후 새 명령창부터).
 폴더가 달라도 **같은 비서**가 뜨고 **기억을 공유**한다.
 
+**폴더 전용 비서 — `ocd`** (프로젝트 폴더마다 다른 페르소나/규칙)
+그 폴더에서 cmd 열고 `ocd` 입력. 첫 실행이면 `.opencodelig\` 폴더에
+`PERSONA.md`(폴더 페르소나) / `RULES.md`(폴더 규칙) / `PROJECT_MEMORY.md`
+(폴더 기억) / `TASKS.md`(할 일)를 만들어 준다 — 원하는 대로 편집하면
+다음 실행부터 그 폴더 전용 비서가 된다. 전역 기억은 그대로 공유되고,
+이미 편집한 파일은 절대 덮어쓰지 않는다. (메뉴만 열려면 `ai` 입력)
+
 **방법 B — AI비서 메뉴 (오픈코드 없이)**
 바탕화면 [AI비서] 실행 → 번호 선택 (업무/브리핑/주간보고/일정/진단).
 
@@ -41,6 +48,7 @@ LIG_API_KEY=발급받은키
 ```
 %USERPROFILE%\OpenCodeLIG\
   bin\opencode.exe, oc.bat     실행기 (oc = 아무 폴더에서 오픈코드)
+  bin\ocd.bat, ai.bat          ocd = 그 폴더 전용 비서 / ai = 일일 메뉴
   workspace\                   프로그램 본체
     agent_ops\results\artifacts\   ← 만들어진 산출물 (run별 폴더)
     agent_ops\results\reports\     ← 브리핑/주간보고

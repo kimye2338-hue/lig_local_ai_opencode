@@ -41,12 +41,15 @@ def main() -> None:
     browser_names = {"browse_tabs", "read_web_page", "browser_action", "new_tab", "snapshot",
                      "find_clickables", "click", "screenshot", "wait_for_selector", "select_tab", "spa_map"}
     check("tool_definitions covers registry",
-          {"read_file", "replace_in_file"}.issubset(names)
-          and browser_names.issubset(names) and len(names) == 18)
+          {"read_file", "replace_in_file", "project_info", "remember"}.issubset(names)
+          and browser_names.issubset(names) and len(names) == 20)
     prompt_schema_bytes = len(AGENT_SYSTEM_PROMPT.encode("utf-8"))
     prompt_schema_bytes += len(json.dumps(defs, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
     # Browser action tools are explicit so weak models stop inventing unsupported tool names.
-    check("prompt and schema stay under 7.5KB", prompt_schema_bytes <= 7500, str(prompt_schema_bytes))
+    # Budget history: 7.5KB at 18 tools; +0.3KB for project_info/remember (folder
+    # profiles + durable memory writes — FABLE-OCD-WORKSPACE-PROFILES). Keep tight:
+    # every new tool must justify its schema bytes against weak-model call accuracy.
+    check("prompt and schema stay under 7.8KB", prompt_schema_bytes <= 7800, str(prompt_schema_bytes))
 
     r = d.dispatch({"name": "browser_action", "arguments": {"action": "no_such_browser_action"}})
     check("browser_action rejects invented actions without Chrome",

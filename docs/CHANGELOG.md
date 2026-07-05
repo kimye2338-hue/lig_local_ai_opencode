@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-07-05 - ocd folder profiles + shared global memory + patch package
+
+- New `ocd` command (installed to `%USERPROFILE%\OpenCodeLIG\bin`, on PATH):
+  opens OpenCodeLIG in the current folder, seeding `.opencodelig\`
+  (profile.json / PERSONA.md / PROJECT_MEMORY.md / RULES.md / TASKS.md) on
+  first run only — customized files are never overwritten. `ai` opens the menu.
+- Agent context assembly now injects, in order: global memory recall →
+  folder PROJECT_MEMORY → folder PERSONA → folder RULES → task, with the
+  documented conflict rule (safety/global preferences > local persona;
+  local rules > generic defaults; conflicts reported, not swallowed).
+- New LLM tools `project_info` (context-source diagnostics) and `remember`
+  (durable global-memory writes from inside a run) — implemented AND exposed
+  through the dispatcher registry + tool schema, per the self-extension rule.
+- Doctor now reports cwd / global memory dir / folder profile state.
+- `core.run_cmd` captures child output as bytes and decodes UTF-8→CP949→replace,
+  fixing Korean CMD mojibake in captured output (RUNTIME_LESSONS §4).
+- Browser CDP exposure finished: `test_browser_adapter` updated for the SPA
+  action set (was still pinned to the old five-action tuple).
+- New `release/build_patch.py`: builds `OpenCodeLIG_PATCH_<date>.zip`
+  (패치.bat + workspace overlay) that updates program files only — backs up
+  changed files, never touches `OpenCodeLIG_USERDATA` (memory preserved),
+  regenerates bin launchers. Companion to the full install bundle.
+- Tests: `test_ocd_profiles.py` (25 checks), `test_patch_build.py` (21 checks).
+
 ## 2026-07-05 - agent_ops runtime rebuild + company validation
 
 ### Final polish (same day, ultracode full review)

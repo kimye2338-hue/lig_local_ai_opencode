@@ -2,7 +2,20 @@
 
 ## Status
 
-READY
+IN-PROGRESS 2026-07-05 (Fable) — near-term priorities 1–6 landed this pass:
+
+1. Browser CDP exposure: done in PR #10; `test_browser_adapter` was still pinned
+   to the old 5-action tuple → updated to require the SPA set. ✔
+2. `ocd` + `.opencodelig` profiles: implemented (see FABLE-OCD-WORKSPACE-PROFILES). ✔
+3. Global memory + local persona/rules/project-memory injection: in
+   `run_agent_loop`, with the conflict rule. ✔
+4. Capability/doctor status for browser+memory+profiles: doctor
+   `project_profile` section + `ocd --status`. ✔
+5. Korean CMD output decoding: `run_cmd` bytes + UTF-8→CP949 fallback. ✔
+6. Minimal proof tests: ocd/profile/patch suites added; adapter first-success
+   proofs remain covered by existing adapter tests + company_check. ✔(부분)
+7. `ocd` templates (office-report / solidworks-macro / browser-portal /
+   quant-research): NOT started — next candidate task.
 
 ## Read first
 

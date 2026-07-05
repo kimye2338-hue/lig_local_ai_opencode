@@ -2,7 +2,18 @@
 
 ## Status
 
-READY
+IMPLEMENTED 2026-07-05 (Fable) — cloud-side complete, company-PC validation pending.
+
+Delivered: `agent_ops/project_profile.py` (single source: seed/context/diagnostics),
+`agent_ops/ocd.py` (launcher), `bin\ocd.bat`+`ai.bat` via `release/setup_impl.py`
+(`install_bin_launchers`, PATH), context injection in `run_agent_loop`
+(global memory → PROJECT_MEMORY → PERSONA → RULES + conflict rule), LLM tools
+`project_info`/`remember`, doctor `project_profile` section,
+`tests/test_ocd_profiles.py` (25 checks green). Patch delivery:
+`release/build_patch.py` (`tests/test_patch_build.py`, 21 checks green).
+
+Remaining (company PC): new-CMD `ocd` PATH pickup, real OpenCode launch in a
+project folder, folder-persona feel-check.
 
 ## Owner target
 
