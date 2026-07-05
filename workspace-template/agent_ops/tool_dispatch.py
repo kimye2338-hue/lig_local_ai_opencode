@@ -47,6 +47,12 @@ ToolFn = Callable[[Path, Dict[str, Any]], Dict[str, Any]]
 _BROWSER_HINT = (" — 디버그 크롬이 필요합니다: launch\\chrome-debug.bat 로 크롬을 연 뒤 다시 시도"
                  " (이미 떠 있는 일반 크롬 창은 보이지 않습니다)")
 
+_BROWSER_OPTION_KEYS = (
+    "url", "tab", "selector", "text", "index", "timeout", "max_length",
+    "max_text_length", "max_html_length", "limit", "filename", "wait_seconds",
+    "load_timeout", "output_dir", "max_clicks", "include_clickables",
+)
+
 
 def tool_browse_tabs(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
     from .adapters import browser_cdp
@@ -72,16 +78,47 @@ def tool_read_web_page(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
         if not opened.get("ok"):
             return {"ok": False, "error": str(opened.get("error", "")) + _BROWSER_HINT,
                     "root_cause_category": "browser_unavailable"}
-    title = browser_cdp.execute("get_title", dict(opts))
-    text = browser_cdp.execute("extract_text",
-                               {**opts, "max_length": int(args.get("max_length") or 4000)})
-    if not text.get("ok"):
-        return {"ok": False, "error": str(text.get("error", "")) + _BROWSER_HINT,
+    snap = browser_cdp.execute("snapshot", {**opts, "max_text_length": int(args.get("max_length") or 4000),
+                                            "include_clickables": False})
+    if not snap.get("ok"):
+        # Compatibility fallback for older local adapters.
+        title = browser_cdp.execute("get_title", dict(opts))
+        text = browser_cdp.execute("extract_text", {**opts, "max_length": int(args.get("max_length") or 4000)})
+        if not text.get("ok"):
+            return {"ok": False, "error": str(text.get("error", snap.get("error", ""))) + _BROWSER_HINT,
+                    "root_cause_category": "browser_unavailable"}
+        return {"ok": True, "data": {"title": (title.get("data") or {}).get("title", ""),
+                                      "url": url,
+                                      "text": (text.get("data") or {}).get("text", ""),
+                                      "truncated": (text.get("data") or {}).get("truncated", False)}}
+    data = snap.get("data") or {}
+    return {"ok": True, "data": {"title": data.get("title", ""),
+                                  "url": data.get("url") or url,
+                                  "text": data.get("text", ""),
+                                  "truncated": data.get("text_truncated", False)}}
+
+
+def tool_browser_action(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
+    from .adapters import browser_cdp
+    action = str(args.get("action") or "")
+    if not action:
+        return {"ok": False, "error": "action is required", "root_cause_category": "missing_argument"}
+    if action not in getattr(browser_cdp, "ACTIONS", ()):  # do not let model invent arbitrary adapter calls
+        return {"ok": False,
+                "error": "unsupported browser action: %s; available=%s" % (action, ", ".join(browser_cdp.ACTIONS)),
+                "root_cause_category": "invalid_argument"}
+    opts = {k: v for k, v in args.items() if k in _BROWSER_OPTION_KEYS and v not in (None, "")}
+    res = browser_cdp.execute(action, opts)
+    if not res.get("ok"):
+        return {"ok": False, "error": str(res.get("error", "")) + _BROWSER_HINT,
                 "root_cause_category": "browser_unavailable"}
-    return {"ok": True, "data": {"title": (title.get("data") or {}).get("title", ""),
-                                 "url": url,
-                                 "text": (text.get("data") or {}).get("text", ""),
-                                 "truncated": (text.get("data") or {}).get("truncated", False)}}
+    return {"ok": True, "data": res.get("data", {})}
+
+
+def _browser_tool(action: str) -> ToolFn:
+    def run(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
+        return tool_browser_action(root, {"action": action, **args})
+    return run
 
 
 REGISTRY: Dict[str, Dict[str, Any]] = {
@@ -93,7 +130,16 @@ REGISTRY: Dict[str, Dict[str, Any]] = {
     "search_files":    {"fn": tool_search_files,    "required": ["query"],                "optional": ["path", "pattern"],   "description": "Search text across files"},
     "run_diagnostic":  {"fn": tool_run_diagnostic,  "required": [],                       "optional": [],                    "description": "Check workspace health"},
     "browse_tabs":     {"fn": tool_browse_tabs,     "required": [],                       "optional": [],                    "description": "List open Chrome tabs (needs debug Chrome)"},
-    "read_web_page":   {"fn": tool_read_web_page,   "required": [],                       "optional": ["url", "tab", "max_length"], "description": "Read page text: url to open, or tab(index/substring) = already-open tab"},
+    "read_web_page":   {"fn": tool_read_web_page,   "required": [],                       "optional": ["url", "tab", "max_length"], "description": "Read rendered page text: url to open, or tab(index/title/url)"},
+    "browser_action":  {"fn": tool_browser_action,  "required": ["action"],               "optional": list(_BROWSER_OPTION_KEYS), "description": "Advanced Chrome CDP action: new_tab/select_tab/snapshot/find_clickables/click/screenshot/wait_for_selector/spa_map"},
+    "new_tab":         {"fn": _browser_tool("new_tab"),          "required": [], "optional": ["url"], "description": "Open a new debug Chrome tab"},
+    "snapshot":        {"fn": _browser_tool("snapshot"),         "required": [], "optional": ["tab", "max_length", "max_text_length", "max_html_length"], "description": "Snapshot rendered SPA page text/html"},
+    "find_clickables": {"fn": _browser_tool("find_clickables"),  "required": [], "optional": ["tab", "limit"], "description": "List clickable page elements"},
+    "click":           {"fn": _browser_tool("click"),            "required": [], "optional": ["tab", "selector", "text", "index", "wait_seconds"], "description": "Click page element by selector/text/index"},
+    "screenshot":      {"fn": _browser_tool("screenshot"),       "required": [], "optional": ["tab", "filename"], "description": "Capture current page screenshot"},
+    "wait_for_selector":{"fn": _browser_tool("wait_for_selector"),"required": [], "optional": ["tab", "selector", "text", "timeout"], "description": "Wait until selector/text appears"},
+    "select_tab":      {"fn": _browser_tool("select_tab"),       "required": [], "optional": ["tab", "index"], "description": "Activate an open debug Chrome tab"},
+    "spa_map":         {"fn": _browser_tool("spa_map"),          "required": [], "optional": ["tab", "output_dir", "max_clicks", "wait_seconds"], "description": "Explore current SPA menu/clickable map"},
 }
 
 _PARAM_DESCRIPTIONS = {
@@ -104,7 +150,26 @@ _PARAM_DESCRIPTIONS = {
     "count": "max replacements",
     "query": "search text",
     "pattern": "glob, e.g. **/*.md",
+    "action": "browser action name",
+    "url": "URL",
+    "tab": "tab index or title/url substring",
+    "selector": "CSS selector",
+    "text": "visible text substring",
+    "index": "clickable or tab index",
+    "timeout": "seconds",
+    "max_length": "max text length",
+    "max_text_length": "max text length",
+    "max_html_length": "max html length; 0 disables html",
+    "limit": "maximum item count",
+    "filename": "output filename",
+    "wait_seconds": "seconds to wait after click",
+    "load_timeout": "page load timeout seconds",
+    "output_dir": "output directory",
+    "max_clicks": "maximum clicks to explore",
+    "include_clickables": "true/false",
 }
+
+_INT_PARAMS = {"count", "index", "timeout", "max_length", "max_text_length", "max_html_length", "max_clicks", "limit"}
 
 
 def tool_definitions() -> List[Dict[str, Any]]:
@@ -112,7 +177,7 @@ def tool_definitions() -> List[Dict[str, Any]]:
     defs = []
     for name, spec in REGISTRY.items():
         props = {
-            arg: {"type": "integer" if arg == "count" else "string",
+            arg: {"type": "integer" if arg in _INT_PARAMS else "string",
                   "description": _PARAM_DESCRIPTIONS.get(arg, "")}
             for arg in spec["required"] + spec["optional"]
         }
@@ -217,7 +282,7 @@ class ToolDispatcher:
                     args = {}
             if not isinstance(args, dict):
                 args = {}
-            target = args.get("path") or args.get("target") or ""
+            target = args.get("path") or args.get("target") or args.get("url") or args.get("selector") or ""
             name = call.get("name", "")
             risk = classify_risk(name, str(target), self.root)
             audit_record({
@@ -233,10 +298,11 @@ class ToolDispatcher:
 
 
 AGENT_SYSTEM_PROMPT = (
-    "You are a local file agent operating inside a workspace. "
+    "You are a local file and browser agent operating inside a workspace. "
     "Use the provided tools to complete the task. All paths are relative to "
-    "the workspace root. For file tasks, use tools before answering. Copy filenames exactly. "
-    "When the task is complete, reply with a plain-text "
+    "the workspace root. For browser tasks, use browse_tabs/read_web_page first, "
+    "then snapshot/find_clickables/click/wait_for_selector/screenshot/spa_map as needed. "
+    "Copy filenames exactly. When the task is complete, reply with a plain-text "
     "summary and no tool call."
 )
 
