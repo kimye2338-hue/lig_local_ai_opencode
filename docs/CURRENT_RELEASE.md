@@ -1,8 +1,26 @@
 # Current release
 
-Status date: 2026-07-01
+Status date: 2026-07-05
 
-## Decision
+## agent_ops runtime (offline bring-in bundle)
+
+The office-automation runtime is delivered as an offline install bundle built from
+this repo (no GitHub access needed on the company PC).
+
+- Build: `py -3.11 release\build_bundle.py --date YYYYMMDD` after populating
+  `release\prefetch\` (8 office/COM wheels + python-embed; hashes in
+  `release/dependencies.json`, verified by `release/verify_prefetch.py`).
+- Install: `release\setup.bat` on the company PC (`pip --no-index`, no internet).
+- Bundle contents: `workspace-template` runtime + wheels + python-embed +
+  internal `MANIFEST_SHA256.txt`. No secrets/hosts (pre-zip scan refuses them).
+
+**Company validation — 2026-07-05** (`probe/results/company_check_20260705.md`):
+real gateway pipeline end-to-end + 6/6 business scenarios passed. Adapters
+office(Excel)/outlook/matlab/hwp/autocad/browser are `available`; SolidWorks
+(connect-only), Fluent, and office Word/PPT convert remain pending. Remaining step:
+company pilot day-1 (12 tasks, `workspace-template/docs/PILOT_DAY1.md`).
+
+## OpenCode TUI artifact
 
 Use the latest successful `LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE` artifact from the `Build LIG OpenCode offline package` workflow on `main`.
 

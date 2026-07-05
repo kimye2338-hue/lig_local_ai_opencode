@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-07-05 - agent_ops runtime rebuild + company validation
+
+Major milestone: the `agent_ops` office-automation runtime was rebuilt on the
+`rebuild/fable5-open-architecture` branch and validated on the company PC.
+
+- **Runtime**: stdlib-only core (weak-model tool-call recovery parser, LIG provider
+  fallback, resilient LLM runtime with injectable transport, sandboxed file tools,
+  mock/real agent loop, checkpoint/resume), keyword-routed capability planner with a
+  NEGATIVE_CORPUS bench guard, input-grounded artifact generation + per-kind quality
+  validators, approval gate + audit log, schedule/briefing, secretary capabilities.
+- **Adapters**: COM (Excel/Word/PPT/Outlook/HWP/SolidWorks), batch (MATLAB/AutoCAD/
+  Fluent), browser CDP. Optional-import graceful degradation; execution gated behind
+  approval.
+- **Company validation (2026-07-05)**: real gateway pipeline end-to-end (tool-use loop)
+  succeeded; 6/6 business scenarios passed. Adapters office(Excel)/outlook/matlab/hwp/
+  autocad/browser flipped to `available` with recorded evidence
+  (`probe/results/company_check_20260705.md`). SolidWorks (connect-only), Fluent, and
+  office Word/PPT convert remain pending.
+- **Offline bring-in** (`release/`): per-file SHA256 prefetch manifest, `build_bundle.py`
+  (transparent zip + internal MANIFEST_SHA256, secret refusal), offline `setup.bat`
+  (`pip --no-index`), `verify_prefetch.py`, air-gap rehearsal pre-flight + procedure.
+  Pilot deps = 8 office/COM wheels + python-embed (all hashes measured); local-serving
+  and voice binaries deferred.
+- **Diagnostics** (`probe/`): single-file `company_check.py` -> one `.md` report,
+  auto-detecting a co-located runtime to run doctor + mock + real gateway E2E.
+- **Security**: internal hostname purged from git history (git-filter-repo, all branches
+  + main); secret-scan pre-commit; no secrets/hosts in code, commits, bundles, or reports.
+- **OpenCode integration** (`docs/OPENCODE_INTEGRATION.md`): agent_ops runs as a parallel
+  CLI (no external-runtime hook in OpenCode plugins), confirmed against official docs.
+
 ## 2026-07-01 - Repository cleanup and source-of-truth reset
 
 - Merged PR #4 into `main`.
