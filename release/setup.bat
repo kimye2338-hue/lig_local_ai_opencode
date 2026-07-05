@@ -4,7 +4,11 @@ rem No internet used (pip --no-index). No -ExecutionPolicy Bypass.
 chcp 65001 >nul
 set PYTHONUTF8=1
 setlocal
-set "ROOT=%~dp0"
+rem 이 파일은 번들의 release\ 안에 있다 — 번들 루트는 한 단계 위.
+for %%I in ("%~dp0..") do set "ROOT=%%~fI\"
+rem 안전망: 혹시 다른 위치에서 실행되면 workspace-template가 보이는 쪽을 루트로.
+if not exist "%ROOT%workspace-template\" if exist "%~dp0workspace-template\" set "ROOT=%~dp0"
+if not exist "%ROOT%workspace-template\" if exist "%CD%\workspace-template\" set "ROOT=%CD%\"
 set "TARGET=%USERPROFILE%\OpenCodeLIG"
 set "USERDATA=%USERPROFILE%\OpenCodeLIG_USERDATA"
 set "ENVFILE=%USERDATA%\secrets\lig-api.env"
@@ -15,6 +19,12 @@ echo  ==============================================
 echo    OpenCodeLIG 설치를 시작합니다 (오프라인)
 echo  ==============================================
 echo.
+if not exist "%ROOT%workspace-template\" (
+    echo [중단] 번들 구조를 찾지 못했습니다 ^(workspace-template 폴더 없음^).
+    echo        zip을 통째로 푼 폴더에서  설치.bat  을 실행했는지 확인하세요.
+    echo        탐색 위치: %ROOT%
+    goto :the_end
+)
 
 rem --- 1. Python 3.11 찾기 (py -3.11 / python / python3.11 / python3) ---
 set "PYEXE="

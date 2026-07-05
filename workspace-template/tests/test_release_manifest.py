@@ -133,6 +133,13 @@ def _check_bundle_build() -> None:
         check("root installer is CRLF", inst.count(b"\n") == inst.count(b"\r\n") > 0, "LF installer")
         setup = zf.read("release/setup.bat")
         check("setup.bat is CRLF", setup.count(b"\n") == setup.count(b"\r\n") > 0, "LF setup")
+        # setup.bat lives in release/ but must treat the BUNDLE ROOT (its parent)
+        # as ROOT — regression guard for the '%~dp0' path bug that broke install
+        # (looked for release\workspace-template / release\release\prefetch).
+        check("setup.bat resolves ROOT to bundle root (parent of release/)",
+              b'%~dp0..' in setup, "ROOT not parent-resolved")
+        check("setup.bat guards missing workspace-template with a clear stop",
+              "번들 구조를 찾지 못했습니다".encode("utf-8") in setup, "no structure guard")
         check("launch bats do not hardcode py -3.11",
               not any(b"py -3.11 agent_ops" in zf.read(n) for n in names
                       if n.endswith(".bat") and "launch/" in n and not n.endswith("_py.bat")),
