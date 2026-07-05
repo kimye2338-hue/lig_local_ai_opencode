@@ -83,17 +83,20 @@ Do not reintroduce `<spinner>` in this offline build unless a future OpenTUI/run
 
 The patch must implement a permission approval policy toggle independent from OpenCode agent/persona/workflow/model state.
 
-Checklist:
+Checklist (2026-07-05: FULL mode added by explicit user request):
 
-- `Shift+Tab` toggles permission policy only.
+- `Shift+Tab` cycles permission policy only: ASK → AUTO → FULL → ASK.
 - `Shift+Tab` does not cycle agent/persona/workflow/model/plan/autopilot.
 - Previous-agent reverse cycle is `Shift+F3`.
-- TUI displays current mode, for example `[PERM:ASK shift+tab]` or `[PERM:AUTO shift+tab]`.
-- `/permission status`, `/permission ask`, `/permission auto`, `/permission cycle` work.
-- `/perm status`, `/perm ask`, `/perm auto`, `/perm cycle` work.
-- AUTO replies to permission requests with `reply: "once"`.
-- AUTO must not use `reply: "always"`.
-- AUTO must not bypass command guard or explicit deny behavior.
+- TUI displays current mode, e.g. `[PERM:ASK shift+tab]`, `[PERM:AUTO shift+tab]`,
+  `[PERM:FULL shift+tab]` (FULL badge uses the error color as a visual warning).
+- `/permission status|ask|auto|full|cycle` and `/perm ...` aliases work.
+- AUTO replies to permission requests with `reply: "once"` — never "always".
+- FULL (완전 오토) replies with `reply: "always"` — the same permission is
+  remembered for the session. This is a deliberate opt-in tier; AUTO keeps the
+  original once-only guarantee.
+- Neither AUTO nor FULL may bypass command guard or explicit core deny
+  (deny is resolved before a request is surfaced to the TUI).
 - ASK mode must preserve the original prompt flow.
 - Reject, always, and subagent reject flows must not be broken.
 

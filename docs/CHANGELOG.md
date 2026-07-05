@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-05 - FULL (완전 오토) permission tier
+
+- TUI patch: permission policy is now a 3-way cycle ASK → AUTO → FULL
+  (Shift+Tab). AUTO keeps replying `once` per request; FULL replies `always`
+  so the same permission is remembered for the rest of the session — the
+  fewest-interruption tier the user asked for. `/permission full` (+ `/perm`)
+  added; FULL badge renders in the error color as a visual caution.
+- Boundaries unchanged: explicit core `deny` is resolved before a request is
+  surfaced, and command-guard keeps blocking dangerous bash in every tier.
+- CI applies the patch with `git apply --recount` (headers recounted from
+  body); apply/typecheck/build validation happens in the PR workflow.
+
 ## 2026-07-05 - 3 modes, guaranteed recall, image pet, IME mitigation
 
 - **Modes reduced to 3**: built-in `build`(일반) / `plan`(계획) + one unified
