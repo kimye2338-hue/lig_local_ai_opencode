@@ -94,6 +94,42 @@ def run_doctor(workspace: Path, ud: Path) -> bool:
     return True
 
 
+def install_global_brain(home: Path, workspace: Path) -> None:
+    """OpenCode 전역 설정(~/.config/opencode)에 페르소나/명령을 설치한다.
+
+    이렇게 하면 사용자가 '아무 폴더'에서 opencode를 켜도 같은 업무 비서
+    페르소나가 뜨고, agent_ops 런타임을 절대경로로 호출한다(폴더 무관).
+    기억/일정/감사는 USERDATA 전역이므로 폴더가 달라도 이어진다.
+    """
+    src = workspace / ".opencode"
+    if not src.is_dir():
+        return
+    dst = home / ".config" / "opencode"
+    abs_runtime = (workspace / "agent_ops" / "agentops.py").as_posix()
+    for sub in ("agents", "commands", "plugins"):
+        s = src / sub
+        if not s.is_dir():
+            continue
+        d = dst / sub
+        d.mkdir(parents=True, exist_ok=True)
+        for f in s.rglob("*"):
+            if not f.is_file():
+                continue
+            rel = f.relative_to(s)
+            out = d / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            if f.suffix in (".md", ".ts", ".json"):
+                text = f.read_text(encoding="utf-8")
+                # 전역 사본은 어느 폴더에서든 동작해야 하므로 런타임 경로를 절대화.
+                text = text.replace("agent_ops/agentops.py", abs_runtime)
+                text = text.replace("agent_ops/menu.py",
+                                    (workspace / "agent_ops" / "menu.py").as_posix())
+                out.write_text(text, encoding="utf-8")
+            else:
+                shutil.copy2(f, out)
+    print(f"       OpenCode 전역 페르소나 설치: {dst} (아무 폴더에서나 동일 비서)")
+
+
 def desktop_launcher(home: Path) -> None:
     desktop = home / "Desktop"
     if not desktop.is_dir():
@@ -120,6 +156,7 @@ def main(argv=None) -> int:
     ud = make_userdata(home)
     gateway_env(ud, interactive=not a.no_input)
     ok &= run_doctor(workspace, ud)
+    install_global_brain(home, workspace)
     desktop_launcher(home)
 
     print()

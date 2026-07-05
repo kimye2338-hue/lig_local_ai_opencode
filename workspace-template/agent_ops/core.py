@@ -26,7 +26,15 @@ POLICIES = AGENT_OPS / "policies"
 CONFIG = AGENT_OPS / "config"
 ARCHIVE = AGENT_OPS / "archive"
 LOCKS = AGENT_OPS / "locks"
-MEMORY = ROOT / ".agent-memory"
+# 기억은 '전역'이다 — 어느 폴더에서 작업하든 같은 기억을 공유해 점점 똑똑해진다.
+# 우선순위: AGENTOPS_MEMORY_DIR(명시) > AGENTOPS_ROOT/.agent-memory(테스트 격리)
+#           > %USERPROFILE%\OpenCodeLIG_USERDATA\memory (기본: 전역)
+MEMORY = Path(
+    os.environ.get("AGENTOPS_MEMORY_DIR")
+    or (Path(os.environ["AGENTOPS_ROOT"]) / ".agent-memory"
+        if os.environ.get("AGENTOPS_ROOT") else
+        Path.home() / "OpenCodeLIG_USERDATA" / "memory")
+)
 PORTAL = ROOT / "portal_research"
 
 def now() -> str:
