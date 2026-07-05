@@ -257,6 +257,26 @@ def main() -> None:
     if excel_com._PYWIN32_ERROR:
         print(f"\nSKIP Excel COM live checks - skipped, not failed; ALL {PASS} STATIC CHECKS PASSED (office adapters)")
         return
+    # --- work --execute dispatch: office/hwp mappings ------------------------
+    from agent_ops.adapters import plan_execution
+
+    md = tmp_root / "문서.md"
+    md.write_text("# 문서\n", encoding="utf-8")
+    bas = tmp_root / "macro_excel.bas"
+    bas.write_text("Sub M()\nEnd Sub\n", encoding="utf-8")
+
+    doc_entry = plan_execution(["document"], [str(md)])[0]
+    check("dispatch document maps to hwp md_to_hwp",
+          doc_entry["adapter"] == "hwp" and doc_entry["ready"] is True
+          and "md_to_hwp" in doc_entry["reason"], str(doc_entry))
+    vba_no_xlsx = plan_execution(["vba_macro"], [str(bas)])[0]
+    check("dispatch vba without xlsx input stays no-auto-run with manual guide",
+          vba_no_xlsx["ready"] is False and "xlsx" in vba_no_xlsx["reason"]
+          and "수동" in vba_no_xlsx["reason"], str(vba_no_xlsx))
+    vba_with = plan_execution(["vba_macro"], [str(bas)], [str(tmp_root / "장부.xlsx")])[0]
+    check("dispatch vba with xlsx input becomes ready (copy policy inside adapter)",
+          vba_with["ready"] is True and vba_with["adapter"] == "office", str(vba_with))
+
     print(f"\nALL {PASS} CHECKS PASSED (office adapters)")
 
 

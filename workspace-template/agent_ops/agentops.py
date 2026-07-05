@@ -97,12 +97,15 @@ def _print_artifact_result(plan: dict, result: dict, inputs) -> None:
             print(f"  - {item}")
 
 
-def _work_risk_items(plan: dict, execute: bool) -> list[dict]:
+def _work_risk_items(plan: dict, execute: bool, input_paths=()) -> list[dict]:
     items = []
     for kind in plan.get("artifact_kinds", []):
         items.append({"action_kind": "create_file", "target": f"results/artifacts/{kind}", "risk": "safe"})
     if execute:
-        for kind in plan.get("artifact_kinds", []):
+        # 실제로 자동 실행될 어댑터 매핑에만 dangerous 승인 항목을 만든다
+        # (매핑 없는 kind에 가짜 위험 항목을 만들지 않는다 — 승인 신뢰 유지).
+        from agent_ops.adapters import executable_kinds
+        for kind in executable_kinds(plan.get("artifact_kinds", []), input_paths):
             items.append({"action_kind": "adapter_execute", "target": kind, "risk": "dangerous"})
     return items
 
@@ -121,27 +124,27 @@ def _audit_work(run_id: str, task: str, name: str, verdict: str, detail: str = "
     })
 
 
-def _adapter_execution_summary(plan: dict, artifact_result: dict, execute: bool) -> list[dict]:
+def _adapter_execution_summary(plan: dict, artifact_result: dict, execute: bool,
+                               input_paths=()) -> list[dict]:
     if not execute:
         return [{"adapter": "-", "verdict": "not requested", "detail": "--execute 미지정"}]
-    from agent_ops.adapters import ADAPTERS
+    from agent_ops.adapters import plan_execution
     summaries = []
-    artifact_kinds = set(plan.get("artifact_kinds", []))
-    for adapter_id, spec in ADAPTERS.items():
-        if not artifact_kinds.intersection(set(spec.get("consumes", []))):
-            continue
-        if not spec.get("available"):
-            summaries.append({"adapter": adapter_id, "verdict": "adapter pending", "detail": spec.get("pending", "")})
-            continue
-        execute_fn = spec.get("execute")
-        if not callable(execute_fn):
-            summaries.append({"adapter": adapter_id, "verdict": "adapter pending", "detail": "execute callable 없음"})
-            continue
-        # 어댑터는 실기 검증(available)됐지만, artifact_kind -> 어댑터 action 자동 매핑
-        # (생성된 .bas/.m/.scr 를 어느 action으로 실행할지)은 파일럿에서 개별 검증한다.
-        # 여기서 임의 action을 호출해 실패로 보고하지 않는다(과거 미배선 상태의 스텁 제거).
-        summaries.append({"adapter": adapter_id, "verdict": "available",
-                          "detail": spec.get("validated", "") or "실행 매핑은 파일럿 검증 대기"})
+    entries = plan_execution(plan.get("artifact_kinds", []),
+                             artifact_result.get("files", []), input_paths)
+    for e in entries:
+        if e["ready"]:
+            result = e["invoke"]()
+            ok = bool(result.get("ok"))
+            detail = e["reason"] if ok else str(result.get("error", ""))[:160]
+            if ok and result.get("out_path"):
+                detail += f" -> {result['out_path']}"
+            summaries.append({"adapter": e["adapter"],
+                              "verdict": "ok" if ok else "failed",
+                              "detail": detail})
+        else:
+            summaries.append({"adapter": e["adapter"] if e["adapter"] != "-" else e["kind"],
+                              "verdict": "no-auto-run", "detail": e["reason"]})
     return summaries or [{"adapter": "-", "verdict": "adapter pending", "detail": "matching adapter 없음"}]
 
 
@@ -436,7 +439,7 @@ def cmd_agent(args):
             for item in cfg.get("missing", []):
                 print(f"  - {item}", file=sys.stderr)
             print(f"  설정 파일 위치: {SECRET_ENV_PATH}", file=sys.stderr)
-            print("  회사 PC에서 lig-api.env를 채운 뒤 다시 실행하세요 (company validation pending).", file=sys.stderr)
+            print("  lig-api.env 를 채운 뒤 다시 실행하세요.", file=sys.stderr)
             return 2
         print("[real 모드] LIG gateway로 실제 요청을 보냅니다.")
         result = run_agent_loop(task, WS_ROOT, max_turns=args.max_turns,
@@ -445,6 +448,9 @@ def cmd_agent(args):
     out = RESULTS / "llm_responses" / "agent_cli_last.md"
     atomic_write_text(out, result.get("final_content", ""))
     print(f"결과: {result['outcome']}  (턴 {result['turns']}, 도구 실행 {len(result['tool_results'])}회)")
+    if result.get("outcome") == "local_fallback":
+        print("[게이트웨이 오류] 모든 제공자 폴백이 실패했습니다 — 네트워크/게이트웨이 상태를"
+              " 확인한 뒤 다시 시도하세요.", file=sys.stderr)
     failed = [r for r in result["tool_results"] if not r.get("ok")]
     if failed:
         print(f"실패한 도구 호출 {len(failed)}건: " + ", ".join(
@@ -478,7 +484,8 @@ def cmd_work(args):
     _record_work_context(ctx)
     _audit_work(run_id, task, "plan", "approved", "planned")
 
-    risks = _work_risk_items(plan, bool(getattr(args, "execute", False)))
+    input_paths = list(getattr(args, "input", []) or [])
+    risks = _work_risk_items(plan, bool(getattr(args, "execute", False)), input_paths)
     approval = request_approval(risks, assume_yes=bool(getattr(args, "yes", False)))
     _audit_work(run_id, task, "approval", "approved" if approval.get("approved") else "denied",
                 approval.get("mode", ""), risk="dangerous" if approval.get("dangerous_count") else "safe")
@@ -487,16 +494,55 @@ def cmd_work(args):
         return 3
 
     if plan["artifact_kinds"]:
+        mode = getattr(args, "mode", "mock")
+        llm_client = None
+        if mode == "real":
+            from agent_ops.lig_providers import SECRET_ENV_PATH, validate_config
+            cfg = validate_config()
+            if cfg.get("ready"):
+                from agent_ops.lig_runtime import chat_with_fallback
+                capability_ids = [c["id"] for c in plan.get("capabilities", [])]
+                def llm_client(prompt, _ids=capability_ids):
+                    return chat_with_fallback([{"role": "user", "content": prompt}],
+                                              capability_ids=_ids)
+                print("[real 모드] 게이트웨이 LLM으로 산출물 내용을 채웁니다 (품질검사 통과분만 반영).")
+            else:
+                print("[real 모드] LIG provider 설정이 없어 서식(scaffold)만 생성합니다.", file=sys.stderr)
+                for item in cfg.get("missing", []):
+                    print(f"  - {item}", file=sys.stderr)
+                print(f"  설정 파일: {SECRET_ENV_PATH} 를 채우면 내용까지 채워집니다.", file=sys.stderr)
+        else:
+            print("[mock 모드] 실제 모델 호출 없이 서식/규칙 기반으로 생성합니다 (--mode real 로 내용 채움).")
         artifact_result = generate_artifacts(task, plan["artifact_kinds"],
                                              out_dir=RESULTS / "artifacts" / run_id,
-                                             context=ctx)
+                                             context=ctx,
+                                             enrich=llm_client is not None,
+                                             llm_client=llm_client)
+        enr = artifact_result.get("enrichment", {})
+        if enr.get("requested"):
+            print(f"LLM 내용 채움: {enr.get('status', '')}")
+            for fb in enr.get("fallback", [])[:3]:
+                print(f"  - {fb.get('file')}: {fb.get('reason')}")
         _print_artifact_result(plan, artifact_result, inputs)
         _audit_work(run_id, task, "artifacts", "approved" if artifact_result.get("ok") else "failed",
                     f"{len(artifact_result.get('files', []))} files")
         work_step = {"name": "artifacts", "verdict": "approved" if artifact_result.get("ok") else "failed"}
-        adapter_summary = _adapter_execution_summary(plan, artifact_result, bool(getattr(args, "execute", False)))
+        adapter_summary = _adapter_execution_summary(plan, artifact_result,
+                                                      bool(getattr(args, "execute", False)),
+                                                      input_paths)
     else:
         agent_result = _run_agent_work(task, plan, getattr(args, "mode", "mock"))
+        if agent_result.get("outcome") == "config_missing":
+            from agent_ops.lig_providers import SECRET_ENV_PATH, validate_config
+            print("[real 모드] LIG provider 설정이 준비되지 않았습니다.", file=sys.stderr)
+            for item in validate_config().get("missing", []):
+                print(f"  - {item}", file=sys.stderr)
+            print(f"  설정 파일 위치: {SECRET_ENV_PATH}", file=sys.stderr)
+            print("  lig-api.env 를 채운 뒤 다시 실행하세요.", file=sys.stderr)
+            return 2
+        if agent_result.get("outcome") == "local_fallback":
+            print("[게이트웨이 오류] 모든 제공자 폴백이 실패했습니다 — 네트워크/게이트웨이 상태를"
+                  " 확인한 뒤 다시 시도하세요. (진단: OpenCodeLIG_USERDATA\\diagnostics)", file=sys.stderr)
         out = RESULTS / "llm_responses" / f"work_{run_id}.md"
         atomic_write_text(out, agent_result.get("final_content", ""))
         artifact_result = {

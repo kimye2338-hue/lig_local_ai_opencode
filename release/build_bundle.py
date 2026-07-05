@@ -137,7 +137,7 @@ def build(date: str, out_dir: Path) -> Path:
                   "2. 게이트웨이 주소/API 키를 붙여넣으세요 (모르면 그냥 Enter — 나중에 설정 가능).\r\n"
                   "3. 끝. 바탕화면에 생긴  AI비서  를 실행하면 됩니다.\r\n"
                   "\r\n"
-                  "문제가 생기면: docs\\RUNBOOK.md 또는 워크스페이스의 launch\\diag.bat 실행.\r\n")
+                  "문제가 생기면: workspace-template\\docs\\RUNBOOK.md 또는 워크스페이스의 launch\\diag.bat 실행.\r\n")
 
     manifest_lines = ["# MANIFEST_SHA256 — every archived file", f"# bundle: {zip_path.name}", ""]
     print(f"packing {len(all_files)} files ({len(source)} source + {len(prefetch)} prefetch) ...")

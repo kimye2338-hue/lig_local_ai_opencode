@@ -29,15 +29,15 @@
    → A-3의 값과 **일치**해야 함. 불일치 시 전송 손상 — 재복사.
 7. zip 해제(탐색기 또는 `tar -xf`). 자기추출 exe 사용 금지(투명 zip만).
 
-## C. 설치 (회사 PC)
+## C. 설치 (회사 PC) — 더블클릭 한 번
 
-8. 해제 폴더 루트에서 **`release\setup.bat`** 실행. 단계별 출력:
-   - `[OK] Python 3.11 present` — 없으면 `[STOP]` + 안내(번들 python-embed 또는 회사 Python).
-   - `[OK] Wheels installed` — `pip --no-index`로 번들 wheel만(인터넷 접근 없음).
-   - `[OK] Workspace at %USERPROFILE%\OpenCodeLIG\workspace`
-   - `[OK] USERDATA at %USERPROFILE%\OpenCodeLIG_USERDATA`
-   - `[OK] doctor completed`
-   - 실패 시: 각 `[STOP]`/`[WARN]`이 원인과 다음 행동을 출력한다(조용한 실패 없음).
+8. 해제 폴더 루트의 **`설치.bat` 더블클릭**. 설치기가 [1/6]~[6/6] 순서로 자동 진행:
+   - Python 3.11 자동 탐지(`py -3.11`→`python`→`python3.11`→`python3`)
+   - 라이브러리 오프라인 설치(`pip --no-index`, 인터넷 없음)
+   - 프로그램 배치(`%USERPROFILE%\OpenCodeLIG\workspace`) + 데이터 폴더
+   - **게이트웨이 설정**: 주소/API 키 붙여넣기(모르면 Enter로 건너뜀 — 나중에 설정 가능)
+   - 자가 진단(doctor) + **바탕화면 [AI비서] 바로가기 생성**
+   - 실패 시: 각 `[중단]`/`[주의]`가 원인과 다음 행동을 출력한다(조용한 실패 없음).
 
 ## D. 확인 (doctor 기대값)
 
@@ -45,15 +45,16 @@
    - `encoding.roundtrip_ok: true` (UTF-8 왕복)
    - `operations.runbook: true` (RUNBOOK 동봉 확인)
    - `capabilities`/`adapters` 섹션 출력(secret 없이 presence flag만)
-   - `lig_api_config.ready`는 아직 **false 정상** — E 단계 후 true.
+   - `lig_api_config.ready` — 설치 때 게이트웨이 값을 넣었으면 true, 건너뛰었으면 false.
    - 실패 시: `docs\RUNBOOK.md`의 해당 증상 행을 따른다.
 
-## E. lig-api.env 작성 (수동, 커밋·반출 금지)
+## E. 게이트웨이 값 (설치 때 건너뛴 경우만)
 
-10. `%USERPROFILE%\OpenCodeLIG_USERDATA\secrets\lig-api.env`에 회사 gateway 값 입력
-    (`LIG_API_KEY`, 라우트 3줄은 `/gateway/` 접두 — 실측: 누락 시 404).
+10. 설치 5단계에서 Enter로 건너뛰었다면
+    `%USERPROFILE%\OpenCodeLIG_USERDATA\secrets\lig-api.env` 를 열어
+    `LIG_GATEWAY_BASE_URL` / `LIG_API_KEY` 두 값을 채운다.
     - **이 파일은 절대 git/번들/채팅에 넣지 않는다.** 진단·보고에는 presence flag만.
-11. `launch\gateway-smoke.bat` → 3라우트 준비 확인(미설정 시 무엇이 빠졌는지 + exit 2).
+11. 바탕화면 [AI비서] → `5. 게이트웨이 점검` 으로 연결 확인(미설정 시 무엇이 빠졌는지 안내).
 12. 이후는 `docs\PILOT_DAY1.md`(파일럿 1일차)로 이어진다.
 
 ## 금지 요약

@@ -46,6 +46,8 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-05 **★★ 울트라코드 최종 풀 검토 완결 (plan/reviews/FINAL-2026-07-05-ultracode.md)**: 42-에이전트 검증(요구 14건 커버리지 + 5차원 리뷰 + 22건 전건 적대검증) 후 Fable 직접 수정. **플래그십 결함 2건 해소**: ① `work --mode real` 산출물 enrich 미연결(빈 서식만) → 실 게이트웨이 LLM 내용 채움 연결(품질 게이트+scaffold 폴백, 3경로 실측) ② `--execute` 무동작 → `plan_execution()` 안전 dispatch(matlab/hwp/excel/autocad, 전제 없으면 정직한 no-auto-run, 가짜 MATLAB E2E 실측). ③ 'HWP 변환' 오라우팅 수술(document로, bench 220) ④ 설치 원클릭(설치.bat→바탕화면 AI비서, 런처 11종 py-폴백) ⑤ 메뉴 v2(실패 안내·최신 폴더·일정/Outlook) ⑥ 문서 12건 정합(Sonnet 병렬). 회귀 20 green(dispatch 테스트 신규 포함), secret scan 통과. **파일럿이 이제 진짜 UX를 측정한다.**
+
 - 2026-07-05 **AutoCAD 재검증 성공 → available 전환 (Fable 승인)**: 계측기 `/i` 누락 버그를 고친 단독 스크립트(제품 autocad_batch와 동일하게 `/i` 시드 dwg + `/s` scr)를 회사 AutoCAD 2019 accoreconsole에서 실행 → 원 그리기+SAVEAS 저장 성공. autocad 어댑터 `available:True`(validated 기록), test_batch_adapters/capability_bench 갱신. **이로써 업무 시나리오 6/6 전부 성공.** app-validation 완료 어댑터 = office(Excel)/outlook/matlab/hwp/autocad + browser. 잔여 pending = solidworks(connect만), fluent(미검증), office Word/PPT 변환. 회귀 green 유지.
 
 

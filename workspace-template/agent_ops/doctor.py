@@ -234,7 +234,7 @@ def run_doctor() -> dict:
             "semantic_planner": "pending — plan_task(task, planner=...) hook ready",
             "quality_validator_available": quality_available,
             "llm_enrichment": ("mock available via generate_artifacts(enrich=True, llm_client=...); "
-                               "real LLM fill: company validation pending"),
+                               "real LLM fill: work --mode real 에서 자동 (게이트웨이 설정 시; 실측 2026-07-05)"),
             "enrich_diagnostics": str(_diag_dir / "artifact-enrich-last.json"),
             "last_bench_result": {"path": str(bench_file), "exists": bench_file.exists(),
                                   "checks_passed": bench_info.get("checks_passed"),

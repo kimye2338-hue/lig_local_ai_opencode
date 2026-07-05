@@ -159,6 +159,9 @@ def build_briefing(now: datetime | None = None) -> tuple[Path, str]:
         audit_summary,
         "",
     ]
+    if not (today or week or due_soon):
+        lines += ["> 일정이 비어 있습니다 — AI비서 메뉴의 [일정 추가]로 등록하거나 "
+                  "[Outlook 일정 가져오기]로 동기화하세요.", ""]
     text = "\n".join(lines)
     path = RESULTS / "reports" / f"briefing_{current.strftime('%Y%m%d')}.md"
     atomic_write_text(path, text)

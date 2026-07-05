@@ -1,8 +1,16 @@
 # AI handoff
 
-This is the single shared handoff file for Codex, Claude Code, Claude chat, and future reviewers.
+This is the single shared handoff file for Codex, Claude Code, Claude chat, and future reviewers. It covers two tracks: the **agent_ops runtime / offline bundle** (this section) and the **patched OpenCode TUI** (rest of this file).
 
-## Current state
+## agent_ops runtime track (2026-07-05 기준 현황)
+
+- 런타임(`workspace-template/agent_ops/`)이 재구축되어 **회사 PC에서 실측 검증됨**: doctor·mock work·real agent E2E 전부 성공, 업무 시나리오 6/6 성공. 근거: `probe/results/company_check_20260705.md`.
+- 배포는 오프라인 번들 설치 — 번들 zip을 풀고 **`설치.bat`** 더블클릭 한 번으로 끝(빌드는 `release/build_bundle.py`).
+- 작업은 `plan/STATUS.md` 보드에서 관리(지시서 `plan/tasks/`, 보고서 `plan/reports/`, 리뷰 `plan/reviews/`).
+- 최종 리뷰: `plan/reviews/FINAL-2026-07-04.md` (클라우드에서 가능한 작업 전량 완결 판정).
+- 남은 것: 회사 파일럿 12종 UX 실주행 — 절차서 `workspace-template/docs/PILOT_DAY1.md`.
+
+## Current state (patched OpenCode TUI track)
 
 The repository builds one current offline Windows package through one workflow:
 

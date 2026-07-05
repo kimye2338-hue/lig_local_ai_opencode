@@ -2,6 +2,20 @@
 
 ## 2026-07-05 - agent_ops runtime rebuild + company validation
 
+### Final polish (same day, ultracode full review)
+
+- One-click install: bundle-root `설치.bat` + interactive gateway setup + desktop
+  [AI비서] menu; all launcher BATs CRLF + shared Python 3.11 resolver (_py.bat).
+- `work --mode real` now actually fills artifact content via the gateway LLM
+  (quality-gated enrich, scaffold fallback); `work --execute` actually runs safe
+  adapter mappings (matlab/.m, document->.hwp, macro->input .xlsx copy,
+  autocad with input .dwg) and reports unmapped kinds honestly as no-auto-run.
+- 'HWP/Word 변환' routes to document generation (no more stray AutoCAD/VBA kinds).
+- Clear Korean guidance on missing gateway config and total-gateway-failure paths.
+- 22 verified findings (10 must / 12 should) from a 42-agent review, all fixed;
+  regression 20 green + new dispatch tests; docs (INSTALL/VALIDATION/
+  REPOSITORY_MAP/AI_HANDOFF/launch README) aligned to the validated state.
+
 Major milestone: the `agent_ops` office-automation runtime was rebuilt on the
 `rebuild/fable5-open-architecture` branch and validated on the company PC.
 

@@ -216,6 +216,46 @@ def main() -> None:
         else:
             os.environ["FLUENT_EXE"] = old_fluent
 
+    # --- work --execute dispatch (plan_execution) ---------------------------
+    from agent_ops.adapters import plan_execution, executable_kinds
+
+    disp_dir = tmp_root / "dispatch"
+    disp_dir.mkdir(exist_ok=True)
+    m_file = disp_dir / "작업.m"
+    m_file.write_text("disp('ok')\n", encoding="utf-8")
+    fake_m2 = _write_fake_exe(
+        tmp_root / "fake_matlab_dispatch",
+        win_body="@echo off\r\necho MATLAB dispatch ok\r\nexit /b 0\r\n",
+        unix_body="#!/bin/sh\necho MATLAB dispatch ok\nexit 0\n",
+    )
+    os.environ["MATLAB_EXE"] = str(fake_m2)
+    try:
+        entries = plan_execution(["matlab_script"], [str(m_file)])
+        check("dispatch maps matlab_script to matlab adapter",
+              len(entries) == 1 and entries[0]["adapter"] == "matlab" and entries[0]["ready"], str(entries))
+        run = entries[0]["invoke"]()
+        check("dispatch matlab invoke actually executes",
+              run.get("ok") is True and run.get("returncode") == 0, str(run))
+    finally:
+        os.environ.pop("MATLAB_EXE", None)
+
+    scr_file = disp_dir / "작업.scr"
+    scr_file.write_text("_CIRCLE\n0,0\n10\n", encoding="utf-8")
+    no_dwg = plan_execution(["autocad_script"], [str(scr_file)])
+    check("dispatch autocad without input dwg stays no-auto-run",
+          no_dwg[0]["ready"] is False and ".dwg" in no_dwg[0]["reason"], str(no_dwg))
+    with_dwg = plan_execution(["autocad_script"], [str(scr_file)], [str(disp_dir / "도면.dwg")])
+    check("dispatch autocad with input dwg becomes ready",
+          with_dwg[0]["ready"] is True and with_dwg[0]["adapter"] == "autocad", str(with_dwg))
+
+    check("executable_kinds probe honors prerequisites",
+          executable_kinds(["matlab_script", "autocad_script", "slide_outline"]) == ["matlab_script"]
+          and "autocad_script" in executable_kinds(["autocad_script"], ["도면.dwg"]),
+          str(executable_kinds(["matlab_script", "autocad_script", "slide_outline"])))
+    check("unmapped kind reports honest no-auto-run",
+          plan_execution(["slide_outline"], ["slide_outline.md"])[0]["reason"].startswith("자동 실행 매핑 없음"),
+          str(plan_execution(["slide_outline"], ["slide_outline.md"])))
+
     print(f"\nALL {PASS} CHECKS PASSED (batch adapters)")
 
 

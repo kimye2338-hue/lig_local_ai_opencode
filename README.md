@@ -18,22 +18,23 @@
 - 잔여(pending): SolidWorks 매크로 실행(연결만 확인), Fluent, office의 Word/PPT 변환.
 - 남은 단계: 회사 파일럿 12종 UX 실주행(`workspace-template/docs/PILOT_DAY1.md`).
 
-## 오프라인 반입 설치 (agent_ops)
+## 설치 — 더블클릭 한 번 (사내 PC)
 
-집/개발 PC에서 번들을 만들어 사내 PC에 물리 반입한다. 인터넷 접근 없이 설치된다.
+번들 zip을 풀고 **`설치.bat` 을 더블클릭**하면 끝. 설치기가 Python 탐지 → 라이브러리
+오프라인 설치(`pip --no-index`) → 프로그램 배치 → **게이트웨이 주소/키 입력(붙여넣기,
+모르면 Enter)** → 진단 → **바탕화면 [AI비서] 바로가기**까지 자동으로 한다.
+매일 쓸 때는 바탕화면 [AI비서] 하나만 실행하면 된다(업무 시키기/브리핑/주간보고/진단 메뉴).
+
+번들 만들기 (집/개발 PC, 인터넷 O):
 
 ```bat
-:: 집/개발 PC (인터넷 O) — 의존성 prefetch 후 번들 빌드
 py -3.11 -m pip download --only-binary=:all: --platform win_amd64 --python-version 3.11 ^
   --implementation cp --abi cp311 -d release\prefetch pywin32 openpyxl python-pptx
-py -3.11 release\build_bundle.py --date YYYYMMDD      :: -> release\dist\OpenCodeLIG_BUNDLE_*.zip
-
-:: 사내 PC (인터넷 X) — 반입 후
-release\setup.bat            :: py3.11 확인 -> pip --no-index wheel 설치 -> workspace 배치 -> doctor
+py -3.11 release\build_bundle.py --date YYYYMMDD   :: -> release\dist\OpenCodeLIG_BUNDLE_*.zip
 ```
 
-- 전 과정: `workspace-template/docs/BRING_IN_CHECKLIST.md`
-- 반입 전 집에서 air-gap 리허설: `docs/OFFLINE_REHEARSAL.md`
+- 상세 설치 안내: `docs/INSTALL.md` · 전 과정 체크리스트: `workspace-template/docs/BRING_IN_CHECKLIST.md`
+- 반입 전 집 air-gap 리허설: `docs/OFFLINE_REHEARSAL.md`
 - 파일럿 필수 = office/COM wheel 8종 + python-embed(전부 매니페스트 실측 해시). 로컬 LLM 서빙
   (llama.cpp/GGUF)·음성(whisper/ffmpeg)은 `deferred`(사내 게이트웨이가 LLM 서빙하므로 파일럿 불필요).
 
@@ -66,6 +67,8 @@ release/                       오프라인 반입 설치 (agent_ops)
 probe/                         환경 계측
   company_check.py               단일 파일 종합 계측기 -> .md 하나
   results/                       회사 실측 결과 (sanitized)
+results/                       어댑터 실기 검증 증거 (workspace-template/agent_ops/results/adapter_validation/)
+skills/                        AI 워커용 스킬 문서 (app-adapter/repo-conventions/worker-loop 등)
 workspace-template/            사내 PC workspace로 설치되는 트리
   agent_ops/                     런타임 (코어 stdlib + 어댑터)
   tests/                         py -3.11 tests\test_*.py (네트워크 없음)

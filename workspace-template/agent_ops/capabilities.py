@@ -38,7 +38,10 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "outputs": [".md", ".txt"],
         "pending": [],
         "keywords": ["문서", "보고서", "작성", "요약", "정리", "메모", "설명서",
-                     "document", "report", "summary", "write up"],
+                     "document", "report", "summary", "write up",
+                     # 문서 변환 요청(HWP/Word로 바꿔줘)은 CAD/매크로가 아니라 문서 경로.
+                     # 실제 변환 실행(.md -> .hwp)은 work --execute의 hwp dispatch가 담당.
+                     "한글", "hwp", "워드", "word", "변환"],
     },
     "macro_generation": {
         "description": "앱 매크로 코드 생성 (VBA .bas 등) — 실행은 해당 앱 필요",
@@ -130,15 +133,15 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
                      "메카니컬", "spaceclaim", "icepak", "cfd", "fea"],
     },
     "office_cad_automation": {
-        "description": "Office/CAD 앱 자동화 (SolidWorks/Excel/Word/PowerPoint/HWP) — 매크로/절차 산출물",
+        "description": "CAD/SolidWorks 앱 자동화 — 매크로/배치 스크립트 산출물",
         "status": "scaffold_available",
         "artifact_kinds": ["vba_macro", "autocad_script", "document"],
-        "outputs": ["SolidWorks VBA", "Excel VBA", "자동화 절차 문서"],
-        "pending": ["app validation pending: SolidWorks/Office/HWP 실제 실행",
-                    "app validation pending: AutoCAD 2019 accoreconsole 실제 실행",
-                    "dependency pending: COM 제어 채택 시 pywin32"],
+        "outputs": ["SolidWorks VBA", "AutoCAD .scr", "자동화 절차 문서"],
+        "pending": ["app validation pending: SolidWorks 매크로 실행 (COM 연결은 2026-07-05 확인)"],
+        # 문서 변환(HWP/Word)은 document_generation 담당 — 여기 키워드에 넣지 않는다
+        # (과거 'hwp/워드' 포함이 'HWP 변환' 요청에 autocad_script까지 emit하는 오라우팅 유발).
         "keywords": ["solidworks", "솔리드웍스", "cad", "좌표", "어셈블리", "파트",
-                     "도면", "word", "워드", "한글파일", "hwp", "com 자동화"],
+                     "도면", "autocad", "오토캐드", "com 자동화"],
     },
 }
 

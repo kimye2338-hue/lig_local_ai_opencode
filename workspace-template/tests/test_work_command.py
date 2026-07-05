@@ -72,18 +72,27 @@ def test_success_with_execute_pending() -> None:
     body = report.read_text(encoding="utf-8")
     required = ["## 요청", "## 계획", "## 승인", "## 산출물과 품질", "## audit 요약", "## pending", "## 다음 명령"]
     check("work report has required sections", all(item in body for item in required), body)
-    check("work report records adapter pending", "adapter pending" in body, body)
+    # --execute semantics: kinds without a safe auto-mapping are reported
+    # honestly as no-auto-run (vba_macro without an input .xlsx here).
+    check("work report records no-auto-run for unmapped execute", "no-auto-run" in body, body)
+    check("no-auto-run explains manual path", "수동" in body or "실행 생략" in body, body)
     run_id = report.stem.replace("work_", "")
     check("artifact folder reuses run id", (ws / "agent_ops" / "results" / "artifacts" / run_id).exists(), run_id)
     rows = read_jsonl(Path(env["LIG_AUDIT_DIR"]) / "audit.jsonl")
     run_ids = {row["run_id"] for row in rows if row.get("run_id")}
     check("audit uses one run id for success", run_ids == {run_id}, str(rows))
-    check("audit stores task summary", all("Excel 매크로" in row.get("task", "") for row in rows), str(rows))
+    # adapters append their own audit rows (kind=adapter, no run task) — scope
+    # the task-summary assertion to the work command's own rows.
+    work_rows = [row for row in rows if row.get("kind") == "work"]
+    check("audit stores task summary", work_rows and all("Excel 매크로" in row.get("task", "") for row in work_rows), str(rows))
 
 
 def test_denied_before_artifacts() -> None:
     ws, env = env_for("denied")
-    r = run_work(["--task", "크롬에서 페이지 열고 텍스트 추출해줘", "--execute"], env, stdin="n\n")
+    # matlab task: matlab adapter is available -> --execute creates a dangerous
+    # approval row -> interactive prompt -> 'n' denies. (Kinds with no auto-run
+    # mapping no longer create fake dangerous rows, so use an executable kind.)
+    r = run_work(["--task", "시험 데이터 매트랩 후처리 스크립트 만들어줘", "--execute"], env, stdin="n\n")
     out = decode(r.stdout) + decode(r.stderr)
     check("work denial exits 3", r.returncode == 3, out)
     check("work denial explains stop", "승인 거부로 중단" in out, out)
