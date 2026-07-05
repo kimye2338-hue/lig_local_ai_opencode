@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Unit tests for local_tools + ToolDispatcher (stdlib only, no network).
 
-Run: py -3.11 tests\\test_tool_dispatch.py
+Run: py -3.11 tests\test_tool_dispatch.py
 """
 from __future__ import annotations
 
@@ -38,13 +38,19 @@ def main() -> None:
     # --- registry / definitions ---
     defs = tool_definitions()
     names = {x["function"]["name"] for x in defs}
+    browser_names = {"browse_tabs", "read_web_page", "browser_action", "new_tab", "snapshot",
+                     "find_clickables", "click", "screenshot", "wait_for_selector", "select_tab", "spa_map"}
     check("tool_definitions covers registry",
-          "read_file" in names and "replace_in_file" in names
-          and "browse_tabs" in names and "read_web_page" in names and len(names) == 9)
+          {"read_file", "replace_in_file"}.issubset(names)
+          and browser_names.issubset(names) and len(names) == 18)
     prompt_schema_bytes = len(AGENT_SYSTEM_PROMPT.encode("utf-8"))
     prompt_schema_bytes += len(json.dumps(defs, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-    # 브라우저 2도구 추가로 상향 — 약모델 tool-call 안정선은 P11 floor 실측상 ~3KB까지 여유.
-    check("prompt and schema stay under 2.8KB", prompt_schema_bytes <= 2800, str(prompt_schema_bytes))
+    # Browser action tools are explicit so weak models stop inventing unsupported tool names.
+    check("prompt and schema stay under 7.5KB", prompt_schema_bytes <= 7500, str(prompt_schema_bytes))
+
+    r = d.dispatch({"name": "browser_action", "arguments": {"action": "no_such_browser_action"}})
+    check("browser_action rejects invented actions without Chrome",
+          not r["ok"] and r["root_cause_category"] == "invalid_argument", str(r))
 
     # --- write then read (Korean path + content) ---
     r = d.dispatch({"name": "write_file", "arguments": {"path": "메모/노트.md", "content": "첫 줄\n둘째 줄\n"}})
