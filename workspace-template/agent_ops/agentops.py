@@ -767,6 +767,18 @@ def cmd_briefing(args):
     print(text)
     print(f"브리핑 저장: {path}")
     rebuild_quietly()   # 아침마다 지식책 자동 갱신 (리마인더 등록 시 무인 동작)
+    # 위키 정리도 매일 아침 자동으로: schtasks 리마인더가 이미 이 명령을
+    # 매일 08:30 에 돌리므로, 새 스케줄 인프라 없이 "scheduled agent" 패턴을
+    # 얻는다 (사람이 memorycheck 를 따로 안 돌려도 lint 가 스스로 돈다).
+    try:
+        from agent_ops.wiki_manager import lint
+        report = lint()
+        issues = (len(report["duplicates"]) + len(report["orphan_pages"])
+                  + len(report["stale_topics"]) + len(report.get("contradictions", [])))
+        if issues:
+            print(f"위키 점검: 확인 필요 {issues}건 (wiki\\log.md 참고)")
+    except Exception:
+        pass
     return 0
 
 

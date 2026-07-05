@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-07-05 - LLM Wiki: community-extension techniques (researched, not invented)
+
+User asked to research how the community actually extended Karpathy's LLM Wiki
+gist and apply proven techniques under our offline/never-silently-delete
+constraints. Read 4 sources (Karpathy's original gist, rohitg00's "LLM Wiki
+v2", the theaioperator.io rebuild critique, green-dalii/obsidian-llm-wiki) and
+adopted what fits; explicitly rejected auto-decay/auto-reconciliation because
+those sources themselves warn against it for exactly our use case ("bugs you
+forget are bugs you repeat").
+
+- **Contradiction detection** (rohitg00 + Karpathy's "flag for human review"):
+  `lint()` now finds same-topic record pairs with high keyword+tag overlap
+  where negation-marker presence differs, and reports them — never decides
+  which side is right, never deletes either. Surfaced in the daily briefing
+  output and as a red banner in the knowledge book.
+- **Alias/synonym expansion** (green-dalii/obsidian-llm-wiki "mandatory
+  aliases"), scoped to search-time only: `wiki/aliases.json` (seeded,
+  user-editable) lets `recall_pages()` find the "excel" page when asked about
+  "엑셀" — page names/grouping are untouched so existing pages never get
+  silently renamed.
+- **Backlinks** (same plugin's bidirectional links): a text-scan pass over
+  every auto + `wiki/manual/` page finds `[[topic]]` mentions and adds a
+  "언급된 곳" section, complementing the existing co-occurrence-based
+  "관련 주제" forward links.
+- **Reinforcement signal** (honest version of rohitg00's confidence scoring,
+  which the sources themselves criticize as "false precision"): pages show
+  a plain repeat count ("반복 확인된 규칙: N건") instead of a fake decimal score.
+- Daily 08:30 scheduled briefing (already-existing Windows Task Scheduler
+  reminder) now also runs wiki lint, giving a real "scheduled agent" pass
+  without new infrastructure.
+- Tests: `test_wiki_manager.py` grew from 27 to 34 checks (alias expansion,
+  contradiction detection, backlinks, reinforcement note, book banner).
+
 ## 2026-07-05 - FULL (완전 오토) permission tier
 
 - TUI patch: permission policy is now a 3-way cycle ASK → AUTO → FULL

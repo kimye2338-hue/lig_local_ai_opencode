@@ -105,6 +105,47 @@ def main() -> None:
     check("recall_pages returns distilled excerpt",
           pages and pages[0]["topic"] == "excel" and "VBProject" in pages[0]["excerpt"], str(pages)[:120])
 
+    # --- 커뮤니티 확장 기법 (2026-07-05): 별칭/모순후보/백링크/강화신호 ---
+    # ① 별칭 확장: "엑셀"(한글)로 물어도 "excel"(영문) 페이지를 찾는다.
+    #    페이지 이름/그룹핑은 안 바뀐다 — 검색 시점에만 넓힌다.
+    alias_pages = wm.recall_pages(["엑셀"])
+    check("alias expansion finds excel page via 엑셀",
+          alias_pages and alias_pages[0]["topic"] == "excel", str(alias_pages)[:120])
+    aliases_file = json.loads(wm.ALIASES_FILE.read_text(encoding="utf-8"))
+    check("aliases file seeded with excel<->엑셀", "엑셀" in aliases_file.get("excel", []),
+          str(aliases_file.get("excel")))
+
+    # ② 반복 확인(강화 신호): "엑셀 피벗 교훈" 중복 제목이 lint 에도 잡히지만
+    #    페이지에는 긍정적 신호("반복 확인된 규칙/교훈")로도 나타나야 한다.
+    check("page shows reinforcement note for repeated title",
+          "반복 확인된 규칙/교훈" in page.read_text(encoding="utf-8"))
+
+    # ③ 모순 후보: 같은 주제("결재")에서 부정어 유무가 갈리고 문구가 겹치는
+    #    쌍을 lint 가 찾아야 한다 — 어느 쪽이 맞는지 자동 판단하지 않는다.
+    add_memory_event("preference", "결재 승인 규칙", "부서장 결재 없이 진행하면 안 된다",
+                     tags=["결재", "승인"])
+    add_memory_event("preference", "결재 승인 예외", "긴급 건은 부서장 결재 없이 진행한다",
+                     tags=["결재", "승인"])
+    report2 = wm.lint()
+    # 태그가 둘 다 붙어 있어("결재","승인") 어느 쪽 주제 버킷이 먼저 잡는지는
+    # 순서에 따라 달라질 수 있다 — 같은 쌍이 두 주제 중 하나에서만 잡히면 된다
+    # (동일 쌍 중복 보고 방지를 위해 전역 dedup 하기 때문).
+    check("lint flags contradiction candidate",
+          any(c["topic"] in ("결재", "승인") for c in report2["contradictions"]),
+          str(report2["contradictions"]))
+    check("contradiction report never deletes either side",
+          any("결재 승인 규칙" in c["a_title"] or "결재 승인 규칙" in c["b_title"]
+              for c in report2["contradictions"]))
+
+    # ④ 백링크: manual/ 페이지가 [[excel]] 을 언급하면 excel.md 에 역방향으로
+    #    나타나야 한다 (obsidian-llm-wiki 의 bidirectional link).
+    (wm.MANUAL_DIR / "포털노트.md").write_text("# 포털 노트\n엑셀 자동화는 [[excel]] 참고.\n",
+                                              encoding="utf-8")
+    wm.consolidate()
+    excel_text = page.read_text(encoding="utf-8")
+    check("backlink from manual page appears on excel.md",
+          "## 언급된 곳" in excel_text and "manual/포털노트" in excel_text, excel_text[-400:])
+
     from agent_ops.tool_dispatch import run_agent_loop
     captured = {}
 
@@ -147,6 +188,7 @@ def main() -> None:
     check("book renders excel page", "id='wiki-excel'" in html_text and "VBProject" in html_text)
     check("book renders wikilinks as anchors", "class='wl' href='#wiki-" in html_text)
     check("book shows manual page", "수동 노트" in html_text)
+    check("book shows contradiction banner", "모순 후보" in html_text and "결재 승인 규칙" in html_text)
 
     # --- memorycheck 가 위키 정리를 포함 ---
     from agent_ops.memory_manager import memorycheck
