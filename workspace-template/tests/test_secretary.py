@@ -117,6 +117,11 @@ def seed_weekly_fixtures(ws: Path, env: dict) -> None:
     art = ws / "agent_ops" / "results" / "artifacts" / "run-week" / "문서.md"
     art.parent.mkdir(parents=True, exist_ok=True)
     art.write_text("# 시험 결과 보고서\n", encoding="utf-8")
+    # 주간보고 아티팩트 창은 mtime 기준(secretary._weekly_artifacts). fixture 날짜(2026-07-04)
+    # 창 안에 들도록 mtime을 고정 — 실제 벽시계에 의존하지 않게(결정적).
+    from datetime import datetime as _dt
+    _ts = _dt(2026, 7, 3, 12, 0).timestamp()
+    os.utime(art, (_ts, _ts))
 
 
 def test_briefing_with_fixtures() -> None:

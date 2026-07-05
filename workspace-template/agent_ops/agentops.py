@@ -137,8 +137,11 @@ def _adapter_execution_summary(plan: dict, artifact_result: dict, execute: bool)
         if not callable(execute_fn):
             summaries.append({"adapter": adapter_id, "verdict": "adapter pending", "detail": "execute callable 없음"})
             continue
-        result = execute_fn("artifact", {"files": artifact_result.get("files", [])})
-        summaries.append({"adapter": adapter_id, "verdict": "ok" if result.get("ok") else "failed", "detail": result.get("error", "")})
+        # 어댑터는 실기 검증(available)됐지만, artifact_kind -> 어댑터 action 자동 매핑
+        # (생성된 .bas/.m/.scr 를 어느 action으로 실행할지)은 파일럿에서 개별 검증한다.
+        # 여기서 임의 action을 호출해 실패로 보고하지 않는다(과거 미배선 상태의 스텁 제거).
+        summaries.append({"adapter": adapter_id, "verdict": "available",
+                          "detail": spec.get("validated", "") or "실행 매핑은 파일럿 검증 대기"})
     return summaries or [{"adapter": "-", "verdict": "adapter pending", "detail": "matching adapter 없음"}]
 
 

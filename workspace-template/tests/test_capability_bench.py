@@ -598,9 +598,16 @@ def main() -> None:
           summary["browser"]["available"] is True
           and summary["browser"]["validated"].startswith("local Chrome CDP, ")
           and "company validation pending" in summary["browser"]["pending"])
-    check("non-browser adapters stay unavailable without app validation",
-          all(not a["available"] and "pending" in a["pending"]
-              for adapter_id, a in summary.items() if adapter_id != "browser"))
+    # Adapters available only with recorded validation evidence; the rest stay
+    # pending. (office/outlook/matlab/hwp validated on the company PC 2026-07-05.)
+    validated_available = {"browser", "office", "outlook", "matlab", "hwp"}
+    for adapter_id, a in summary.items():
+        if adapter_id in validated_available:
+            check(f"{adapter_id} available carries validation evidence",
+                  a["available"] is True and bool(a.get("validated")), str(a))
+        else:
+            check(f"{adapter_id} stays unavailable with pending reason",
+                  a["available"] is False and "pending" in a.get("pending", ""), str(a))
 
     # --- CLI: plan --make-artifacts end to end in an isolated workspace ---
     ws = tmp / "작업공간"

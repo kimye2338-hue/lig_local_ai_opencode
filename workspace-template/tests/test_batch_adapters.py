@@ -142,9 +142,10 @@ def main() -> None:
         check("artifact kind metadata includes autocad_script", "autocad_script" in ARTIFACT_KIND_INFO)
         check("office cad capability emits autocad_script",
               "autocad_script" in CAPABILITIES["office_cad_automation"]["artifact_kinds"])
-        check("matlab adapter registered unavailable",
-              ADAPTERS["matlab"]["available"] is False and ADAPTERS["matlab"].get("execute") is matlab_batch.execute)
-        check("autocad adapter registered unavailable",
+        check("matlab adapter validated available (회사 R2024a 2026-07-05)",
+              ADAPTERS["matlab"]["available"] is True and ADAPTERS["matlab"].get("execute") is matlab_batch.execute)
+        check("matlab validated cites company batch run", "R2024a" in ADAPTERS["matlab"].get("validated", ""))
+        check("autocad adapter stays unavailable (계측기 /i 누락으로 미검증)",
               ADAPTERS["autocad"]["available"] is False and ADAPTERS["autocad"].get("execute") is autocad_batch.execute)
 
         missing_jou = fluent_batch.execute(str(tmp_root / "missing.jou"), {})

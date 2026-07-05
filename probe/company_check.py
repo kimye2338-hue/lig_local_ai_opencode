@@ -728,29 +728,58 @@ def scn_outlook_read() -> dict:
     return info
 
 
+def _find_dwg_seed() -> str:
+    """accoreconsole /i 에 넘길 시드 도면. 제품 어댑터는 사용자 dwg를 쓰지만, 계측기는
+    시스템 템플릿(.dwt)을 시드로 사용한다(원본 없이 end-to-end 재현). 없으면 빈 문자열."""
+    import glob
+    pats = []
+    for root in (os.environ.get("LOCALAPPDATA", ""), os.environ.get("APPDATA", "")):
+        if root:
+            pats.append(root + r"\Autodesk\AutoCAD*\R*\enu\Template\acad*.dwt")
+    pats += [r"C:\AutoCAD*\UserDataCache\Template\acad*.dwt",
+             r"C:\Program Files\Autodesk\AutoCAD*\UserDataCache\Template\acad*.dwt",
+             r"C:\Program Files\Autodesk\AutoCAD*\Template\acad*.dwt"]
+    for p in pats:
+        hits = sorted(glob.glob(p))
+        if hits:
+            return hits[0]
+    return ""
+
+
 def scn_autocad_script() -> dict:
-    """accoreconsole로 사본 dwg에 .scr 실행 — CAD 배치 자동화 end-to-end."""
+    """accoreconsole로 시드 도면에 .scr 실행 — CAD 배치 자동화 end-to-end.
+    제품 어댑터(autocad_batch)와 동일하게 반드시 /i 로 입력 도면을 넘긴다(누락 시 exit 53)."""
     import glob
     hits = (sorted(glob.glob(r"C:\AutoCAD*\accoreconsole.exe"))
             + sorted(glob.glob(r"C:\Program Files\Autodesk\AutoCAD*\accoreconsole.exe")))
     exe = os.environ.get("ACCORECONSOLE_EXE", hits[-1] if hits else "")
     if not exe or not Path(exe).exists():
         return {"ok": False, "status": "accoreconsole.exe 미발견"}
+    seed = _find_dwg_seed()
+    if not seed:
+        return {"ok": None, "status": "seed 템플릿(.dwt) 미발견 — accoreconsole는 /i 입력 도면이 "
+                "있어야 동작(없으면 exit 53). 제품 어댑터는 사용자 dwg를 /i로 받으므로 정상. "
+                "실제 검증은 파일럿에서 사용자 dwg로."}
     tmpdir = Path(os.environ.get("TEMP", ".")) / f"occ_acad_{os.getpid()}"
     tmpdir.mkdir(exist_ok=True)
+    in_dwg = tmpdir / "seed.dwg"
+    try:
+        shutil.copy2(seed, in_dwg)   # 템플릿을 입력 도면 사본으로
+    except Exception as e:
+        return {"ok": False, "status": f"시드 복사 실패: {type(e).__name__}"}
     scr = tmpdir / "test.scr"
-    # 새 도면에 원 하나 그리고 사본으로 저장 후 종료 (원본 없이 동작)
     scr.write_text('_CIRCLE\n0,0\n10\n_SAVEAS\n2013\n"' + str(tmpdir / "out.dwg").replace("\\", "/") + '"\n_QUIT\n',
                    encoding="utf-8")
     t0 = time.time()
     try:
-        r = subprocess.run([exe, "/s", str(scr)], capture_output=True,
+        r = subprocess.run([exe, "/i", str(in_dwg), "/s", str(scr)], capture_output=True,
                            timeout=TIMEOUT_SCN_AUTOCAD - 10, text=True,
                            encoding="utf-8", errors="replace", cwd=str(tmpdir))
         secs = round(time.time() - t0, 1)
         made = (tmpdir / "out.dwg").exists()
         return {"ok": made or r.returncode == 0, "seconds": secs, "out_dwg_created": made,
-                "exit": r.returncode, "output_tail": ((r.stdout or "") + (r.stderr or "")).strip()[-150:]}
+                "exit": r.returncode, "seed": _mask_path(seed),
+                "output_tail": ((r.stdout or "") + (r.stderr or "")).strip()[-150:]}
     except subprocess.TimeoutExpired:
         return {"ok": False, "status": f"timeout(>{TIMEOUT_SCN_AUTOCAD-10}s) — 대화형 대기 가능성"}
     except Exception as e:

@@ -184,9 +184,9 @@ def main() -> None:
     check("spec_to_pptx succeeds", pptx.get("ok"), pptx)
     _open_generated_files(Path(docx["path"]), Path(pptx["path"]))
 
-    check("office available remains false", ADAPTERS["office"]["available"] is False)
-    check("office home smoke wording keeps 2016 pending",
-          "Office 2016 검증은 app validation pending" in ADAPTERS["office"].get("home_smoke", ""))
+    check("office validated available (회사 Excel 2026-07-05)", ADAPTERS["office"]["available"] is True)
+    check("office keeps Word/PPT convert pending honest",
+          "app validation pending" in ADAPTERS["office"].get("pending", ""))
 
     after = {image: _wait_count(image, count) for image, count in before.items()}
     check("Excel process count restored", after["EXCEL.EXE"] == before["EXCEL.EXE"], (before, after))

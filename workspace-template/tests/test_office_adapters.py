@@ -42,18 +42,23 @@ def check(label: str, cond: bool, detail: str = "") -> None:
 
 def main() -> None:
     office = ADAPTERS["office"]
-    check("office adapter remains unavailable", office["available"] is False)
+    check("office adapter validated available (회사 Excel 2026-07-05)", office["available"] is True)
     check("office adapter exposes execute", callable(office.get("execute")))
-    check("office home smoke is honest", "Office 2016 검증은 app validation pending" in office.get("home_smoke", ""))
+    check("office validated cites company Excel run",
+          "Excel" in office.get("validated", "") and "2026-07-05" in office.get("validated", ""))
+    check("office keeps Word/PPT convert pending honest", "app validation pending" in office.get("pending", ""))
     check("office consumes document conversion", "document" in office.get("consumes", []), str(office.get("consumes")))
     outlook = ADAPTERS["outlook"]
-    check("outlook adapter remains unavailable", outlook["available"] is False)
+    check("outlook adapter validated available (회사 Outlook 2026-07-05)", outlook["available"] is True)
+    check("outlook validated cites company read", "Outlook" in outlook.get("validated", ""))
     check("outlook adapter exposes execute", outlook.get("execute") is outlook_com.execute)
     hwp = ADAPTERS["hwp"]
-    check("hwp adapter remains unavailable", hwp["available"] is False)
+    check("hwp adapter validated available (회사 한글 2026-07-05)", hwp["available"] is True)
+    check("hwp validated cites company doc save", "한글" in hwp.get("validated", ""))
     check("hwp adapter exposes execute", hwp.get("execute") is hwp_com.execute)
     solidworks = ADAPTERS["solidworks"]
-    check("solidworks adapter remains unavailable", solidworks["available"] is False)
+    check("solidworks adapter stays unavailable (connect-only)", solidworks["available"] is False)
+    check("solidworks records connect smoke", "connect" in solidworks.get("home_smoke", "").lower())
     check("solidworks adapter exposes execute", solidworks.get("execute") is solidworks_com.execute)
     check("outlook actions keep send non-public",
           set(outlook_com.ACTIONS) == {"read_calendar", "sync_calendar", "read_inbox"}
