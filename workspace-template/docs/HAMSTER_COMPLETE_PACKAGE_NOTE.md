@@ -19,7 +19,6 @@ The ZIP contains:
 - installer `INSTALL_COMPLETE_HAMSTER_PET.cmd.txt`
 - `docs/FABLE_HAMSTER_CONNECT_PROMPT.md`
 
-The GitHub connector used here can write UTF-8 text files but is not a normal git binary-file upload path. For final repository integration, Fable should either:
+GitHub connector limitation note:
 
-1. copy the files from the complete ZIP into the repository using normal git, or
-2. use the provided docs/FABLE_HAMSTER_CONNECT_PROMPT.md to wire the runtime lifecycle first, then add the image assets from the ZIP.
+The connector used in this session can write normal UTF-8 text files, but it is not the same as a full git binary-file upload workflow. The complete ZIP includes all binary PNG/ICO assets and the complete Windows overlay implementation. For final repository integration, Fable should copy the files from the ZIP into the repository using a normal git workflow, then wire `status_writer.py` into the existing OpenCodeLIG runtime.
