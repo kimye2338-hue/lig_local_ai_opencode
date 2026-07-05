@@ -1,6 +1,6 @@
 ---
 description: 아침 브리핑 (오늘/이번주 일정, 마감, 액션아이템, 어제 요약)
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

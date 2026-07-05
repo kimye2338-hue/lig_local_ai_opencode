@@ -182,6 +182,12 @@ def run_doctor() -> dict:
         }
     except Exception as exc:
         checks["agent_runtime"] = {"error": repr(exc)}
+    # 폴더 프로필 + 전역 기억: ocd 가 어떤 컨텍스트를 잡는지 (secret-free).
+    try:
+        from .project_profile import profile_diagnostics
+        checks["project_profile"] = profile_diagnostics()
+    except Exception as exc:
+        checks["project_profile"] = {"error": exc.__class__.__name__}
     # What kinds of office/engineering work can be handled right now, and
     # which validations are still pending (secret-free inventory).
     try:
@@ -251,7 +257,7 @@ def run_doctor() -> dict:
     except Exception as exc:
         checks["artifact_pipeline"] = {"error": repr(exc)}
     atomic_write_json(RESULTS / "environment_check.json", checks)
-    lines = ["# AgentOps Doctor Report", "", f"- Generated: {checks['timestamp']}", f"- ChromeDriver found: `{found or 'NOT FOUND'}`", f"- Chrome 9222 OK: `{checks['chrome_9222'].get('ok')}`", f"- UTF-8 roundtrip OK: `{checks['encoding']['roundtrip_ok']}`", f"- LLM profile: `{checks.get('llm_endpoints', {}).get('profile', 'unknown')}`", f"- Local LLM reachable: `{checks.get('llm_endpoints', {}).get('local_reachable', {}).get('ok')}`", "", "## Raw", "```json", json.dumps(checks, ensure_ascii=False, indent=2), "```"]
+    lines = ["# AgentOps Doctor Report", "", f"- Generated: {checks['timestamp']}", f"- ChromeDriver found: `{found or 'NOT FOUND'}`", f"- Chrome 9222 OK: `{checks['chrome_9222'].get('ok')}`", f"- UTF-8 roundtrip OK: `{checks['encoding']['roundtrip_ok']}`", f"- LLM profile: `{checks.get('llm_endpoints', {}).get('profile', 'unknown')}`", f"- Local LLM reachable: `{checks.get('llm_endpoints', {}).get('local_reachable', {}).get('ok')}`", f"- Global memory dir: `{checks.get('project_profile', {}).get('global_memory_dir', 'unknown')}`", f"- Folder profile active: `{checks.get('project_profile', {}).get('project_profile_active')}`", "", "## Raw", "```json", json.dumps(checks, ensure_ascii=False, indent=2), "```"]
     atomic_write_text(REPORTS / "DOCTOR_REPORT.md", "\n".join(lines))
     update_checkpoint("doctor completed")
     return checks

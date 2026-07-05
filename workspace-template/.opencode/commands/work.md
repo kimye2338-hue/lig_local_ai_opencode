@@ -1,6 +1,6 @@
 ---
 description: 업무 지시 — agent_ops 런타임으로 산출물 생성 (real 모드)
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

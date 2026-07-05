@@ -1,6 +1,6 @@
 ---
 description: Explain external orchestrator use
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

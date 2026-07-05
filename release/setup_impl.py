@@ -95,6 +95,34 @@ def run_doctor(workspace: Path, ud: Path) -> bool:
     return True
 
 
+# 모드 3개(build/plan/agent) 정리(2026-07-05)로 제거된 구 primary 페르소나.
+# copytree 는 삭제를 전파하지 않으므로 설치/패치가 명시적으로 지운다 —
+# 안 지우면 Tab 순환에 구 모드가 계속 남는다.
+OBSOLETE_CONFIG_FILES = [
+    "agents/agentops-autopilot.md",
+    "agents/agentops-plan.md",
+    "agents/agentops-supervisor.md",
+]
+
+
+def remove_obsolete(home: Path, workspace: Path) -> None:
+    roots = [workspace / ".opencode",
+             home / ".config" / "opencode",
+             home / "OpenCodeLIG" / "userdata" / "config" / "opencode"]
+    removed = 0
+    for root in roots:
+        for rel in OBSOLETE_CONFIG_FILES:
+            target = root / rel
+            if target.is_file():
+                try:
+                    target.unlink()
+                    removed += 1
+                except OSError:
+                    pass
+    if removed:
+        print(f"       구버전 모드 파일 {removed}개 정리 (모드는 build/plan/agent 3개)")
+
+
 def install_global_brain(home: Path, workspace: Path) -> None:
     """OpenCode 전역 설정(~/.config/opencode)에 페르소나/명령을 설치한다.
 
@@ -102,6 +130,7 @@ def install_global_brain(home: Path, workspace: Path) -> None:
     페르소나가 뜨고, agent_ops 런타임을 절대경로로 호출한다(폴더 무관).
     기억/일정/감사는 USERDATA 전역이므로 폴더가 달라도 이어진다.
     """
+    remove_obsolete(home, workspace)
     src = workspace / ".opencode"
     if not src.is_dir():
         return
@@ -160,6 +189,7 @@ OC_JSON = """{
 # 내용은 ASCII만(cp949 파싱 안전). lig-api.env 를 프로세스 env로 로드해 {env:} 치환을 살린다.
 OC_BAT = (
     "@echo off\r\n"
+    "chcp 65001 >nul\r\n"
     "set \"OCODE_EXE=%USERPROFILE%\\OpenCodeLIG\\bin\\opencode.exe\"\r\n"
     "set \"OPENCODE_USERDATA=%USERPROFILE%\\OpenCodeLIG\\userdata\"\r\n"
     "set \"XDG_CONFIG_HOME=%OPENCODE_USERDATA%\\config\"\r\n"
@@ -174,10 +204,36 @@ OC_BAT = (
     "\"%OCODE_EXE%\" %*\r\n"
 )
 
+# 더블클릭 실행은 구형 콘솔(conhost)로 열린다 — 한국어 IME 조합이 밀리는 주 원인.
+# Windows Terminal(wt.exe)이 있으면 그쪽에서 연다 (없으면 기존 동작 그대로).
 RUN_BAT = (
     "@echo off\r\n"
+    "chcp 65001 >nul\r\n"
     "cd /d \"%USERPROFILE%\\OpenCodeLIG\\workspace\"\r\n"
+    "if defined WT_SESSION goto :direct\r\n"
+    "where wt.exe >nul 2>&1\r\n"
+    "if errorlevel 1 goto :direct\r\n"
+    "start \"\" wt.exe -d \"%USERPROFILE%\\OpenCodeLIG\\workspace\" cmd /k call \"%USERPROFILE%\\OpenCodeLIG\\bin\\oc.bat\"\r\n"
+    "exit /b 0\r\n"
+    ":direct\r\n"
     "call \"%USERPROFILE%\\OpenCodeLIG\\bin\\oc.bat\" %*\r\n"
+)
+
+# ocd.bat: '현재 폴더'를 프로젝트로 여는 런처 — .opencodelig 로컬 프로필을
+# 시드하고 전역 기억을 공유한 채 OpenCode를 그 폴더에서 실행한다.
+# 로직은 전부 agent_ops/ocd.py (파이썬)에 있다. 내용은 ASCII만.
+OCD_BAT = (
+    "@echo off\r\n"
+    "set \"LIG_WS=%USERPROFILE%\\OpenCodeLIG\\workspace\"\r\n"
+    "call \"%LIG_WS%\\launch\\_py.bat\"\r\n"
+    "if errorlevel 1 exit /b 9\r\n"
+    "%PY% \"%LIG_WS%\\agent_ops\\ocd.py\" %*\r\n"
+)
+
+# ai.bat: 아무 폴더에서 `ai` 로 일일 메뉴를 연다.
+AI_BAT = (
+    "@echo off\r\n"
+    "call \"%USERPROFILE%\\OpenCodeLIG\\workspace\\launch\\menu.bat\"\r\n"
 )
 
 VERIFY_BAT = (
@@ -213,6 +269,22 @@ def _add_user_path(bin_dir: Path) -> None:
         print("       PATH에 등록: 새 명령창부터 아무 폴더에서 `oc` 로 실행 가능.")
     except Exception as exc:  # noqa: BLE001 - 설치는 계속
         print(f"       (PATH 등록 생략: {type(exc).__name__} — oc.bat 전체 경로로 실행하세요)")
+
+
+def install_bin_launchers(home: Path) -> Path:
+    """bin 런처(ocd/ai) 설치 + PATH 등록 — OpenCode 동봉 여부와 무관하게 항상.
+
+    ocd 는 폴더-로컬 프로필 기능의 진입점이라 agent_ops-only 설치에서도
+    (프로필 시드/진단까지는) 동작해야 한다. 기존 파일은 덮어써 갱신하지만
+    사용자 데이터(OpenCodeLIG_USERDATA)는 절대 건드리지 않는다.
+    """
+    bin_dir = home / "OpenCodeLIG" / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    _write_ascii_bat(bin_dir / "ocd.bat", OCD_BAT)
+    _write_ascii_bat(bin_dir / "ai.bat", AI_BAT)
+    _add_user_path(bin_dir)
+    print("       명령 설치: 새 명령창에서 아무 폴더든 `ocd`(그 폴더에서 비서) / `ai`(메뉴)")
+    return bin_dir
 
 
 def install_opencode(home: Path, workspace: Path) -> None:
@@ -293,14 +365,18 @@ def desktop_launcher(home: Path) -> None:
         content = ('@echo off\r\n'
                    'start "" "%USERPROFILE%\\OpenCodeLIG_USERDATA\\memory\\book\\knowledge_book.html"\r\n')
         (desktop / "지식책.bat").write_bytes(content.encode("ascii"))
+    # 비서펫(햄스터 상태 오버레이) — 항상 위에 떠서 작업 상태를 알려준다.
+    content = ('@echo off\r\n'
+               'call "%USERPROFILE%\\OpenCodeLIG\\workspace\\launch\\hamster.bat"\r\n')
+    (desktop / "비서펫.bat").write_bytes(content.encode("ascii"))
     oc = home / "OpenCodeLIG" / "bin" / "oc.bat"
     if oc.exists():
         content = ('@echo off\r\n'
                    'call "%USERPROFILE%\\OpenCodeLIG\\workspace\\RUN_OPENCODE_LIG.bat"\r\n')
         (desktop / "오픈코드.bat").write_bytes(content.encode("ascii"))
-        print("       바탕화면에 [AI비서]/[오픈코드] 바로가기를 만들었습니다.")
+        print("       바탕화면에 [AI비서]/[오픈코드]/[비서펫] 바로가기를 만들었습니다.")
     else:
-        print("       바탕화면에 [AI비서] 바로가기를 만들었습니다.")
+        print("       바탕화면에 [AI비서]/[비서펫] 바로가기를 만들었습니다.")
 
 
 def main(argv=None) -> int:
@@ -317,6 +393,7 @@ def main(argv=None) -> int:
     gateway_env(ud, interactive=not a.no_input)
     ok &= run_doctor(workspace, ud)
     install_global_brain(home, workspace)
+    install_bin_launchers(home)
     install_opencode(home, workspace)
     seed_wiki(home, workspace)
     desktop_launcher(home)

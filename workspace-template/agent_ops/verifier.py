@@ -34,7 +34,7 @@ def verify() -> dict:
     opencode = read_json(ROOT / "opencode.json", {})
     instructions = opencode.get("instructions", []) if isinstance(opencode, dict) else []
     instruction_issues = [x for x in instructions if isinstance(x, str) and x.startswith(".agent-memory")]
-    required = [AGENT_OPS / "AGENTOPS_RULES.md", AGENT_OPS / "agentops.py", ROOT / ".opencode" / "agents" / "agentops-supervisor.md", ROOT / ".opencode" / "commands" / "continue.md", ROOT / ".agent-memory" / "memory.jsonl"]
+    required = [AGENT_OPS / "AGENTOPS_RULES.md", AGENT_OPS / "agentops.py", ROOT / ".opencode" / "agents" / "agent.md", ROOT / ".opencode" / "commands" / "continue.md", ROOT / ".agent-memory" / "memory.jsonl"]
     missing = [str(p) for p in required if not p.exists()]
     agent_issues = scan_agents()
     ok = all(r.get("ok") for r in compile_results) and not missing and not instruction_issues and not agent_issues

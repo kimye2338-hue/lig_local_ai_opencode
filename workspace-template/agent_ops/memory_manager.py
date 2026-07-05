@@ -49,6 +49,13 @@ def add_memory_event(kind: str, title: str, body: str, status: str = "active", p
                     r["deprecated_reason"] = "memory cap exceeded; auto-archived"
         write_jsonl(MEMORY_JSONL, rows)
     render_memory_views()
+    # ingest 워크플로(LLM Wiki): 새 기록이 들어올 때마다 주제 페이지를 갱신한다.
+    # 기록이 쌓일수록 같은 페이지가 두꺼워지는 복리 구조 — 실패해도 저장은 유효.
+    try:
+        from .wiki_manager import consolidate_quietly
+        consolidate_quietly()
+    except Exception:
+        pass
     return item
 
 def add_user_memory(text: str, title: str = "User instruction") -> Dict[str, Any]:
@@ -104,6 +111,38 @@ def recall(task_kind: str = "", keywords: List[str] | None = None, limit: int = 
             scored.append((score, row))
     scored.sort(key=lambda x: (-x[0], str(x[1].get("created_at", ""))))
     return [r for _, r in scored[:limit]]
+
+def pinned_recall(limit: int = 5, error_days: int = 14) -> List[Dict[str, Any]]:
+    """키워드와 무관하게 '항상' 주입할 기억 — 회상 보장의 핵심.
+
+    recall 은 키워드 점수제라 작업 문구가 다르면 놓칠 수 있다. 하지만
+    ① 사용자가 직접 시킨 규칙(source=user)과 ② 최근 자가 관찰 실수
+    (error_pattern)는 어떤 작업에서든 반영돼야 한다 — "기억해놓으면 꼭 회상".
+    """
+    ensure_memory()
+    rows = load_memory(status="active")
+    user_prefs = [r for r in rows if r.get("source") == "user"]
+    # 우선순위 high 먼저, 같은 급에서는 최신 먼저 (안정 정렬 2단).
+    user_prefs.sort(key=lambda r: str(r.get("created_at", "")), reverse=True)
+    user_prefs.sort(key=lambda r: 0 if r.get("priority") == "high" else 1)
+    cutoff = now()[:10]
+    try:
+        from datetime import datetime, timedelta
+        cutoff = (datetime.fromisoformat(now()[:10]) - timedelta(days=error_days)).strftime("%Y-%m-%d")
+    except Exception:
+        pass
+    recent_errors = sorted(
+        [r for r in rows if r.get("kind") == "error_pattern"
+         and str(r.get("created_at", ""))[:10] >= cutoff],
+        key=lambda r: str(r.get("created_at", "")), reverse=True)
+    picked: List[Dict[str, Any]] = []
+    seen: set = set()
+    for r in user_prefs[:limit] + recent_errors[:max(2, limit - 2)]:
+        if r.get("id") not in seen:
+            seen.add(r.get("id"))
+            picked.append(r)
+    return picked[: limit + 2]
+
 
 def format_recall_for_prompt(items: List[Dict[str, Any]]) -> str:
     if not items:
@@ -202,10 +241,18 @@ def memorycheck() -> Dict[str, Any]:
     ensure_memory()
     plan = propose_memory_update("routine memorycheck")
     render_memory_views()
+    # 위키 정리 루틴: 페이지 재통합 + lint(중복/고아/정체 보고 — 자동 삭제 없음).
+    wiki_report: Dict[str, Any] = {}
+    try:
+        from .wiki_manager import consolidate, lint
+        wiki_report = {"consolidate": consolidate(), "lint": lint()}
+    except Exception as exc:
+        wiki_report = {"error": exc.__class__.__name__}
     report = {
         "timestamp": now(),
         "index": json.loads(read_text(MEMORY / "MEMORY_INDEX.json") or "{}"),
         "update_plan": plan,
+        "wiki": wiki_report,
     }
     atomic_write_text(REPORTS / "MEMORY_REVIEW.md", "# Memory Review\n\n```json\n" + json.dumps(report, ensure_ascii=False, indent=2) + "\n```\n")
     return report

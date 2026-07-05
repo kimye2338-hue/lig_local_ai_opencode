@@ -1,6 +1,6 @@
 ---
 description: 일정 등록/조회 (자연어) — 예: /schedule 금요일 14시 보고서 마감
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

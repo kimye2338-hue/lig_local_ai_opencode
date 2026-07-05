@@ -1,6 +1,6 @@
 ---
 description: 주간보고 초안 (지난 7일 기록 기반)
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

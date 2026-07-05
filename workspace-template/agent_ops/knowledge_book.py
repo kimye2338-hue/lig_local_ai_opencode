@@ -18,12 +18,13 @@ from __future__ import annotations
 import html
 import json
 import os
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List
 
 from . import audit
-from .core import MEMORY, atomic_write_text, read_jsonl
+from .core import MEMORY, atomic_write_text, read_jsonl, read_text
 from .memory_manager import MEMORY_JSONL, ensure_memory
 
 BOOK_DIR = MEMORY / "book"
@@ -110,24 +111,39 @@ def _audit_activity(now: datetime, days: int = 30) -> List[Dict[str, Any]]:
     return sorted(by_day.values(), key=lambda s: s["day"], reverse=True)
 
 
+def _inline_md(escaped: str) -> str:
+    """이미 escape 된 한 줄에 인라인 서식 적용: **굵게**, [[위키링크]]→앵커."""
+    escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
+    escaped = re.sub(r"\[\[([^\]|]+)\]\]",
+                     lambda m: f"<a class='wl' href='#wiki-{html.escape(_anchor(m.group(1)))}'>"
+                               f"{m.group(1)}</a>", escaped)
+    return escaped
+
+
+def _anchor(topic: str) -> str:
+    return re.sub(r"[^0-9A-Za-z가-힣_-]+", "-", str(topic).strip().lower()).strip("-") or "t"
+
+
 def _md_to_html(md: str) -> str:
-    """WIKI.md 렌더용 초소형 마크다운 변환(헤딩/리스트/코드/문단만, stdlib)."""
+    """위키 페이지 렌더용 초소형 마크다운 변환(헤딩/리스트/굵게/[[링크]], stdlib)."""
     out: List[str] = []
     in_list = False
     for raw in md.splitlines():
         line = raw.rstrip()
-        esc = html.escape(line)
+        if line.startswith("<!--"):
+            continue
+        esc = _inline_md(html.escape(line))
         if line.startswith("#"):
             if in_list:
                 out.append("</ul>")
                 in_list = False
             level = min(len(line) - len(line.lstrip("#")), 4)
-            out.append(f"<h{level + 1}>{html.escape(line.lstrip('#').strip())}</h{level + 1}>")
+            out.append(f"<h{level + 1}>{_inline_md(html.escape(line.lstrip('#').strip()))}</h{level + 1}>")
         elif line.strip().startswith("- "):
             if not in_list:
                 out.append("<ul>")
                 in_list = True
-            out.append(f"<li>{html.escape(line.strip()[2:])}</li>")
+            out.append(f"<li>{_inline_md(html.escape(line.strip()[2:]))}</li>")
         elif not line.strip():
             if in_list:
                 out.append("</ul>")
@@ -193,6 +209,19 @@ nav a:hover{border-color:var(--accent);color:var(--accent)}
 .chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 .archive{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 16px}
 .archive a{font-size:12px;color:var(--accent);text-decoration:none;border:1px dashed var(--line);border-radius:8px;padding:2px 10px}
+a.chip{text-decoration:none;color:var(--fg)}
+a.chip b{color:var(--accent);font-weight:700;margin-left:4px}
+.wikipage{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:10px 0;overflow:hidden}
+.wikipage summary{cursor:pointer;padding:12px 16px;font-size:15px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.wikipage summary::-webkit-details-marker{display:none}
+.wikipage summary:before{content:'▸';color:var(--accent);font-size:13px}
+.wikipage[open] summary:before{content:'▾'}
+.wikipage .wmeta{margin-left:auto;color:var(--muted);font-size:12px}
+.wbody{padding:2px 20px 16px;border-top:1px solid var(--line);font-size:14px}
+.wbody h2,.wbody h3{border:none;margin:16px 0 6px;font-size:15px;color:var(--accent)}
+.wbody ul{padding-left:20px}
+.wbody li{margin:3px 0}
+a.wl{color:var(--accent);text-decoration:none;border-bottom:1px dashed var(--accent)}
 """
 
 _JS = """
@@ -221,6 +250,79 @@ apply();
 """
 
 
+def _contradiction_banner() -> str:
+    """모순 후보가 있으면 책 상단에 눈에 띄게 — 사람 확인 유도(자동 해결 없음)."""
+    try:
+        from .wiki_manager import lint
+        report = lint()
+    except Exception:  # noqa: BLE001
+        return ""
+    pairs = report.get("contradictions") or []
+    if not pairs:
+        return ""
+    items = "".join(
+        f"<li>[{p['topic']}] \"{html.escape(p['a_title'][:40])}\" ↔ "
+        f"\"{html.escape(p['b_title'][:40])}\"</li>"
+        for p in pairs[:8]
+    )
+    more = f"<p>… 외 {len(pairs) - 8}건</p>" if len(pairs) > 8 else ""
+    return (f"<div class='card' style='border-color:#dc2626'>"
+           f"<div class='title'>⚠️ 확인 필요 — 모순 후보 {len(pairs)}건</div>"
+           f"<div class='body'>같은 주제에서 서로 반대로 말하는 기록이 있습니다 "
+           f"(자동으로 어느 쪽이 맞는지 지우거나 고치지 않았습니다):</div>"
+           f"<ul>{items}</ul>{more}</div>")
+
+
+def _wiki_pages_html() -> str:
+    """주제 위키 챕터 — 페이지가 곧 블로그 글. 기록이 쌓일수록 글이 두꺼워진다."""
+    try:
+        from .wiki_manager import AUTO_MARK, MANUAL_DIR, WIKI_DIR, consolidate_quietly
+        consolidate_quietly()  # 책은 항상 최신 위키 위에서
+    except Exception:  # noqa: BLE001
+        return ""
+    if not WIKI_DIR.is_dir():
+        return ""
+    pages = []
+    for p in sorted(WIKI_DIR.glob("*.md")):
+        if p.name in ("index.md", "log.md", "WIKI_SCHEMA.md"):
+            continue
+        raw = read_text(p)
+        meta = dict(re.findall(r"^(topic|updated|records|active):\s*(.*)$",
+                               raw.split("---")[1] if raw.count("---") >= 2 else "", re.M))
+        body = raw.split("---", 2)[-1] if raw.count("---") >= 2 else raw
+        pages.append({"topic": meta.get("topic", p.stem), "updated": meta.get("updated", ""),
+                      "records": int(meta.get("records", "0") or 0),
+                      "active": int(meta.get("active", "0") or 0),
+                      "auto": AUTO_MARK in raw, "body": body})
+    manual = []
+    if MANUAL_DIR.is_dir():
+        for p in sorted(MANUAL_DIR.glob("*.md")):
+            manual.append({"topic": p.stem, "updated": "", "records": 0, "active": 0,
+                           "auto": False, "body": read_text(p)})
+    if not pages and not manual:
+        return ""
+    pages.sort(key=lambda x: (-x["records"], x["topic"]))
+    parts = ["<h2 id='topics'>🧠 주제별 지식 (위키) — 쌓일수록 두꺼워지는 페이지</h2>",
+             "<div class='chips'>"]
+    parts += [f"<a class='chip' href='#wiki-{_anchor(pg['topic'])}'>{html.escape(pg['topic'])}"
+              f" <b>{pg['active']}</b></a>" for pg in pages[:30]]
+    parts.append("</div>")
+    for pg in pages + manual:
+        aid = _anchor(pg["topic"])
+        badge = "" if pg["auto"] else " <span class='badge' style='background:#7c3aed'>수동</span>"
+        meta = (f"현행 {pg['active']} · 누적 {pg['records']} · {pg['updated']}"
+                if pg["auto"] else "manual/ — 사람이 관리")
+        parts.append(
+            f"<details class='wikipage' id='wiki-{aid}'>"
+            f"<summary><b>{html.escape(pg['topic'])}</b>{badge}"
+            f"<span class='wmeta'>{meta}</span></summary>"
+            f"<div class='wbody'>{_md_to_html(pg['body'])}</div></details>")
+    parts.append("<p class='sub'>페이지 원본: OpenCodeLIG_USERDATA\\memory\\wiki\\ — "
+                 "Obsidian 으로 이 폴더를 열면 [[링크]] 그래프가 그대로 보입니다. "
+                 "직접 쓰는 글은 wiki\\manual\\ 에.</p>")
+    return "\n".join(parts)
+
+
 def build_book(now: datetime | None = None) -> Path:
     """지식책 HTML 생성 — 언제든 호출 가능, 항상 전체를 다시 그린다."""
     current = _now(now)
@@ -246,10 +348,11 @@ def build_book(now: datetime | None = None) -> Path:
               for k in ("preference", "lesson", "error_pattern")}
     parts.append("<nav>"
                  "<a href='#review'>🔁 복습</a>"
+                 "<a href='#topics'>🧠 주제 위키</a>"
                  f"<a href='#pref'>내 규칙 {counts['preference']}</a>"
                  f"<a href='#lesson'>배운 것 {counts['lesson']}</a>"
                  f"<a href='#err'>실수 노트 {counts['error_pattern']}</a>"
-                 "<a href='#wiki'>위키</a><a href='#timeline'>타임라인</a>"
+                 "<a href='#wiki'>규칙집</a><a href='#timeline'>타임라인</a>"
                  "<a href='#activity'>활동</a></nav>")
     parts.append("<input id='q' type='search' placeholder='검색 — 제목/내용/분류'>")
     parts.append("<div class='chips'>"
@@ -262,6 +365,14 @@ def build_book(now: datetime | None = None) -> Path:
         parts.append("<h2 id='review'>🔁 이번 주의 복습 — 잊기 전에 다시 보기</h2>")
         for r in picks:
             parts.append(_entry_card(r).replace("class=\"card\"", "class=\"card review\""))
+
+    banner = _contradiction_banner()
+    if banner:
+        parts.append(banner)
+
+    wiki_pages = _wiki_pages_html()
+    if wiki_pages:
+        parts.append(wiki_pages)
 
     by_kind: Dict[str, List[Dict[str, Any]]] = {}
     for r in active:
@@ -278,7 +389,7 @@ def build_book(now: datetime | None = None) -> Path:
         parts.extend(_entry_card(r) for r in other)
 
     if wiki_html:
-        parts.append("<h2 id='wiki'>📖 위키 (현행 규칙집 — 직접 편집 가능)</h2>")
+        parts.append("<h2 id='wiki'>📖 규칙집 (WIKI.md — 직접 편집 가능)</h2>")
         parts.append(f"<div class='wiki'>{wiki_html}</div>")
 
     parts.append("<h2 id='timeline'>📜 전체 타임라인 — 나의 히스토리북</h2>")

@@ -15,7 +15,7 @@ That is not a clean shell command. It is mixed reasoning + command text and shou
 
 ## Prevention layers
 
-1. `agentops-autopilot` no longer has broad `bash: allow`.
+1. `agent` mode (구 autopilot 통합) no longer has broad `bash: allow`.
 2. Safe AgentOps/Python verification commands are allowed by pattern.
 3. Known bad shell-generation patterns are denied:
    - `cat > *`

@@ -1,6 +1,6 @@
 ---
 description: Write checkpoint
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

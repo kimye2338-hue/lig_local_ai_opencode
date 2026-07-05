@@ -17,7 +17,7 @@ def normalize_task(task: Dict[str, Any]) -> Dict[str, Any]:
     t.setdefault("status", "pending")
     t.setdefault("title", "")
     t.setdefault("kind", "manual")
-    t.setdefault("owner_agent", "agentops-supervisor")
+    t.setdefault("owner_agent", "agent")
     t.setdefault("depends_on", [])
     t.setdefault("touches", [])
     t.setdefault("attempt_count", 0)
@@ -40,7 +40,7 @@ def load_tasks() -> List[Dict[str, Any]]:
 def save_tasks(tasks: List[Dict[str, Any]]) -> None:
     write_jsonl(QUEUE, tasks)
 
-def enqueue_task(title: str, kind: str = "manual", owner_agent: str = "agentops-supervisor", priority: int = 5, risk: str = "safe", payload: Optional[Dict[str, Any]] = None, depends_on: Optional[List[str]] = None, touches: Optional[List[str]] = None) -> Dict[str, Any]:
+def enqueue_task(title: str, kind: str = "manual", owner_agent: str = "agent", priority: int = 5, risk: str = "safe", payload: Optional[Dict[str, Any]] = None, depends_on: Optional[List[str]] = None, touches: Optional[List[str]] = None) -> Dict[str, Any]:
     with file_lock("task_queue"):
         tasks = load_tasks()
         task = normalize_task({

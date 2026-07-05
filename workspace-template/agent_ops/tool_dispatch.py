@@ -47,6 +47,13 @@ ToolFn = Callable[[Path, Dict[str, Any]], Dict[str, Any]]
 _BROWSER_HINT = (" — 디버그 크롬이 필요합니다: launch\\chrome-debug.bat 로 크롬을 연 뒤 다시 시도"
                  " (이미 떠 있는 일반 크롬 창은 보이지 않습니다)")
 
+_BROWSER_OPTION_KEYS = (
+    "url", "tab", "selector", "text", "index", "timeout", "max_length",
+    "max_text_length", "max_html_length", "limit", "filename", "wait_seconds",
+    "load_timeout", "render_timeout", "output_dir", "max_clicks",
+    "include_clickables", "value", "enter",
+)
+
 
 def tool_browse_tabs(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
     from .adapters import browser_cdp
@@ -72,16 +79,66 @@ def tool_read_web_page(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
         if not opened.get("ok"):
             return {"ok": False, "error": str(opened.get("error", "")) + _BROWSER_HINT,
                     "root_cause_category": "browser_unavailable"}
-    title = browser_cdp.execute("get_title", dict(opts))
-    text = browser_cdp.execute("extract_text",
-                               {**opts, "max_length": int(args.get("max_length") or 4000)})
-    if not text.get("ok"):
-        return {"ok": False, "error": str(text.get("error", "")) + _BROWSER_HINT,
+    snap = browser_cdp.execute("snapshot", {**opts, "max_text_length": int(args.get("max_length") or 4000),
+                                            "include_clickables": False})
+    if not snap.get("ok"):
+        # Compatibility fallback for older local adapters.
+        title = browser_cdp.execute("get_title", dict(opts))
+        text = browser_cdp.execute("extract_text", {**opts, "max_length": int(args.get("max_length") or 4000)})
+        if not text.get("ok"):
+            return {"ok": False, "error": str(text.get("error", snap.get("error", ""))) + _BROWSER_HINT,
+                    "root_cause_category": "browser_unavailable"}
+        return {"ok": True, "data": {"title": (title.get("data") or {}).get("title", ""),
+                                      "url": url,
+                                      "text": (text.get("data") or {}).get("text", ""),
+                                      "truncated": (text.get("data") or {}).get("truncated", False)}}
+    data = snap.get("data") or {}
+    return {"ok": True, "data": {"title": data.get("title", ""),
+                                  "url": data.get("url") or url,
+                                  "text": data.get("text", ""),
+                                  "truncated": data.get("text_truncated", False)}}
+
+
+def tool_browser_action(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
+    from .adapters import browser_cdp
+    action = str(args.get("action") or "")
+    if not action:
+        return {"ok": False, "error": "action is required", "root_cause_category": "missing_argument"}
+    if action not in getattr(browser_cdp, "ACTIONS", ()):  # do not let model invent arbitrary adapter calls
+        return {"ok": False,
+                "error": "unsupported browser action: %s; available=%s" % (action, ", ".join(browser_cdp.ACTIONS)),
+                "root_cause_category": "invalid_argument"}
+    opts = {k: v for k, v in args.items() if k in _BROWSER_OPTION_KEYS and v not in (None, "")}
+    res = browser_cdp.execute(action, opts)
+    if not res.get("ok"):
+        return {"ok": False, "error": str(res.get("error", "")) + _BROWSER_HINT,
                 "root_cause_category": "browser_unavailable"}
-    return {"ok": True, "data": {"title": (title.get("data") or {}).get("title", ""),
-                                 "url": url,
-                                 "text": (text.get("data") or {}).get("text", ""),
-                                 "truncated": (text.get("data") or {}).get("truncated", False)}}
+    return {"ok": True, "data": res.get("data", {})}
+
+
+def _browser_tool(action: str) -> ToolFn:
+    def run(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
+        return tool_browser_action(root, {"action": action, **args})
+    return run
+
+
+def tool_project_info(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
+    """현재 폴더 프로필/전역 기억 진단 — 모델이 자기 컨텍스트 출처를 확인."""
+    from .project_profile import profile_diagnostics
+    return {"ok": True, "data": profile_diagnostics()}
+
+
+def tool_remember(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
+    """전역 기억에 교훈/선호를 남긴다 — 다음 작업부터 자동 recall 주입."""
+    text = str(args.get("note") or args.get("text") or "").strip()
+    if not text:
+        return {"ok": False, "error": "note is required", "root_cause_category": "missing_argument"}
+    title = str(args.get("title") or "").strip() or text[:60]
+    from .memory_manager import add_memory_event, extract_keywords
+    item = add_memory_event("lesson", title, text, status="active",
+                            priority="normal", source="agent",
+                            tags=extract_keywords(text)[:8])
+    return {"ok": True, "data": {"id": item.get("id"), "title": title}}
 
 
 REGISTRY: Dict[str, Dict[str, Any]] = {
@@ -93,18 +150,50 @@ REGISTRY: Dict[str, Dict[str, Any]] = {
     "search_files":    {"fn": tool_search_files,    "required": ["query"],                "optional": ["path", "pattern"],   "description": "Search text across files"},
     "run_diagnostic":  {"fn": tool_run_diagnostic,  "required": [],                       "optional": [],                    "description": "Check workspace health"},
     "browse_tabs":     {"fn": tool_browse_tabs,     "required": [],                       "optional": [],                    "description": "List open Chrome tabs (needs debug Chrome)"},
-    "read_web_page":   {"fn": tool_read_web_page,   "required": [],                       "optional": ["url", "tab", "max_length"], "description": "Read page text: url to open, or tab(index/substring) = already-open tab"},
+    "read_web_page":   {"fn": tool_read_web_page,   "required": [],                       "optional": ["url", "tab", "max_length"], "description": "Read rendered page text: url to open, or tab(index/title/url)"},
+    "browser_action":  {"fn": tool_browser_action,  "required": ["action"],               "optional": list(_BROWSER_OPTION_KEYS), "description": "Advanced Chrome CDP action: new_tab/select_tab/snapshot/find_clickables/click/fill/screenshot/wait_for_selector/spa_map"},
+    "new_tab":         {"fn": _browser_tool("new_tab"),          "required": [], "optional": ["url"], "description": "Open a new debug Chrome tab"},
+    "snapshot":        {"fn": _browser_tool("snapshot"),         "required": [], "optional": ["tab", "max_length", "max_text_length", "max_html_length"], "description": "Snapshot rendered SPA page text/html"},
+    "find_clickables": {"fn": _browser_tool("find_clickables"),  "required": [], "optional": ["tab", "limit"], "description": "List clickable page elements"},
+    "click":           {"fn": _browser_tool("click"),            "required": [], "optional": ["tab", "selector", "text", "index", "wait_seconds"], "description": "Click page element by selector/text/index"},
+    "screenshot":      {"fn": _browser_tool("screenshot"),       "required": [], "optional": ["tab", "filename"], "description": "Capture current page screenshot"},
+    "wait_for_selector":{"fn": _browser_tool("wait_for_selector"),"required": [], "optional": ["tab", "selector", "text", "timeout"], "description": "Wait until selector/text appears"},
+    "select_tab":      {"fn": _browser_tool("select_tab"),       "required": [], "optional": ["tab", "index"], "description": "Activate an open debug Chrome tab"},
+    "spa_map":         {"fn": _browser_tool("spa_map"),          "required": [], "optional": ["tab", "output_dir", "max_clicks", "wait_seconds"], "description": "Explore current SPA menu/clickable map"},
+    "project_info":    {"fn": tool_project_info,  "required": [],               "optional": [],                    "description": "Show folder profile + global memory paths"},
+    "remember":        {"fn": tool_remember,      "required": ["note"],         "optional": ["title"],             "description": "Save a lesson to global memory"},
 }
 
 _PARAM_DESCRIPTIONS = {
     "path": "relative path",
     "content": "UTF-8 text",
+    "title": "memory title",
+    "note": "text to remember",
     "old": "exact text to replace",
     "new": "replacement text",
     "count": "max replacements",
     "query": "search text",
     "pattern": "glob, e.g. **/*.md",
+    "action": "browser action name",
+    "url": "URL",
+    "tab": "tab index or title/url substring",
+    "selector": "CSS selector",
+    "text": "visible text substring",
+    "index": "clickable or tab index",
+    "timeout": "seconds",
+    "max_length": "max text length",
+    "max_text_length": "max text length",
+    "max_html_length": "max html length; 0 disables html",
+    "limit": "maximum item count",
+    "filename": "output filename",
+    "wait_seconds": "seconds to wait after click",
+    "load_timeout": "page load timeout seconds",
+    "output_dir": "output directory",
+    "max_clicks": "maximum clicks to explore",
+    "include_clickables": "true/false",
 }
+
+_INT_PARAMS = {"count", "index", "timeout", "max_length", "max_text_length", "max_html_length", "max_clicks", "limit"}
 
 
 def tool_definitions() -> List[Dict[str, Any]]:
@@ -112,7 +201,7 @@ def tool_definitions() -> List[Dict[str, Any]]:
     defs = []
     for name, spec in REGISTRY.items():
         props = {
-            arg: {"type": "integer" if arg == "count" else "string",
+            arg: {"type": "integer" if arg in _INT_PARAMS else "string",
                   "description": _PARAM_DESCRIPTIONS.get(arg, "")}
             for arg in spec["required"] + spec["optional"]
         }
@@ -217,7 +306,7 @@ class ToolDispatcher:
                     args = {}
             if not isinstance(args, dict):
                 args = {}
-            target = args.get("path") or args.get("target") or ""
+            target = args.get("path") or args.get("target") or args.get("url") or args.get("selector") or ""
             name = call.get("name", "")
             risk = classify_risk(name, str(target), self.root)
             audit_record({
@@ -233,10 +322,11 @@ class ToolDispatcher:
 
 
 AGENT_SYSTEM_PROMPT = (
-    "You are a local file agent operating inside a workspace. "
+    "You are a local file and browser agent operating inside a workspace. "
     "Use the provided tools to complete the task. All paths are relative to "
-    "the workspace root. For file tasks, use tools before answering. Copy filenames exactly. "
-    "When the task is complete, reply with a plain-text "
+    "the workspace root. For browser tasks, use browse_tabs/read_web_page first, "
+    "then snapshot/find_clickables/click/wait_for_selector/screenshot/spa_map as needed. "
+    "Copy filenames exactly. When the task is complete, reply with a plain-text "
     "summary and no tool call."
 )
 
@@ -263,14 +353,45 @@ def run_agent_loop(
     ]
     # 복리 기억의 쐐기돌: 축적된 규칙/교훈을 '기계적으로' 주입한다.
     # 페르소나가 recall을 잊어도 같은 실수를 반복하지 않도록 — 선의가 아닌 구조.
+    # 주입 순서(제품 문서 §6.3): 전역 기억 → 폴더 프로필(기억/페르소나/규칙) → 작업.
+    inserts: List[Dict[str, Any]] = []
     try:
-        from .memory_manager import extract_keywords, format_recall_for_prompt, recall
-        mem = recall(keywords=extract_keywords(prompt), limit=5)
+        from .memory_manager import extract_keywords, format_recall_for_prompt, pinned_recall, recall
+        keywords = extract_keywords(prompt)
+        # 회상 보장: 사용자 규칙 + 최근 실수는 키워드가 안 맞아도 항상 주입,
+        # 키워드 매칭분은 그 위에 추가 (id 로 중복 제거).
+        pinned = pinned_recall(limit=5)
+        matched = recall(keywords=keywords, limit=5)
+        seen_ids = {r.get("id") for r in pinned}
+        mem = pinned + [r for r in matched if r.get("id") not in seen_ids]
         if mem:
-            messages.insert(1, {"role": "system",
-                                "content": "이전에 축적된 사용자 규칙/교훈 — 반드시 반영:\n"
-                                           + format_recall_for_prompt(mem)})
+            inserts.append({"role": "system",
+                            "content": "이전에 축적된 사용자 규칙/교훈 — 반드시 반영:\n"
+                                       + format_recall_for_prompt(mem[:8])})
+        # 복리 recall: 개별 사건보다 '주제 페이지'(증류된 지식)가 강하다.
+        # 기록이 쌓일수록 같은 주제 발췌가 저절로 풍부해진다 (LLM Wiki 층).
+        from .wiki_manager import recall_pages
+        pages = recall_pages(keywords, limit=1)
+        for page in pages:
+            inserts.append({"role": "system",
+                            "content": f"축적된 주제 지식(위키 '{page['topic']}') — 참고:\n"
+                                       + page["excerpt"]})
     except Exception:  # noqa: BLE001 - 기억 주입 실패가 작업을 막으면 안 된다
+        pass
+    try:
+        from .project_profile import format_context_for_prompt, load_project_context
+        project = format_context_for_prompt(load_project_context())
+        if project:
+            inserts.append({"role": "system", "content": project})
+    except Exception:  # noqa: BLE001 - 프로필 주입 실패도 작업을 막으면 안 된다
+        pass
+    for offset, msg in enumerate(inserts):
+        messages.insert(1 + offset, msg)
+    # 비서펫(오버레이) 라이브 상태 — 실패해도 작업을 막지 않는다.
+    try:
+        from .status_writer import publish_status
+        publish_status("working", message="에이전트 작업 시작", task=prompt[:60])
+    except Exception:  # noqa: BLE001
         pass
     tool_results: List[Dict[str, Any]] = []
     outcome = "max_turns_exceeded"
@@ -319,6 +440,24 @@ def run_agent_loop(
         "turns": turns,
         "tool_results": tool_results,
     }
+    try:
+        from .status_writer import publish_event
+        status = {"completed": "done", "llm_failed": "error",
+                  "tool_loop_cutoff": "needs_user",
+                  "max_turns_exceeded": "needs_user"}.get(outcome, "done")
+        publish_event("AGENT_" + outcome.upper(), status=status,
+                      message=(final_content or outcome)[:120], task=prompt[:60])
+    except Exception:  # noqa: BLE001
+        pass
+    # 시행착오의 기계적 학습: 루프가 비정상 종료하면 그 패턴을 기억에 남긴다.
+    # 다음 작업에서 pinned_recall 이 이 교훈을 '반드시' 주입한다.
+    if outcome in ("tool_loop_cutoff", "llm_failed", "max_turns_exceeded"):
+        try:
+            from .memory_manager import record_self_error
+            record_self_error(f"에이전트 루프 {outcome}",
+                              (final_content or outcome)[:200], task=prompt[:80])
+        except Exception:  # noqa: BLE001
+            pass
     try:
         diag = Path(diag_dir) if diag_dir else DIAG_DIR
         diag.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,6 @@
 ---
 description: Clear stop flag
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

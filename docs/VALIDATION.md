@@ -69,7 +69,7 @@ After downloading the artifact:
 - Confirm hidden workspace files exist:
   - `workspace/.opencode/commands/permission.md`
   - `workspace/.opencode/commands/agentmode.md`
-  - `workspace/.opencode/agents/agentops-supervisor.md`
+  - `workspace/.opencode/agents/agent.md`
   - `workspace/.opencode/plugins/command-guard.ts`
 - Confirm context files exist:
   - `workspace/docs/AI_HANDOFF.md`

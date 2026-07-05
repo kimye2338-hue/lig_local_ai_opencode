@@ -1,6 +1,6 @@
 ---
 description: Save user instruction to memory
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 
