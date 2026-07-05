@@ -33,6 +33,9 @@ INCLUDE_FILES = [
     "release/verify_prefetch.py",
     "release/setup.bat",
     "release/setup_impl.py",
+    # OpenCode 동봉 (CI 아티팩트에서 검증 추출; 없으면 agent_ops-only 번들)
+    "release/vendor/opencode/opencode.exe",
+    "release/vendor/opencode/opencode.exe.sha256",
     "README.md",
     "AGENTS.md",
 ]
@@ -47,6 +50,7 @@ EXCLUDE_SUBSTRINGS = [
     ".pyc",
     "/모의_결과/",
     "/prefetch/",  # prefetch handled explicitly below (kept, but not via dir walk)
+    "/vendor/",    # vendor는 INCLUDE_FILES로만 (dir walk 중복 방지)
     ".git/",
 ]
 # Precise secret-file markers (must not false-positive on test_secret_scan.py etc.).
@@ -132,13 +136,13 @@ def build(date: str, out_dir: Path) -> Path:
                  "chcp 65001 >nul\r\n"
                  "cd /d \"%~dp0\"\r\n"
                  "call release\\setup.bat\r\n")
-    first_read = ("OpenCodeLIG 설치 방법 (1분)\r\n"
+    first_read = ("OpenCodeLIG 설치 (1분)\r\n"
                   "\r\n"
-                  "1. 이 폴더의  설치.bat  을 더블클릭하세요.\r\n"
-                  "2. 게이트웨이 주소/API 키를 붙여넣으세요 (모르면 그냥 Enter — 나중에 설정 가능).\r\n"
-                  "3. 끝. 바탕화면에 생긴  AI비서  를 실행하면 됩니다.\r\n"
+                  "1. 설치.bat 더블클릭\r\n"
+                  "2. 게이트웨이 주소/키 붙여넣기 (모르면 Enter 두 번)\r\n"
+                  "3. 바탕화면의 [오픈코드] 실행 - 한국어로 업무를 시키면 됩니다\r\n"
                   "\r\n"
-                  "문제가 생기면: workspace-template\\docs\\RUNBOOK.md 또는 워크스페이스의 launch\\diag.bat 실행.\r\n")
+                  "자세한 것은 같은 폴더의  사용설명서.md  하나만 보면 됩니다.\r\n")
 
     manifest_lines = ["# MANIFEST_SHA256 — every archived file", f"# bundle: {zip_path.name}", ""]
     print(f"packing {len(all_files)} files ({len(source)} source + {len(prefetch)} prefetch) ...")
@@ -146,6 +150,10 @@ def build(date: str, out_dir: Path) -> Path:
         for p, rel in all_files:
             zf.write(p, rel)
             manifest_lines.append(f"{_sha256(p)}  {rel}")
+        guide = REPO_ROOT / "docs" / "GUIDE.md"
+        if guide.exists():
+            zf.write(guide, "사용설명서.md")
+            manifest_lines.append(f"{_sha256(guide)}  사용설명서.md")
         for rel, text in (("설치.bat", installer), ("처음_읽어주세요.txt", first_read)):
             data = text.encode("utf-8")
             zf.writestr(rel, data)

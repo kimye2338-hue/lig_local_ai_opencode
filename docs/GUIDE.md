@@ -1,0 +1,68 @@
+# OpenCodeLIG 사용설명서 (이 문서 하나면 됩니다)
+
+## 1. 설치 — 1분
+
+1. zip을 푼다.
+2. **`설치.bat` 더블클릭.**
+3. 게이트웨이 주소/API 키 붙여넣기 (모르면 Enter 두 번 — 나중에 3번 항목으로 설정).
+
+끝. 바탕화면에 **[오픈코드]** 와 **[AI비서]** 가 생긴다.
+
+## 2. 사용 — 두 가지 방법
+
+**방법 A — 오픈코드 채팅 (주 사용법)**
+바탕화면 [오픈코드] 실행 → 한국어로 그냥 시킨다:
+
+- "이 폴더의 회의메모.txt로 회의록 만들어줘"
+- "지난주 기록으로 주간보고 초안 써줘"
+- "금요일 14시 진동시험 보고서 마감 일정 등록해줘"
+- "기억해: 보고서 제목은 항상 [부서명] 으로 시작"
+
+아무 폴더에서나 쓰려면: 그 폴더에서 cmd 열고 `oc` 입력 (설치 후 새 명령창부터).
+폴더가 달라도 **같은 비서**가 뜨고 **기억을 공유**한다.
+
+**방법 B — AI비서 메뉴 (오픈코드 없이)**
+바탕화면 [AI비서] 실행 → 번호 선택 (업무/브리핑/주간보고/일정/진단).
+
+## 3. 설정 — 파일 하나
+
+`내문서 아님 주의 → %USERPROFILE%\OpenCodeLIG_USERDATA\secrets\lig-api.env`
+
+```
+LIG_GATEWAY_BASE_URL=http://사내게이트웨이주소
+LIG_API_KEY=발급받은키
+```
+
+이 파일 하나가 전부다. **절대 메일/메신저/커밋으로 내보내지 말 것.**
+
+## 4. 폴더 구조 — 어디에 뭐가 있나
+
+```
+%USERPROFILE%\OpenCodeLIG\
+  bin\opencode.exe, oc.bat     실행기 (oc = 아무 폴더에서 오픈코드)
+  workspace\                   프로그램 본체
+    agent_ops\results\artifacts\   ← 만들어진 산출물 (run별 폴더)
+    agent_ops\results\reports\     ← 브리핑/주간보고
+    launch\menu.bat                AI비서 메뉴
+%USERPROFILE%\OpenCodeLIG_USERDATA\
+  secrets\lig-api.env          게이트웨이 설정 (위 3번)
+  memory\WIKI.md               전역 기억 위키 (직접 편집 가능)
+  audit\                       실행 감사 기록
+```
+
+## 5. 기억 — 점점 똑똑해지는 방법
+
+- 채팅에서 **"기억해: ..."** → 전역 저장, 모든 폴더에서 적용.
+- 실수를 지적하면 비서가 교훈으로 기록해 다음엔 반복하지 않는다.
+- 쌓인 규칙은 `USERDATA\memory\WIKI.md` 에서 직접 보고 고칠 수 있다.
+
+## 6. 문제가 생기면
+
+| 증상 | 조치 |
+|---|---|
+| 뭔가 이상함 | [AI비서] → 7. 상태 진단 |
+| LLM 응답 없음 | 3번 설정 확인 → [AI비서] → 8. 게이트웨이 점검 |
+| `oc` 명령 안 먹힘 | 새 명령창 열기 (PATH는 새 창부터 적용) |
+| 오픈코드 안 뜸 | `workspace\VERIFY_OFFLINE_INSTALL.bat` 실행 |
+
+진단 파일 위치: `%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\`
