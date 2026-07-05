@@ -127,7 +127,17 @@ def _check_bundle_build() -> None:
         # One-click install UX: root installer + first-read + daily menu + py resolver
         check("bundle has root 설치.bat", "설치.bat" in names, "no root installer")
         check("bundle has 처음_읽어주세요.txt", "처음_읽어주세요.txt" in names, "no first-read")
-        check("bundle has AI비서 menu", any(n.endswith("launch/AI비서.bat") for n in names), "no menu")
+        check("bundle has AI비서 shim", any(n.endswith("launch/AI비서.bat") for n in names), "no shim")
+        check("bundle has menu.bat (ASCII filename for cp949-safe call)",
+              any(n.endswith("launch/menu.bat") for n in names), "no menu.bat")
+        # cp949 트랩 가드: 더블클릭된 bat는 기본 코드페이지로 '내용'을 읽으므로,
+        # bat 내용이 참조하는 파일명은 ASCII여야 한다 (한글은 파일 '이름'에만 허용).
+        shim = zf.read([n for n in names if n.endswith("launch/AI비서.bat")][0])
+        check("AI비서 shim content is pure ASCII",
+              all(b < 0x80 for b in shim), "non-ascii in shim content")
+        check("setup.bat desktop launcher calls ASCII menu.bat",
+              b'echo call "menu.bat"' in zf.read("release/setup.bat"),
+              "desktop launcher not ASCII-target")
         check("bundle has _py resolver", any(n.endswith("launch/_py.bat") for n in names), "no _py")
         inst = zf.read("설치.bat")
         check("root installer is CRLF", inst.count(b"\n") == inst.count(b"\r\n") > 0, "LF installer")

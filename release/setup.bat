@@ -119,10 +119,13 @@ if not "%DOCTOR_RC%"=="0" (
 ) else (
     echo        정상.
 )
+rem 바탕화면 런처: '내용물'은 반드시 ASCII만 쓴다 — 더블클릭 시 새 cmd가 cp949로
+rem 읽기 때문에, 내용 안의 한글 파일명은 깨져서 "명령이 아닙니다"가 난다(실측).
+rem 한글은 바탕화면 '파일 이름'에만 (Explorer/NTFS는 유니코드라 안전).
 if exist "%USERPROFILE%\Desktop\" (
     > "%USERPROFILE%\Desktop\AI비서.bat" echo @echo off
     >> "%USERPROFILE%\Desktop\AI비서.bat" echo cd /d "%%USERPROFILE%%\OpenCodeLIG\workspace\launch"
-    >> "%USERPROFILE%\Desktop\AI비서.bat" echo call "AI비서.bat"
+    >> "%USERPROFILE%\Desktop\AI비서.bat" echo call "menu.bat"
     echo        바탕화면에 [AI비서] 바로가기를 만들었습니다.
 ) else (
     echo        바탕화면 폴더를 찾지 못해 바로가기는 건너뜁니다.
