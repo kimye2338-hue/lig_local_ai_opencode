@@ -24,6 +24,7 @@ work without reading `plan/PROTOCOL.md`.
 2. `docs/AI_HANDOFF.md`
 3. `docs/REPOSITORY_MAP.md`
 4. `docs/CURRENT_RELEASE.md`
+5. `docs/OPENCODE_LIG_LOCAL_FIXES_20260705.md` when touching launchers, config, encoding, or TUI crash handling.
 
 ## Source of truth
 
@@ -32,6 +33,7 @@ work without reading `plan/PROTOCOL.md`.
 - Installed workspace template: `workspace-template/`
 - Shared handoff and review context: `docs/AI_HANDOFF.md`
 - Current artifact/install state: `docs/CURRENT_RELEASE.md`
+- Runtime hotfix notes/scripts: `docs/OPENCODE_LIG_LOCAL_FIXES_20260705.md` and `patches/runtime-hotfixes/`
 
 Do not add a second competing workflow, patch file, installer folder, or handoff bundle unless the user explicitly asks.
 
@@ -45,7 +47,8 @@ Do not add a second competing workflow, patch file, installer folder, or handoff
 - AUTO approval uses `reply: "once"` only.
 - AUTO must not bypass command guard, explicit deny, or high-risk policy controls.
 - ASK mode must preserve the original permission prompt flow.
-- Direct `<spinner>` JSX must not be reintroduced unless the OpenTUI renderable registration is proven fixed in the offline build.
+- Direct `<spinner>` JSX or `D("spinner")` must not be reintroduced unless the OpenTUI renderable registration is proven fixed in the offline build.
+- If a spinner indicator is needed, use a registered `text`/fallback component.
 
 ## Packaging constraints
 
@@ -59,6 +62,25 @@ Do not introduce:
 - company-PC internet downloads
 - company-PC git clone, npm install, or bun install requirements
 - npm imports in OpenCode local plugins unless the offline install path is updated and validated
+- real local credentials in public GitHub-tracked files
+
+## Windows encoding and command-output rules
+
+- BAT entrypoints should use `chcp 65001 >nul`.
+- Set `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8` in launchers/diagnostics.
+- Python subprocess capture must use `encoding="utf-8", errors="replace"`.
+- Do not rely on localized Korean `dir` output for parsing; use Python `Path.exists()` or ASCII sentinel lines.
+- Mojibake such as `C ����̺���...` means command output encoding/codepage handling is wrong, not that the file/path is necessarily missing.
+
+## Model/provider config rules
+
+- `RUN_OPENCODE_LIG.bat` is not valid unless OpenCode config includes provider/model routes.
+- The installer/repair path must write config to all roots used by the launcher:
+  - `%USERPROFILE%\.config\opencode\opencode.json`
+  - `%USERPROFILE%\OpenCodeLIG\userdata\config\opencode\opencode.json`
+  - any workspace-local path referenced through `OPENCODE_CONFIG`.
+- The launcher must load `%USERPROFILE%\OpenCodeLIG_USERDATA\secrets\lig-api.env` into environment before starting OpenCode.
+- Public repo files must avoid real local credentials. Closed-network local repair files may preserve them, but do not commit them.
 
 ## Review tasks
 
@@ -74,7 +96,7 @@ If the user asks for review/audit/feedback only:
 If the user asks to fix:
 
 - Make minimal targeted changes.
-- Update `docs/AI_HANDOFF.md`, `docs/CURRENT_RELEASE.md`, or `docs/CHANGELOG.md` when behavior or packaging changes.
+- Update `docs/AI_HANDOFF.md`, `docs/CURRENT_RELEASE.md`, `docs/CHANGELOG.md`, or `docs/OPENCODE_LIG_LOCAL_FIXES_20260705.md` when behavior or packaging changes.
 - Run or trigger the existing workflow when package behavior changes.
 - Report workflow run ID, artifact ID, digest, and validation result.
 
