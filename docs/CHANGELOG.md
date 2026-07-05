@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-07-05 - LLM Wiki: compounding topic pages (Karpathy pattern, offline-first)
+
+Memory grows into an Obsidian-compatible wiki instead of only an event list:
+
+- New `agent_ops/wiki_manager.py` — 3 layers per the LLM Wiki pattern:
+  raw ledger (`memory.jsonl`, immutable) → compiled wiki
+  (`memory/wiki/<topic>.md`, regenerated deterministically, wikilinked via
+  `[[topic]]`, `index.md` catalog + `log.md` operations log) → schema
+  (`WIKI_SCHEMA.md`, seeded once, maintenance rules for agent+human).
+- Compounding: every `remember`/self-lesson ingests into topic pages in place —
+  the same page thickens as records accumulate. `wiki/manual/` is a
+  human-owned area never touched by automation.
+- Curation loop: `memorycheck`/`agentops.py wiki` run consolidate + lint
+  (duplicate titles, orphan pages, stale topics — report only, never delete).
+  Optional `wiki --curate` polishes page summaries via the gateway LLM behind
+  a quality gate (anchored-to-ledger or discarded); offline-safe no-op without
+  a gateway, stale markers when newer records arrive after curation.
+- Compounding recall: the agent loop now injects the matching distilled topic
+  page (excerpt) alongside raw memory recall — accumulated knowledge gets
+  richer per prompt automatically.
+- Knowledge book becomes blog-like: new "주제별 지식 (위키)" chapter with topic
+  chips, expandable page articles, clickable `[[wikilinks]]` as anchors, and a
+  pointer for opening `memory/wiki` as an Obsidian vault.
+- Tests: `test_wiki_manager.py` (27 checks green); full suite unaffected.
+
 ## 2026-07-05 - browser reliability: sticky tab, SPA render wait, fill action
 
 Defects found by a live headless-Chromium E2E (SPA page, JS-late render, JS click):

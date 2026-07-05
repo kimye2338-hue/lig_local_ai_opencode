@@ -48,6 +48,16 @@ Do not:
   `PROJECT_MEMORY.md`, `RULES.md`, `TASKS.md`, `profile.json`) — `ocd` seeds
   them only when missing (`agent_ops/project_profile.py` is the single source)
 
+Wiki layer (`memory/wiki/` — LLM Wiki pattern):
+
+- `<topic>.md` auto pages are derived from the ledger and regenerated —
+  do not hand-edit them; fix knowledge by adding a new memory record.
+- `wiki/manual/` and `WIKI_SCHEMA.md` (once seeded) are human-owned:
+  never overwrite or delete them.
+- lint reports duplicates/orphans/stale topics but must never auto-delete.
+- `curated.json` stores optional LLM summaries; losing it only loses polish,
+  never facts (ledger remains the source of truth).
+
 Allowed:
 
 - add new memory views such as `ACTIVE_MEMORY.md`, `LESSONS_LEARNED.md`, or `MEMORY_INDEX.json`

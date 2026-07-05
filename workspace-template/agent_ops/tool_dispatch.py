@@ -357,11 +357,20 @@ def run_agent_loop(
     inserts: List[Dict[str, Any]] = []
     try:
         from .memory_manager import extract_keywords, format_recall_for_prompt, recall
-        mem = recall(keywords=extract_keywords(prompt), limit=5)
+        keywords = extract_keywords(prompt)
+        mem = recall(keywords=keywords, limit=5)
         if mem:
             inserts.append({"role": "system",
                             "content": "이전에 축적된 사용자 규칙/교훈 — 반드시 반영:\n"
                                        + format_recall_for_prompt(mem)})
+        # 복리 recall: 개별 사건보다 '주제 페이지'(증류된 지식)가 강하다.
+        # 기록이 쌓일수록 같은 주제 발췌가 저절로 풍부해진다 (LLM Wiki 층).
+        from .wiki_manager import recall_pages
+        pages = recall_pages(keywords, limit=1)
+        for page in pages:
+            inserts.append({"role": "system",
+                            "content": f"축적된 주제 지식(위키 '{page['topic']}') — 참고:\n"
+                                       + page["excerpt"]})
     except Exception:  # noqa: BLE001 - 기억 주입 실패가 작업을 막으면 안 된다
         pass
     try:

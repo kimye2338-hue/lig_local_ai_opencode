@@ -49,6 +49,13 @@ def add_memory_event(kind: str, title: str, body: str, status: str = "active", p
                     r["deprecated_reason"] = "memory cap exceeded; auto-archived"
         write_jsonl(MEMORY_JSONL, rows)
     render_memory_views()
+    # ingest 워크플로(LLM Wiki): 새 기록이 들어올 때마다 주제 페이지를 갱신한다.
+    # 기록이 쌓일수록 같은 페이지가 두꺼워지는 복리 구조 — 실패해도 저장은 유효.
+    try:
+        from .wiki_manager import consolidate_quietly
+        consolidate_quietly()
+    except Exception:
+        pass
     return item
 
 def add_user_memory(text: str, title: str = "User instruction") -> Dict[str, Any]:
@@ -202,10 +209,18 @@ def memorycheck() -> Dict[str, Any]:
     ensure_memory()
     plan = propose_memory_update("routine memorycheck")
     render_memory_views()
+    # 위키 정리 루틴: 페이지 재통합 + lint(중복/고아/정체 보고 — 자동 삭제 없음).
+    wiki_report: Dict[str, Any] = {}
+    try:
+        from .wiki_manager import consolidate, lint
+        wiki_report = {"consolidate": consolidate(), "lint": lint()}
+    except Exception as exc:
+        wiki_report = {"error": exc.__class__.__name__}
     report = {
         "timestamp": now(),
         "index": json.loads(read_text(MEMORY / "MEMORY_INDEX.json") or "{}"),
         "update_plan": plan,
+        "wiki": wiki_report,
     }
     atomic_write_text(REPORTS / "MEMORY_REVIEW.md", "# Memory Review\n\n```json\n" + json.dumps(report, ensure_ascii=False, indent=2) + "\n```\n")
     return report

@@ -780,6 +780,32 @@ def cmd_book(args):
     return 0
 
 
+def cmd_wiki(args):
+    """LLM Wiki 운영: 주제 페이지 재통합 + lint(+선택 LLM 큐레이션)."""
+    from agent_ops.wiki_manager import WIKI_DIR, consolidate, curate, lint
+    stats = consolidate()
+    print(f"위키 통합: 페이지 {stats['pages']}개 (갱신 {len(stats['updated'])}개, "
+          f"원장 {stats['records']}건) — {WIKI_DIR}")
+    report = lint()
+    issues = (len(report["duplicates"]) + len(report["orphan_pages"])
+              + len(report["stale_topics"]))
+    if issues:
+        print(f"lint: 중복 {len(report['duplicates'])} · 고아 {len(report['orphan_pages'])}"
+              f" · 정체 {len(report['stale_topics'])} — wiki\\log.md 참고")
+    else:
+        print("lint: 이상 없음")
+    if getattr(args, "curate", False):
+        result = curate()
+        print(f"LLM 큐레이션: 성공 {len(result['curated'])}개, 건너뜀 {len(result['skipped'])}개")
+        for s in result["skipped"][:5]:
+            print(f"  - {s['topic']}: {s['reason']}")
+    from agent_ops.knowledge_book import rebuild_quietly
+    rebuild_quietly()
+    if getattr(args, "open", False) and os.name == "nt":
+        os.startfile(str(WIKI_DIR / "index.md"))  # noqa: S606
+    return 0
+
+
 def cmd_weekly(args):
     from agent_ops.secretary import build_weekly_report
     path, text = build_weekly_report()
@@ -824,6 +850,7 @@ def main(argv=None):
     sub.add_parser("briefing").set_defaults(func=cmd_briefing)
     sub.add_parser("weekly").set_defaults(func=cmd_weekly)
     p = sub.add_parser("book"); p.add_argument("--open", action="store_true"); p.set_defaults(func=cmd_book)
+    p = sub.add_parser("wiki"); p.add_argument("--curate", action="store_true"); p.add_argument("--open", action="store_true"); p.set_defaults(func=cmd_wiki)
     p = sub.add_parser("safety-check"); p.add_argument("text", nargs="*"); p.set_defaults(func=cmd_safety_check)
     p = sub.add_parser("safe-write"); p.add_argument("target"); p.add_argument("content_file"); p.set_defaults(func=cmd_safe_write)
     args = parser.parse_args(argv)
