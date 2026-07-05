@@ -1,0 +1,99 @@
+@"%USERPROFILE%\AppData\Local\Programs\Python\Python311\python.exe" -x "%~f0" %* & pause & exit /b
+# -*- coding: utf-8 -*-
+from pathlib import Path
+import datetime
+import hashlib
+import os
+import shutil
+import sys
+
+
+def main() -> int:
+    target = Path(os.environ.get("USERPROFILE", "")) / "OpenCodeLIG" / "bin" / "opencode.exe"
+    backup_dir = Path(os.environ.get("USERPROFILE", "")) / "OpenCodeLIG_USERDATA" / "backups" / "spinner_unknown_type_patch"
+
+    old = b'D("spinner")'
+    new = b'D("text"   )'
+
+    print()
+    print("============================================================")
+    print("OpenCodeLIG spinner crash hotfix V2")
+    print("============================================================")
+    print()
+    print("Fixes: [Reconciler] Unknown component type: spinner")
+    print()
+    print("[INFO] target:", target)
+
+    if not target.exists():
+        print("[ERROR] opencode.exe not found:")
+        print("       ", target)
+        return 1
+
+    data = target.read_bytes()
+    before_sha = hashlib.sha256(data).hexdigest()
+    count_old = data.count(old)
+    count_new = data.count(new)
+
+    print("[INFO] sha256_before:", before_sha)
+    print("[INFO] unsafe_D_spinner_count:", count_old)
+    print("[INFO] already_patched_D_text_count:", count_new)
+
+    if count_old == 0:
+        if count_new > 0:
+            print("[OK] already patched. Nothing to do.")
+            print()
+            try:
+                os.system('"%s" --version' % str(target))
+            except Exception:
+                pass
+            return 0
+        print("[ERROR] exact pattern not found: D(\"spinner\")")
+        print("        This may be a different OpenCode build. Refusing to patch blindly.")
+        return 2
+
+    if count_old != 1:
+        print("[ERROR] expected exactly 1 unsafe D(\"spinner\") occurrence, got", count_old)
+        print("        Refusing to patch blindly.")
+        return 3
+
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup = backup_dir / ("opencode.exe.before_spinner_patch_%s.bak" % stamp)
+    shutil.copy2(target, backup)
+    print("[OK] backup:", backup)
+
+    patched = data.replace(old, new, 1)
+    target.write_bytes(patched)
+
+    verify = target.read_bytes()
+    after_sha = hashlib.sha256(verify).hexdigest()
+    remaining = verify.count(old)
+    patched_count = verify.count(new)
+
+    print("[INFO] sha256_after:", after_sha)
+    print("[INFO] remaining_D_spinner_count:", remaining)
+    print("[INFO] patched_D_text_count:", patched_count)
+
+    if remaining != 0:
+        print("[ERROR] patch verification failed: D(\"spinner\") remains")
+        return 4
+
+    print()
+    print("[OK] spinner unknown-type hotfix applied.")
+    print()
+    print("[INFO] version:")
+    os.system('"%s" --version' % str(target))
+    print()
+    print("[NEXT] Run:")
+    print(r"  %USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat")
+    print()
+    print("If model is still not selected, run the model-config fix separately.")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print("[FATAL]", repr(exc))
+        raise
