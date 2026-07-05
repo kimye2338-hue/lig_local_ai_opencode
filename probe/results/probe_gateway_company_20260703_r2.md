@@ -15,7 +15,7 @@
 ## AutoCAD 확정 (같은 날 사용자 확인)
 
 - `C:\AutoCAD 2019\accoreconsole.exe` **존재 확인** (467,840 bytes, 2018-09-14 빌드)
-- `acad.exe` 동일 폴더. 실행 방식: `/p LIGNEX1 /product ACADM` (Mechanical)
+- `acad.exe` 동일 폴더. 실행 방식: `/p <회사프로파일> /product ACADM` (Mechanical)
 - → P16-02 AutoCAD 배치 자동화 경로 확정, "미발견" 리스크 해소.
 
 ## 교훈 (probe 품질)
