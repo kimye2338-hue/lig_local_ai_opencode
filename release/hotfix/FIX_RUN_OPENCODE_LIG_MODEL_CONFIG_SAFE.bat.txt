@@ -1,0 +1,230 @@
+@python -x "%~f0" %* & pause & exit /b
+# -*- coding: utf-8 -*-
+"""
+Public-repo-safe model config fixer for installed OpenCodeLIG.
+
+Purpose:
+- Fix installs where RUN_OPENCODE_LIG.bat exists but opencode.json has no provider/model.
+- Preserve an existing local-only USERDATA\secrets\lig-api.env when present.
+- If no env file exists, create a template and prompt for gateway base URL / API key locally.
+
+Important:
+- Do not commit the real company API key to this repository.
+- This script writes secrets only on the target PC.
+"""
+from pathlib import Path
+import datetime
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+DEFAULT_GATEWAY_BASE_URL = "http://ais.ligdefenseaerospace.com/ai_infra/llm_api"
+ROUTES = {
+    "QWEN": "/gateway/Qwen3.6-27B-vibe_coding_think_off/v1",
+    "EXAONE": "/gateway/EXAONE-4.5-33B-vibe_coding_think_off/v1",
+    "EXAONE_CHAT": "/gateway/EXAONE-4.5-33B-default_think_off/v1",
+    "GEMMA": "/gateway/gemma-4-31B-it/v1",
+}
+DEFAULT_MODEL_REF = "lig-qwen-coding/Qwen3.6-27B"
+
+
+def ts():
+    return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def write_text(path: Path, text: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="\r\n")
+
+
+def backup(path: Path, backup_dir: Path):
+    if path.exists():
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        safe = str(path).replace(":", "").replace("\\", "_").replace("/", "_")
+        dst = backup_dir / (safe + ".bak")
+        shutil.copy2(path, dst)
+        return dst
+    return None
+
+
+def load_env(path: Path) -> dict:
+    data = {}
+    if not path.exists():
+        return data
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        data[k.strip()] = v.strip()
+    return data
+
+
+def build_env_text(existing: dict) -> str:
+    base = existing.get("LIG_GATEWAY_BASE_URL") or DEFAULT_GATEWAY_BASE_URL
+    key = existing.get("LIG_API_KEY") or ""
+    if not key:
+        print("[INFO] No LIG_API_KEY found in existing env file.")
+        print("       Paste it now, or press Enter to leave a placeholder and edit later.")
+        try:
+            key = input("LIG_API_KEY: ").strip()
+        except EOFError:
+            key = ""
+    if not base:
+        base = DEFAULT_GATEWAY_BASE_URL
+    return f"""# LIG OpenCode local-only API settings. Do not commit this file.
+LIG_API_KEY={key or '<PUT_KEY_HERE>'}
+LIG_GATEWAY_BASE_URL={base}
+LIG_QWEN_BASE_URL={base}{ROUTES['QWEN']}
+LIG_EXAONE_BASE_URL={base}{ROUTES['EXAONE']}
+LIG_EXAONE_CHAT_BASE_URL={base}{ROUTES['EXAONE_CHAT']}
+LIG_GEMMA_BASE_URL={base}{ROUTES['GEMMA']}
+LIG_DEFAULT_OPENCODE_MODEL={DEFAULT_MODEL_REF}
+"""
+
+
+def config_json():
+    provider_common = {
+        "timeout": 180000,
+        "chunkTimeout": 90000,
+    }
+    return {
+        "$schema": "https://opencode.ai/config.json",
+        "autoupdate": False,
+        "share": "disabled",
+        "shell": "cmd.exe",
+        "provider": {
+            "lig-qwen-coding": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "LIG Qwen3.6 27B Coding",
+                "options": {"baseURL": "{env:LIG_QWEN_BASE_URL}", "apiKey": "{env:LIG_API_KEY}", **provider_common},
+                "models": {"Qwen3.6-27B": {"name": "Qwen3.6-27B vibe coding", "limit": {"context": 262144, "output": 8192}}},
+            },
+            "lig-exaone-coding": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "LIG EXAONE 4.5 33B Coding",
+                "options": {"baseURL": "{env:LIG_EXAONE_BASE_URL}", "apiKey": "{env:LIG_API_KEY}", **provider_common},
+                "models": {"EXAONE-4.5-33B": {"name": "EXAONE-4.5-33B vibe coding", "limit": {"context": 262144, "output": 8192}}},
+            },
+            "lig-exaone-chat": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "LIG EXAONE 4.5 33B Chat",
+                "options": {"baseURL": "{env:LIG_EXAONE_CHAT_BASE_URL}", "apiKey": "{env:LIG_API_KEY}", **provider_common},
+                "models": {"EXAONE-4.5-33B-chat": {"name": "EXAONE-4.5-33B default chat", "limit": {"context": 262144, "output": 8192}}},
+            },
+            "lig-gemma-it": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "LIG Gemma 4 31B IT",
+                "options": {"baseURL": "{env:LIG_GEMMA_BASE_URL}", "apiKey": "{env:LIG_API_KEY}", **provider_common},
+                "models": {"gemma-4-31B-it": {"name": "Gemma-4-31B-it", "limit": {"context": 262144, "output": 8192}}},
+            },
+        },
+        "model": DEFAULT_MODEL_REF,
+        "small_model": DEFAULT_MODEL_REF,
+        "enabled_providers": ["lig-qwen-coding", "lig-exaone-coding", "lig-exaone-chat", "lig-gemma-it"],
+        "permission": {
+            "read": "allow", "grep": "allow", "glob": "allow", "lsp": "allow", "todowrite": "allow", "skill": "allow", "edit": "allow",
+            "question": "ask", "webfetch": "deny", "websearch": "deny", "external_directory": "ask", "doom_loop": "deny",
+            "bash": {"*": "allow", "rm -rf *": "deny", "rm -fr *": "deny", "git push *": "ask", "git reset --hard *": "ask"},
+        },
+        "watcher": {"ignore": ["*.pyc", "__pycache__/**", ".git/**", "*.log", "node_modules/**"]},
+    }
+
+
+def launcher_text():
+    return r'''@echo off
+setlocal EnableExtensions
+chcp 65001 >nul
+set "ROOT=%USERPROFILE%\OpenCodeLIG"
+set "EXE=%ROOT%\bin\opencode.exe"
+set "WS=%ROOT%\workspace"
+set "USERDATA=%USERPROFILE%\OpenCodeLIG_USERDATA"
+set "ENVFILE=%USERDATA%\secrets\lig-api.env"
+set "OPENCODE_CONFIG=%USERDATA%\opencode_config\opencode.json"
+set "OPENCODE_USERDATA=%USERDATA%\opencode_data"
+set "OPENCODE_STATE=%USERDATA%\opencode_state"
+set "OPENCODE_CACHE=%USERDATA%\opencode_cache"
+set "XDG_CONFIG_HOME=%USERDATA%\xdg_config"
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
+
+if not exist "%EXE%" (
+  echo [ERROR] opencode.exe not found: %EXE%
+  pause
+  exit /b 1
+)
+if exist "%ENVFILE%" (
+  for /f "usebackq tokens=1,* delims==" %%A in ("%ENVFILE%") do (
+    if not "%%A"=="" if not "%%A:~0,1"=="#" set "%%A=%%B"
+  )
+)
+cd /d "%WS%"
+"%EXE%" --model "%LIG_DEFAULT_OPENCODE_MODEL%"
+'''
+
+
+def verify_json(path: Path):
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data.get("model") == DEFAULT_MODEL_REF
+    assert "lig-qwen-coding" in data.get("provider", {})
+    return True
+
+
+def main() -> int:
+    os.system("chcp 65001 >nul")
+    home = Path(os.environ.get("USERPROFILE", str(Path.home())))
+    root = home / "OpenCodeLIG"
+    ws = root / "workspace"
+    exe = root / "bin" / "opencode.exe"
+    userdata = home / "OpenCodeLIG_USERDATA"
+    secrets = userdata / "secrets"
+    backup_dir = userdata / "backups" / ("model_config_fix_" + ts())
+
+    if not exe.exists():
+        print("[ERROR] opencode.exe not found:", exe)
+        return 1
+    if not ws.exists():
+        print("[ERROR] workspace not found:", ws)
+        return 1
+
+    env_path = secrets / "lig-api.env"
+    targets = [
+        ws / "RUN_OPENCODE_LIG.bat",
+        ws / "opencode.json",
+        userdata / "opencode_config" / "opencode.json",
+        root / "userdata" / "config" / "opencode" / "opencode.json",
+        home / ".config" / "opencode" / "opencode.json",
+        env_path,
+    ]
+    for t in targets:
+        backup(t, backup_dir)
+
+    env_data = load_env(env_path)
+    write_text(env_path, build_env_text(env_data))
+
+    cfg_text = json.dumps(config_json(), ensure_ascii=False, indent=2) + "\n"
+    config_targets = [
+        ws / "opencode.json",
+        userdata / "opencode_config" / "opencode.json",
+        root / "userdata" / "config" / "opencode" / "opencode.json",
+        home / ".config" / "opencode" / "opencode.json",
+    ]
+    for p in config_targets:
+        write_text(p, cfg_text)
+        verify_json(p)
+        print("[OK] wrote config:", p)
+
+    write_text(ws / "RUN_OPENCODE_LIG.bat", launcher_text())
+    print("[OK] wrote launcher:", ws / "RUN_OPENCODE_LIG.bat")
+    print("[OK] env file:", env_path)
+    print("[OK] backups:", backup_dir)
+    print()
+    print("Next run:")
+    print(r"  %USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
