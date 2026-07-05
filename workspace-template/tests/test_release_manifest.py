@@ -124,6 +124,19 @@ def _check_bundle_build() -> None:
     with zipfile.ZipFile(zip_path) as zf:
         names = zf.namelist()
         check("bundle has MANIFEST_SHA256.txt", "MANIFEST_SHA256.txt" in names, str(names[:5]))
+        # One-click install UX: root installer + first-read + daily menu + py resolver
+        check("bundle has root 설치.bat", "설치.bat" in names, "no root installer")
+        check("bundle has 처음_읽어주세요.txt", "처음_읽어주세요.txt" in names, "no first-read")
+        check("bundle has AI비서 menu", any(n.endswith("launch/AI비서.bat") for n in names), "no menu")
+        check("bundle has _py resolver", any(n.endswith("launch/_py.bat") for n in names), "no _py")
+        inst = zf.read("설치.bat")
+        check("root installer is CRLF", inst.count(b"\n") == inst.count(b"\r\n") > 0, "LF installer")
+        setup = zf.read("release/setup.bat")
+        check("setup.bat is CRLF", setup.count(b"\n") == setup.count(b"\r\n") > 0, "LF setup")
+        check("launch bats do not hardcode py -3.11",
+              not any(b"py -3.11 agent_ops" in zf.read(n) for n in names
+                      if n.endswith(".bat") and "launch/" in n and not n.endswith("_py.bat")),
+              "hardcoded launcher remains")
         check("bundle includes workspace-template source",
               any(n.startswith("workspace-template/agent_ops/") for n in names), str(len(names)))
         check("bundle includes plan board", any(n == "plan/STATUS.md" for n in names), "no STATUS")

@@ -2,8 +2,7 @@
 chcp 65001 >nul
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
-where py >nul 2>nul || (echo [오류] py 런처가 없습니다. Python 3.11을 설치하세요. & exit /b 2)
-py -3.11 --version >nul 2>nul || (echo [오류] Python 3.11이 없습니다. & exit /b 2)
+call "%~dp0_py.bat" || exit /b 9
 
 set "CHROME_EXE="
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "CHROME_EXE=%ProgramFiles%\Google\Chrome\Application\chrome.exe"

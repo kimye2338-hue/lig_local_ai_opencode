@@ -126,12 +126,29 @@ def build(date: str, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     zip_path = out_dir / f"OpenCodeLIG_BUNDLE_{date}.zip"
 
+    # Root-level one-click installer + first-read note (generated, CRLF for Windows).
+    installer = ("@echo off\r\n"
+                 "chcp 65001 >nul\r\n"
+                 "cd /d \"%~dp0\"\r\n"
+                 "call release\\setup.bat\r\n")
+    first_read = ("OpenCodeLIG 설치 방법 (1분)\r\n"
+                  "\r\n"
+                  "1. 이 폴더의  설치.bat  을 더블클릭하세요.\r\n"
+                  "2. 게이트웨이 주소/API 키를 붙여넣으세요 (모르면 그냥 Enter — 나중에 설정 가능).\r\n"
+                  "3. 끝. 바탕화면에 생긴  AI비서  를 실행하면 됩니다.\r\n"
+                  "\r\n"
+                  "문제가 생기면: docs\\RUNBOOK.md 또는 워크스페이스의 launch\\diag.bat 실행.\r\n")
+
     manifest_lines = ["# MANIFEST_SHA256 — every archived file", f"# bundle: {zip_path.name}", ""]
     print(f"packing {len(all_files)} files ({len(source)} source + {len(prefetch)} prefetch) ...")
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for p, rel in all_files:
             zf.write(p, rel)
             manifest_lines.append(f"{_sha256(p)}  {rel}")
+        for rel, text in (("설치.bat", installer), ("처음_읽어주세요.txt", first_read)):
+            data = text.encode("utf-8")
+            zf.writestr(rel, data)
+            manifest_lines.append(f"{hashlib.sha256(data).hexdigest()}  {rel}")
         manifest_text = "\n".join(manifest_lines) + "\n"
         zf.writestr("MANIFEST_SHA256.txt", manifest_text)
 
