@@ -16,7 +16,7 @@ from .ws_min import WsClient, WsTimeout
 
 CDP_BASE_URL = "http://127.0.0.1:9222"
 CHROME_GUIDE = "chrome-debug.bat을 먼저 실행하세요"
-ACTIONS = ("open_url", "get_title", "extract_text", "screenshot")
+ACTIONS = ("open_url", "get_title", "extract_text", "screenshot", "list_tabs")
 
 
 def execute(action: str, options: Optional[dict] = None) -> dict:
@@ -26,6 +26,14 @@ def execute(action: str, options: Optional[dict] = None) -> dict:
     caller when Chrome is absent or mid-action CDP behavior differs by version.
     """
     opts = options or {}
+    if action == "list_tabs":
+        try:
+            tabs = _json_get("/json")
+            pages = [{"index": i, "title": tab.get("title", ""), "url": tab.get("url", "")}
+                     for i, tab in enumerate(t for t in tabs if t.get("type") == "page")]
+            return {"ok": True, "action": action, "data": {"tabs": pages}}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "action": action, "error": _friendly_error(exc)}
     if action not in ACTIONS:
         return {
             "ok": False,
@@ -77,6 +85,22 @@ def _connect(options: dict) -> _CdpClient:
     tabs = _json_get("/json")
     if not isinstance(tabs, list):
         raise RuntimeError("Chrome CDP tab list response was not a list")
+    # 사용자가 '열어 둔' 특정 탭을 지정: index(정수) 또는 url/title 부분일치 문자열
+    want = options.get("tab")
+    if want not in (None, ""):
+        pages = [t for t in tabs if t.get("type") == "page" and t.get("webSocketDebuggerUrl")]
+        picked = None
+        try:
+            picked = pages[int(want)]
+        except (ValueError, TypeError, IndexError):
+            needle = str(want).lower()
+            for t2 in pages:
+                if needle in str(t2.get("url", "")).lower() or needle in str(t2.get("title", "")).lower():
+                    picked = t2
+                    break
+        if picked is None:
+            raise RuntimeError(f"열린 탭에서 '{want}' 을 찾지 못했습니다 — list_tabs로 확인하세요")
+        return _CdpClient(picked["webSocketDebuggerUrl"])
     tab = _pick_tab(tabs)
     if tab is None:
         tab = _new_tab()
@@ -110,8 +134,8 @@ def _json_get(path: str, method: str = "GET") -> Any:
 def _run_action(cdp: _CdpClient, action: str, options: dict) -> dict:
     if action == "open_url":
         url = str(options.get("url") or "")
-        if not url.startswith(("http://", "https://")):
-            raise ValueError("open_url requires http(s) url")
+        if not url.startswith(("http://", "https://", "file://")):
+            raise ValueError("open_url requires http(s):// or file:// url")
         cdp.call("Page.enable")
         cdp.call("Page.navigate", {"url": url})
         _wait_ready(cdp, float(options.get("load_timeout", 10)))

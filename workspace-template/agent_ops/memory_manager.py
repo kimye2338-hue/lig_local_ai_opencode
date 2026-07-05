@@ -116,6 +116,24 @@ def format_recall_for_prompt(items: List[Dict[str, Any]]) -> str:
         lines.append(f"- [{item.get('kind')}/{item.get('priority')}/{item.get('source')}] {item.get('title')}: {body}")
     return "\n".join(lines)
 
+def record_self_error(area: str, detail: str, task: str = "") -> None:
+    """시스템이 '스스로 관찰한' 실수를 기억에 남긴다 — 사람이 안 불러줘도.
+
+    호출처: 품질검증이 LLM 출력을 거부했을 때, 어댑터 실행이 실패했을 때.
+    같은 제목이 같은 날 이미 있으면 중복 기록하지 않는다(원장 오염 방지).
+    기록된 error_pattern은 recall 기계주입으로 다음 작업에 자동 반영된다.
+    """
+    title = f"자가 관찰 실수: {area}"
+    today = now()[:10]
+    for r in load_memory():
+        if r.get("title") == title and str(r.get("created_at", ""))[:10] == today:
+            return
+    body = (detail or "")[:300] + (f" (작업: {task[:80]})" if task else "")
+    add_memory_event("error_pattern", title, body, status="active",
+                     priority="normal", source="self_observed",
+                     tags=extract_keywords(area + " " + task)[:6])
+
+
 def record_success_lesson(task: Dict[str, Any], result: Dict[str, Any]) -> None:
     kind = task.get("kind", "task")
     if kind in {"memorycheck", "report", "verify", "doctor", "reflect"}:

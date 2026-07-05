@@ -33,6 +33,7 @@ permission:
 | 일정 등록 | `python agent_ops/agentops.py schedule add "<자연어 일정>"` |
 | 일정 조회 | `python agent_ops/agentops.py schedule list --when week` |
 | Outlook 일정 가져오기 | `python agent_ops/agentops.py schedule sync-outlook` |
+| 웹페이지/사내 포털 분석·요약 | ① 사용자에게 `launch\chrome-debug.bat`로 크롬을 열게 안내(이미 떠 있는 일반 크롬은 안 보임) ② `python agent_ops/agentops.py agent --mode real --task "열린 탭 중 <대상> 페이지를 읽고 요약"` — 에이전트가 browse_tabs/read_web_page 도구로 열린 탭을 나열·크롤링한다 |
 | 상태 점검/문제 진단 | `python agent_ops/agentops.py doctor` |
 
 - 산출물 위치: `agent_ops/results/artifacts/<run_id>/`, 보고서: `agent_ops/results/reports/`.

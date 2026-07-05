@@ -137,6 +137,12 @@ def _adapter_execution_summary(plan: dict, artifact_result: dict, execute: bool,
             result = e["invoke"]()
             ok = bool(result.get("ok"))
             detail = e["reason"] if ok else str(result.get("error", ""))[:160]
+            if not ok:
+                try:  # 어댑터 실패도 자가 관찰 실수로 기억 (같은 날 중복 방지)
+                    from agent_ops.memory_manager import record_self_error
+                    record_self_error(f"{e['adapter']} 어댑터 실행 실패", detail)
+                except Exception:  # noqa: BLE001
+                    pass
             if ok and result.get("out_path"):
                 detail += f" -> {result['out_path']}"
             summaries.append({"adapter": e["adapter"],
@@ -531,7 +537,8 @@ def cmd_work(args):
                                              context=ctx,
                                              enrich=llm_client is not None,
                                              llm_client=llm_client,
-                                             memories=memories_text or None)
+                                             memories=memories_text or None,
+                                             self_learn=True)
         enr = artifact_result.get("enrichment", {})
         if enr.get("requested"):
             print(f"LLM 내용 채움: {enr.get('status', '')}")

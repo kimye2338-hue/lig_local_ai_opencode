@@ -152,7 +152,8 @@ def _entry_card(r: Dict[str, Any], faded: bool = False) -> str:
         faded = True
     cls = "card faded" if faded else "card"
     search = html.escape((title + " " + body + " " + label).lower(), quote=True)
-    return (f'<div class="{cls}" data-search="{search}">'
+    status = "archived" if r.get("status") != "active" else "active"
+    return (f'<div class="{cls}" data-search="{search}" data-kind="{html.escape(kind)}" data-status="{status}">'
             f'<div class="meta"><span class="badge" style="background:{color}">{label}</span>'
             f'{badge}<span class="date">{created}</span><span class="src">{src}</span></div>'
             f'<div class="title">{title}</div><div class="body">{body}</div></div>')
@@ -184,15 +185,39 @@ h3,h4,h5{margin:14px 0 6px}
 .wiki{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 18px}
 .wiki ul{padding-left:20px}
 footer{color:var(--muted);font-size:12px;margin-top:40px;text-align:center}
+nav{position:sticky;top:0;background:var(--bg);padding:10px 0;border-bottom:1px solid var(--line);z-index:5;display:flex;gap:6px;flex-wrap:wrap}
+nav a{color:var(--fg);text-decoration:none;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:4px 12px}
+nav a:hover{border-color:var(--accent);color:var(--accent)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.chip{cursor:pointer;font-size:12px;border:1px solid var(--line);border-radius:20px;padding:3px 12px;background:var(--card);user-select:none}
+.chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.archive{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 16px}
+.archive a{font-size:12px;color:var(--accent);text-decoration:none;border:1px dashed var(--line);border-radius:8px;padding:2px 10px}
 """
 
 _JS = """
-document.getElementById('q').addEventListener('input',function(){
-  var q=this.value.trim().toLowerCase();
+var KIND='',SHOWARC=false;
+function apply(){
+  var q=document.getElementById('q').value.trim().toLowerCase();
   document.querySelectorAll('.card[data-search]').forEach(function(c){
-    c.style.display=(!q||c.getAttribute('data-search').indexOf(q)>=0)?'':'none';
+    var okQ=!q||c.getAttribute('data-search').indexOf(q)>=0;
+    var okK=!KIND||c.getAttribute('data-kind')===KIND;
+    var okA=SHOWARC||c.getAttribute('data-status')!=='archived';
+    c.style.display=(okQ&&okK&&okA)?'':'none';
+  });
+}
+document.getElementById('q').addEventListener('input',apply);
+document.querySelectorAll('.chip[data-kind]').forEach(function(ch){
+  ch.addEventListener('click',function(){
+    var k=ch.getAttribute('data-kind');
+    KIND=(KIND===k)?'':k;
+    document.querySelectorAll('.chip[data-kind]').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-kind')===KIND);});
+    apply();
   });
 });
+var arc=document.getElementById('chip-arc');
+if(arc){arc.addEventListener('click',function(){SHOWARC=!SHOWARC;arc.classList.toggle('on',SHOWARC);apply();});}
+apply();
 """
 
 
@@ -217,20 +242,35 @@ def build_book(now: datetime | None = None) -> Path:
                  f"<div class='stat'><b>{len(entries)}</b><span>누적 기록(보관 포함)</span></div>"
                  f"<div class='stat'><b>{sum(a['count'] for a in activity)}</b><span>최근 30일 작업</span></div>"
                  "</div>")
+    counts = {k: sum(1 for r in active if r.get("kind") == k)
+              for k in ("preference", "lesson", "error_pattern")}
+    parts.append("<nav>"
+                 "<a href='#review'>🔁 복습</a>"
+                 f"<a href='#pref'>내 규칙 {counts['preference']}</a>"
+                 f"<a href='#lesson'>배운 것 {counts['lesson']}</a>"
+                 f"<a href='#err'>실수 노트 {counts['error_pattern']}</a>"
+                 "<a href='#wiki'>위키</a><a href='#timeline'>타임라인</a>"
+                 "<a href='#activity'>활동</a></nav>")
     parts.append("<input id='q' type='search' placeholder='검색 — 제목/내용/분류'>")
+    parts.append("<div class='chips'>"
+                 "<span class='chip' data-kind='preference'>내 규칙·선호</span>"
+                 "<span class='chip' data-kind='lesson'>배운 것</span>"
+                 "<span class='chip' data-kind='error_pattern'>실수 노트</span>"
+                 "<span class='chip' id='chip-arc'>보관 포함</span></div>")
 
     if picks:
-        parts.append("<h2>🔁 이번 주의 복습 — 잊기 전에 다시 보기</h2>")
+        parts.append("<h2 id='review'>🔁 이번 주의 복습 — 잊기 전에 다시 보기</h2>")
         for r in picks:
             parts.append(_entry_card(r).replace("class=\"card\"", "class=\"card review\""))
 
     by_kind: Dict[str, List[Dict[str, Any]]] = {}
     for r in active:
         by_kind.setdefault(str(r.get("kind", "기록")), []).append(r)
+    sec_id = {"preference": "pref", "lesson": "lesson", "error_pattern": "err"}
     for kind in ("preference", "lesson", "error_pattern"):
         rows = by_kind.pop(kind, [])
         if rows:
-            parts.append(f"<h2>{KIND_LABEL[kind][0]} ({len(rows)})</h2>")
+            parts.append(f"<h2 id='{sec_id[kind]}'>{KIND_LABEL[kind][0]} ({len(rows)})</h2>")
             parts.extend(_entry_card(r) for r in rows)
     other = [r for rows in by_kind.values() for r in rows]
     if other:
@@ -238,22 +278,27 @@ def build_book(now: datetime | None = None) -> Path:
         parts.extend(_entry_card(r) for r in other)
 
     if wiki_html:
-        parts.append("<h2>📖 위키 (현행 규칙집 — 직접 편집 가능)</h2>")
+        parts.append("<h2 id='wiki'>📖 위키 (현행 규칙집 — 직접 편집 가능)</h2>")
         parts.append(f"<div class='wiki'>{wiki_html}</div>")
 
-    parts.append("<h2>📜 전체 타임라인 — 나의 히스토리북</h2>")
+    parts.append("<h2 id='timeline'>📜 전체 타임라인 — 나의 히스토리북</h2>")
+    months = sorted({str(r.get("created_at", ""))[:7] for r in entries if r.get("created_at")},
+                    reverse=True)
+    if months:
+        parts.append("<div class='archive'>월별: "
+                     + " ".join(f"<a href='#m-{m}'>{m}</a>" for m in months) + "</div>")
     month = ""
     for r in entries:
         m = str(r.get("created_at", ""))[:7]
         if m != month:
             month = m
-            parts.append(f"<div class='month'>{month or '날짜 미상'}</div>")
+            parts.append(f"<div class='month' id='m-{month}'>{month or '날짜 미상'}</div>")
         parts.append(_entry_card(r, faded=r.get("status") != "active"))
     if not entries:
         parts.append("<p class='sub'>아직 기록이 없습니다 — 오픈코드 채팅에서 \"기억해: ...\" 라고 말해 보세요.</p>")
 
     if activity:
-        parts.append("<h2>🗓 최근 활동 (30일)</h2>")
+        parts.append("<h2 id='activity'>🗓 최근 활동 (30일)</h2>")
         for a in activity[:14]:
             tasks = html.escape(" · ".join(a["tasks"][:3]))
             parts.append(f"<div class='day'><b>{a['day']}</b><span>{a['count']}건 — {tasks}</span></div>")

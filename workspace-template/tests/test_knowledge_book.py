@@ -159,6 +159,28 @@ def main() -> None:
     check("agent loop mechanically carries memories",
           any("직급" in c for c in sys_msgs), str([c[:60] for c in sys_msgs]))
 
+    # --- 자가 학습: 시스템이 스스로 관찰한 실수를 기억한다 (dedup 포함) --------
+    from agent_ops.artifact_generators import generate_artifacts as gen3
+    from agent_ops.memory_manager import load_memory
+    out2 = Path(tempfile.mkdtemp(prefix="self_"))
+    for _ in range(2):   # 두 번 실패해도 같은 날은 1건만
+        gen3("회의록 초안 만들어줘", ["meeting_minutes"], out_dir=out2,
+             enrich=True, llm_client=lambda p: "그냥 잡담", self_learn=True)
+    self_errs = [r for r in load_memory() if r.get("source") == "self_observed"]
+    check("self-observed quality failure recorded once (dedup)",
+          len(self_errs) == 1 and "품질검증 실패" in self_errs[0]["title"], str(self_errs))
+
+    # --- 블로그형 책: 네비/필터 칩/월별 아카이브 ------------------------------
+    r = run_cli(root, "book")
+    check("book rebuild exits 0", r.returncode == 0, r.stderr)
+    h2 = book.read_text(encoding="utf-8")
+    for lbl, needle in [("sticky nav", "<nav>"), ("filter chips", "class='chips'"),
+                        ("archive-toggle chip", "chip-arc"),
+                        ("month archive links", "href='#m-2026-"),
+                        ("kind attr for filtering", 'data-kind="preference"'),
+                        ("self-error surfaces in book", "자가 관찰 실수")]:
+        check(f"blog-style book has {lbl}", needle in h2, needle)
+
     print(f"\nALL {PASS} CHECKS PASSED (knowledge book)")
 
 

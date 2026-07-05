@@ -38,10 +38,13 @@ def main() -> None:
     # --- registry / definitions ---
     defs = tool_definitions()
     names = {x["function"]["name"] for x in defs}
-    check("tool_definitions covers registry", "read_file" in names and "replace_in_file" in names and len(names) == 7)
+    check("tool_definitions covers registry",
+          "read_file" in names and "replace_in_file" in names
+          and "browse_tabs" in names and "read_web_page" in names and len(names) == 9)
     prompt_schema_bytes = len(AGENT_SYSTEM_PROMPT.encode("utf-8"))
     prompt_schema_bytes += len(json.dumps(defs, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-    check("prompt and schema stay under 2.3KB", prompt_schema_bytes <= 2300, str(prompt_schema_bytes))
+    # 브라우저 2도구 추가로 상향 — 약모델 tool-call 안정선은 P11 floor 실측상 ~3KB까지 여유.
+    check("prompt and schema stay under 2.8KB", prompt_schema_bytes <= 2800, str(prompt_schema_bytes))
 
     # --- write then read (Korean path + content) ---
     r = d.dispatch({"name": "write_file", "arguments": {"path": "메모/노트.md", "content": "첫 줄\n둘째 줄\n"}})

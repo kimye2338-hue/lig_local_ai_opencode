@@ -51,8 +51,8 @@ def main() -> None:
     check("browser adapter keeps company login pending",
           "company validation pending" in browser_spec["pending"])
     check("browser adapter exposes execute", browser_spec["execute"] is browser_cdp.execute)
-    check("declared actions include required four",
-          set(browser_cdp.ACTIONS) == {"open_url", "get_title", "extract_text", "screenshot"})
+    check("declared actions include required five",
+          set(browser_cdp.ACTIONS) == {"open_url", "get_title", "extract_text", "screenshot", "list_tabs"})
     bat = (WS_TEMPLATE / "launch" / "chrome-debug.bat").read_text(encoding="utf-8")
     check("chrome-debug.bat uses remote debugging port", "--remote-debugging-port=9222" in bat)
     check("chrome-debug.bat uses separate temp profile", "--user-data-dir=\"%OPEN_CODE_LIG_CHROME_PROFILE%\"" in bat
@@ -62,6 +62,18 @@ def main() -> None:
     check("unknown action returns ok false", bad["ok"] is False)
     check("unknown action reports available actions", "open_url" in bad["data"]["available_actions"])
 
+    # --- 신규: 열린 탭 크롤링 계약 (정적 — chrome 불필요) ---
+    from agent_ops.adapters.browser_cdp import ACTIONS
+    check("list_tabs action registered", "list_tabs" in ACTIONS, str(ACTIONS))
+    from agent_ops.tool_dispatch import tool_definitions
+    names = [d["function"]["name"] for d in tool_definitions()]
+    check("agent exposes browse_tabs tool", "browse_tabs" in names, str(names))
+    check("agent exposes read_web_page tool", "read_web_page" in names, str(names))
+    from agent_ops.tool_dispatch import ToolDispatcher
+    disp = ToolDispatcher(WS_TEMPLATE)
+    bad = disp.dispatch({"name": "read_web_page", "arguments": {}})
+    check("read_web_page requires url or tab", bad["ok"] is False and "url 또는 tab" in bad["error"], str(bad))
+
     if not chrome_9222_available():
         result = browser_cdp.execute("get_title", {})
         check("missing chrome returns ok false", result["ok"] is False)
@@ -70,19 +82,32 @@ def main() -> None:
         print(f"\nSKIP Chrome CDP live checks - skipped, not failed; ALL {PASS} STATIC CHECKS PASSED (browser adapter)")
         return
 
-    opened = browser_cdp.execute("open_url", {"url": "https://example.com", "load_timeout": 15})
-    check("open_url succeeds on example.com", opened["ok"] is True, opened.get("error", ""))
+    # 오프라인 결정성: 외부(example.com) 대신 임시 file:// 페이지 — 집/회사/CI 어디서든 동일.
+    import tempfile
+    live_page = Path(tempfile.mkdtemp(prefix="cdp_")) / "live.html"
+    live_page.write_text("<html><head><title>CDP Live OK</title></head>"
+                         "<body><p>LIVE_MARKER_BODY 텍스트</p></body></html>", encoding="utf-8")
+    opened = browser_cdp.execute("open_url", {"url": live_page.as_uri(), "load_timeout": 15})
+    check("open_url succeeds on local page", opened["ok"] is True, opened.get("error", ""))
     title = browser_cdp.execute("get_title", {})
-    check("get_title returns example title", title["ok"] is True and "Example" in title["data"].get("title", ""),
+    check("get_title returns live title", title["ok"] is True and "CDP Live OK" in title["data"].get("title", ""),
           str(title))
     text = browser_cdp.execute("extract_text", {"max_length": 500})
-    check("extract_text returns example domain body",
-          text["ok"] is True and "Example Domain" in text["data"].get("text", ""), str(text))
+    check("extract_text returns live body",
+          text["ok"] is True and "LIVE_MARKER_BODY" in text["data"].get("text", ""), str(text))
     shot = browser_cdp.execute("screenshot", {"filename": "example.png"})
     shot_path = Path(shot.get("data", {}).get("path", ""))
     check("screenshot writes png under results",
           shot["ok"] is True and shot_path.exists() and shot_path.suffix.lower() == ".png",
           str(shot))
+
+        # 신규: 열린 탭 나열 + 부분일치 attach (live)
+    tabs_res = browser_cdp.execute("list_tabs", {})
+    check("live list_tabs ok", tabs_res["ok"] and isinstance(tabs_res["data"]["tabs"], list), str(tabs_res)[:200])
+    if tabs_res["data"]["tabs"]:
+        first_title = tabs_res["data"]["tabs"][0]["title"]
+        att = browser_cdp.execute("get_title", {"tab": 0})
+        check("live attach by index", att["ok"], str(att)[:200])
 
     print(f"\nALL {PASS} CHECKS PASSED (browser adapter)")
 

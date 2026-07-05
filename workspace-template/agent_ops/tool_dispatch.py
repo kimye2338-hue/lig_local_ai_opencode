@@ -44,6 +44,46 @@ ToolFn = Callable[[Path, Dict[str, Any]], Dict[str, Any]]
 # name -> (fn, required args, optional args, one-line description).
 # Descriptions are deliberately short: weak models pick tools better with a
 # hint, but long schemas eat their context and hurt call accuracy.
+_BROWSER_HINT = (" — 디버그 크롬이 필요합니다: launch\\chrome-debug.bat 로 크롬을 연 뒤 다시 시도"
+                 " (이미 떠 있는 일반 크롬 창은 보이지 않습니다)")
+
+
+def tool_browse_tabs(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
+    from .adapters import browser_cdp
+    res = browser_cdp.execute("list_tabs", {})
+    if not res.get("ok"):
+        return {"ok": False, "error": str(res.get("error", "")) + _BROWSER_HINT,
+                "root_cause_category": "browser_unavailable"}
+    return {"ok": True, "data": res.get("data", {})}
+
+
+def tool_read_web_page(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
+    from .adapters import browser_cdp
+    url = str(args.get("url") or "")
+    tab = args.get("tab")
+    if not url and tab in (None, ""):
+        return {"ok": False, "error": "url 또는 tab 중 하나는 필요합니다",
+                "root_cause_category": "missing_argument"}
+    opts: Dict[str, Any] = {}
+    if tab not in (None, ""):
+        opts["tab"] = tab
+    if url:
+        opened = browser_cdp.execute("open_url", {"url": url, **opts})
+        if not opened.get("ok"):
+            return {"ok": False, "error": str(opened.get("error", "")) + _BROWSER_HINT,
+                    "root_cause_category": "browser_unavailable"}
+    title = browser_cdp.execute("get_title", dict(opts))
+    text = browser_cdp.execute("extract_text",
+                               {**opts, "max_length": int(args.get("max_length") or 4000)})
+    if not text.get("ok"):
+        return {"ok": False, "error": str(text.get("error", "")) + _BROWSER_HINT,
+                "root_cause_category": "browser_unavailable"}
+    return {"ok": True, "data": {"title": (title.get("data") or {}).get("title", ""),
+                                 "url": url,
+                                 "text": (text.get("data") or {}).get("text", ""),
+                                 "truncated": (text.get("data") or {}).get("truncated", False)}}
+
+
 REGISTRY: Dict[str, Dict[str, Any]] = {
     "read_file":       {"fn": tool_read_file,       "required": ["path"],                 "optional": [],                    "description": "Read a text file"},
     "write_file":      {"fn": tool_write_file,      "required": ["path", "content"],      "optional": [],                    "description": "Create or overwrite a text file"},
@@ -52,6 +92,8 @@ REGISTRY: Dict[str, Dict[str, Any]] = {
     "list_dir":        {"fn": tool_list_dir,        "required": [],                       "optional": ["path"],              "description": "List files in a directory"},
     "search_files":    {"fn": tool_search_files,    "required": ["query"],                "optional": ["path", "pattern"],   "description": "Search text across files"},
     "run_diagnostic":  {"fn": tool_run_diagnostic,  "required": [],                       "optional": [],                    "description": "Check workspace health"},
+    "browse_tabs":     {"fn": tool_browse_tabs,     "required": [],                       "optional": [],                    "description": "List open Chrome tabs (needs debug Chrome)"},
+    "read_web_page":   {"fn": tool_read_web_page,   "required": [],                       "optional": ["url", "tab", "max_length"], "description": "Read page text: url to open, or tab(index/substring) = already-open tab"},
 }
 
 _PARAM_DESCRIPTIONS = {

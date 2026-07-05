@@ -908,7 +908,8 @@ def _enrich_prompt(kind: str, task: str, scaffold: str,
 def _maybe_enrich(task: str, files_by_kind: Dict[str, List[str]], enrich: bool,
                   llm_client: Optional[Callable[[str], str]],
                   required_terms: Optional[List[str]] = None,
-                  memories: Optional[str] = None) -> Dict[str, Any]:
+                  memories: Optional[str] = None,
+                  self_learn: bool = False) -> Dict[str, Any]:
     """Optionally let an LLM fill scaffold TODOs — quality-gated, never lossy.
 
     A filled file replaces its scaffold only if the whole artifact set still
@@ -948,6 +949,14 @@ def _maybe_enrich(task: str, files_by_kind: Dict[str, List[str]], enrich: bool,
                 result["fallback"].append(
                     {"file": path.name,
                      "reason": f"quality validator rejected: {failed}"})
+                if self_learn:
+                    # 시스템이 스스로 관찰한 실수 → 기억 (다음 enrich에 기계 주입됨)
+                    try:
+                        from .memory_manager import record_self_error
+                        record_self_error(f"{kind} 생성 시 품질검증 실패({failed})",
+                                          f"규칙 위반: {failed}", task)
+                    except Exception:  # noqa: BLE001
+                        pass
     result["status"] = (f"applied {len(result['applied'])} file(s), "
                         f"fallback {len(result['fallback'])} file(s) — "
                         "실패한 파일은 scaffold 유지")
@@ -972,7 +981,8 @@ def generate_artifacts(task: str, kinds: List[str],
                        context: Optional[Dict[str, Any]] = None,
                        enrich: bool = False,
                        llm_client: Optional[Callable[[str], str]] = None,
-                       memories: Optional[str] = None) -> Dict[str, Any]:
+                       memories: Optional[str] = None,
+                       self_learn: bool = False) -> Dict[str, Any]:
     """Generate scaffolds for the given kinds; never raises per-kind.
 
     Default out_dir is a per-run folder under results/artifacts/ so user
@@ -1007,7 +1017,7 @@ def generate_artifacts(task: str, kinds: List[str],
                for kind, paths in files_by_kind.items()}
     quality_ok = all(v["ok"] for v in quality.values()) if quality else True
     enrichment = _maybe_enrich(task, files_by_kind, enrich, llm_client,
-                               memories=memories,
+                               memories=memories, self_learn=self_learn,
                                required_terms=required_terms)
     if enrichment["requested"]:
         _record_enrich_diag(task, enrichment)
