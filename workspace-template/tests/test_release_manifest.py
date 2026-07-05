@@ -127,29 +127,25 @@ def _check_bundle_build() -> None:
         # One-click install UX: root installer + first-read + daily menu + py resolver
         check("bundle has root 설치.bat", "설치.bat" in names, "no root installer")
         check("bundle has 처음_읽어주세요.txt", "처음_읽어주세요.txt" in names, "no first-read")
-        check("bundle has AI비서 shim", any(n.endswith("launch/AI비서.bat") for n in names), "no shim")
-        check("bundle has menu.bat (ASCII filename for cp949-safe call)",
-              any(n.endswith("launch/menu.bat") for n in names), "no menu.bat")
-        # cp949 트랩 가드: 더블클릭된 bat는 기본 코드페이지로 '내용'을 읽으므로,
-        # bat 내용이 참조하는 파일명은 ASCII여야 한다 (한글은 파일 '이름'에만 허용).
-        shim = zf.read([n for n in names if n.endswith("launch/AI비서.bat")][0])
-        check("AI비서 shim content is pure ASCII",
-              all(b < 0x80 for b in shim), "non-ascii in shim content")
-        check("setup.bat desktop launcher calls ASCII menu.bat",
-              b'echo call "menu.bat"' in zf.read("release/setup.bat"),
-              "desktop launcher not ASCII-target")
+        check("bundle has menu.bat + menu.py (daily entry)",
+              any(n.endswith("launch/menu.bat") for n in names)
+              and any(n.endswith("agent_ops/menu.py") for n in names), "no menu")
+        check("bundle has setup_impl.py (logic out of batch)",
+              "release/setup_impl.py" in names, "no setup_impl")
+        check("setup.bat is a thin shim delegating to setup_impl.py",
+              b"setup_impl.py" in zf.read("release/setup.bat"), "no delegation")
+        impl = zf.read("release/setup_impl.py").decode("utf-8")
+        check("desktop launcher content generated ASCII-only (cp949-safe)",
+              'encode("ascii")' in impl and "menu.bat" in impl, "unsafe desktop gen")
         check("bundle has _py resolver", any(n.endswith("launch/_py.bat") for n in names), "no _py")
         inst = zf.read("설치.bat")
         check("root installer is CRLF", inst.count(b"\n") == inst.count(b"\r\n") > 0, "LF installer")
         setup = zf.read("release/setup.bat")
         check("setup.bat is CRLF", setup.count(b"\n") == setup.count(b"\r\n") > 0, "LF setup")
-        # setup.bat lives in release/ but must treat the BUNDLE ROOT (its parent)
-        # as ROOT — regression guard for the '%~dp0' path bug that broke install
-        # (looked for release\workspace-template / release\release\prefetch).
-        check("setup.bat resolves ROOT to bundle root (parent of release/)",
-              b'%~dp0..' in setup, "ROOT not parent-resolved")
-        check("setup.bat guards missing workspace-template with a clear stop",
-              "번들 구조를 찾지 못했습니다".encode("utf-8") in setup, "no structure guard")
+        check("setup_impl resolves bundle root from its own location",
+              "parents[1]" in impl, "no bundle-root resolution")
+        check("setup_impl guards missing workspace-template with a clear stop",
+              "번들 구조를 찾지 못했습니다" in impl, "no structure guard")
         check("launch bats do not hardcode py -3.11",
               not any(b"py -3.11 agent_ops" in zf.read(n) for n in names
                       if n.endswith(".bat") and "launch/" in n and not n.endswith("_py.bat")),
@@ -167,6 +163,29 @@ def _check_bundle_build() -> None:
               all(HEX64.match(ln.split("  ")[0]) for ln in hash_lines), "bad hash line")
     # no lig-api.env / secrets bundled
     check("bundle carries no lig-api.env", not any("lig-api.env" in n for n in names), "leak")
+
+    # --- 설치 E2E: 번들을 풀고 setup_impl 로 실제 설치 후 결과 검증 ------------
+    # (배치 함정으로 실 설치가 3번 깨진 뒤 도입 — 설치 경로는 항상 실행으로 증명)
+    import subprocess
+    ex_dir = Path(tempfile.mkdtemp(prefix="bundle_install_"))
+    with zipfile.ZipFile(zip_path) as zf2:
+        zf2.extractall(ex_dir)
+    fake_home = ex_dir / "home"
+    (fake_home / "Desktop").mkdir(parents=True)
+    r = subprocess.run([sys.executable, str(ex_dir / "release" / "setup_impl.py"),
+                        "--home", str(fake_home), "--no-input"],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    check("install E2E: setup_impl exits 0", r.returncode == 0, (r.stdout + r.stderr)[-400:])
+    check("install E2E: workspace deployed",
+          (fake_home / "OpenCodeLIG" / "workspace" / "agent_ops" / "agentops.py").exists(), "no workspace")
+    check("install E2E: env template written with placeholders",
+          "REPLACE_WITH" in (fake_home / "OpenCodeLIG_USERDATA" / "secrets" / "lig-api.env").read_text(encoding="utf-8"),
+          "no env template")
+    dsk = (fake_home / "Desktop" / "AI비서.bat").read_bytes()
+    check("install E2E: desktop launcher ASCII+CRLF",
+          all(b < 0x80 for b in dsk) and dsk.count(b"\n") == dsk.count(b"\r\n") > 0, str(dsk[:60]))
+    check("install E2E: doctor report produced",
+          (fake_home / "OpenCodeLIG_USERDATA" / "diagnostics" / "setup_doctor.txt").exists(), "no doctor")
 
 
 if __name__ == "__main__":

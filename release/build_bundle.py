@@ -32,6 +32,7 @@ INCLUDE_FILES = [
     "release/dependencies.json",
     "release/verify_prefetch.py",
     "release/setup.bat",
+    "release/setup_impl.py",
     "README.md",
     "AGENTS.md",
 ]

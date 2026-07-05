@@ -2,7 +2,10 @@
 chcp 65001 >nul
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
-call "%~dp0_py.bat" || exit /b 9
+rem %~dp0 is re-resolved against the CURRENT dir when the bat was CALLed
+rem with a relative path - capture it ONCE before any cd (learned the hard way).
+set "HERE=%~dp0"
+call "%HERE%_py.bat" || exit /b 9
 
 set "CHROME_EXE="
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "CHROME_EXE=%ProgramFiles%\Google\Chrome\Application\chrome.exe"

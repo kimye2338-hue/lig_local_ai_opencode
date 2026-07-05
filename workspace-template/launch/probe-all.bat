@@ -2,20 +2,23 @@
 chcp 65001 >nul
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
-call "%~dp0_py.bat" || (pause & exit /b 9)
-set "PROBE_OUT_DIR=%~dp0probe_results"
+rem %~dp0 is re-resolved against the CURRENT dir when the bat was CALLed
+rem with a relative path - capture it ONCE before any cd (learned the hard way).
+set "HERE=%~dp0"
+call "%HERE%_py.bat" || (pause & exit /b 9)
+set "PROBE_OUT_DIR=%HERE%probe_results"
 
 echo ============================================================
 echo  [1/2] 환경 probe (앱/매크로 정책/OpenCode 기동 진단)
 echo ============================================================
-%PY% "%~dp0..\agent_ops\probe_env.py"
+%PY% "%HERE%..\agent_ops\probe_env.py"
 
 echo.
 echo ============================================================
 echo  [2/2] gateway probe (404면 discovery 모드가 올바른 경로 탐색)
 echo ============================================================
 echo (lig-api.env 미작성이면 이 단계는 안내 후 건너뜁니다)
-%PY% "%~dp0..\agent_ops\probe_gateway.py"
+%PY% "%HERE%..\agent_ops\probe_gateway.py"
 
 echo.
 echo ============================================================

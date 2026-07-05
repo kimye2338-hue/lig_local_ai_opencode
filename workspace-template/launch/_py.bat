@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 rem Shared Python 3.11 resolver. Sets %PY% for the calling BAT. Exit 9 if none.
 rem Order: py -3.11 -> python -> python3.11 -> python3 (must report 3.11.x)
 set "PY="
