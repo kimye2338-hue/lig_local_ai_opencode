@@ -19,5 +19,14 @@ if not defined CHROME_EXE (
 set "OPEN_CODE_LIG_CHROME_PROFILE=%TEMP%\opencodelig_chrome"
 echo Chrome CDP profile: %OPEN_CODE_LIG_CHROME_PROFILE%
 echo Chrome CDP endpoint: http://127.0.0.1:9222/json
-start "" "%CHROME_EXE%" --remote-debugging-port=9222 --user-data-dir="%OPEN_CODE_LIG_CHROME_PROFILE%" about:blank
+start "" "%CHROME_EXE%" ^
+  --remote-debugging-port=9222 ^
+  --user-data-dir="%OPEN_CODE_LIG_CHROME_PROFILE%" ^
+  --no-first-run ^
+  --no-default-browser-check ^
+  --noerrdialogs ^
+  --disable-session-crashed-bubble ^
+  --disable-features=InfiniteSessionRestore ^
+  --restore-last-session=false ^
+  about:blank
 exit /b 0
