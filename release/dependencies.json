@@ -1,0 +1,301 @@
+{
+  "$comment": "Offline dependency manifest for company-PC deployment. status: required|planned|optional|not_needed|resolved|deferred. Prefetch everything with status=required/planned/resolved while internet is available; verify SHA256 after transfer. 'deferred' = not needed for the company_gateway pilot (local-serving/voice only). No secrets belong in this file or in the bundle.",
+  "manifest_version": 1,
+  "updated": "2026-07-04",
+  "runtime_note": "agent_ops is stdlib-only by design: no pip wheels are required for the core runtime. Keep it that way when patching.",
+  "dependencies": [
+    {
+      "name": "python-embeddable",
+      "version": "3.11.9",
+      "source": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip",
+      "why": "Core runtime for agent_ops, diagnostics, install/repair scripts. Company PC python default must not be assumed.",
+      "status": "required",
+      "bundle_path": "release/prefetch/python-3.11.9-embed-amd64.zip (prefetch_files 항목으로 이관 — 실측 해시 확정)",
+      "sha256": "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b",
+      "offline_install": "unzip to %USERPROFILE%\\OpenCodeLIG\\python311\\; no registry changes needed",
+      "offline_verify": "python311\\python.exe --version",
+      "fallback": "company-installed Python 3.11 via py -3.11 if present"
+    },
+    {
+      "name": "opencode-binary",
+      "version": "pinned opencode commit afff74eb + permission-mode-toggle patch",
+      "source": "GitHub Actions artifact LIG_OPENCODE_PATCHED_OFFLINE_PACKAGE (.github/workflows/build-offline-package.yml — PR #8 브랜치 런에서 다운로드)",
+      "why": "Primary agent runtime on the company PC. CI가 소스 클론→패치→빌드→SHA256SUMS 내장까지 수행하고 installer BAT가 payload 해시를 자가 검증한다.",
+      "status": "required",
+      "bundle_path": "별도 반입물 (CI 아티팩트 zip — release/prefetch/ 경유 아님)",
+      "sha256": "SELF_VERIFIED_IN_ARTIFACT (아티팩트 내장 SHA256SUMS를 installer가 검증)",
+      "offline_install": "artifact installer BAT 실행; record version in diagnostics (opencode --version)",
+      "offline_verify": "opencode --version matches pinned commit build",
+      "fallback": "none; deployment blocked without it"
+    },
+    {
+      "name": "python-wheels",
+      "version": "see prefetch_files",
+      "source": "see prefetch_files",
+      "why": "Core agent_ops runtime is stdlib-only (불변 원칙). office/COM 어댑터용 wheel 8종은 하단 prefetch_files에서 per-file 해시로 관리 — 이 항목은 core 기준 서술.",
+      "status": "core=not_needed; adapters=see prefetch_files (8 resolved)",
+      "bundle_path": "release/prefetch/",
+      "sha256": null,
+      "offline_install": "py -3.11 -m pip install --no-index --find-links release/prefetch pywin32 openpyxl python-pptx",
+      "offline_verify": "py -3.11 tests run with no pip packages installed (core); import win32com/openpyxl/pptx (adapters)",
+      "fallback": "core는 wheel 없이 동작; 어댑터는 available=False로 안전 저하"
+    },
+    {
+      "name": "chromedriver",
+      "version": "match company Chrome major version (home Chrome: check at prefetch time)",
+      "source": "https://googlechromelabs.github.io/chrome-for-testing/",
+      "why": "Browser automation via Selenium/CDP, only if that route is chosen (doctor.py already probes CHROMEDRIVER_PATH and CDP port 9222).",
+      "status": "planned",
+      "bundle_path": "release/vendor/chromedriver/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "copy chromedriver.exe; set CHROMEDRIVER_PATH",
+      "offline_verify": "chromedriver.exe --version",
+      "fallback": "CDP via Chrome --remote-debugging-port=9222 without a driver binary"
+    },
+    {
+      "name": "pywinauto-and-deps",
+      "version": "PENDING_DECISION",
+      "source": "pip download pywinauto -d release/vendor/wheels-ui/",
+      "why": "Windows UI automation, only if that capability is adopted.",
+      "status": "planned",
+      "bundle_path": "release/vendor/wheels-ui/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "py -3.11 -m pip install --no-index --find-links release/vendor/wheels-ui pywinauto",
+      "offline_verify": "py -3.11 -c \"import pywinauto\"",
+      "fallback": "skip UI automation; core file/LLM workflow unaffected"
+    },
+    {
+      "name": "nodejs-runtime",
+      "version": "n/a unless OpenCode distribution requires it",
+      "source": "https://nodejs.org/dist/",
+      "why": "Only if the pinned OpenCode build needs Node.",
+      "status": "planned",
+      "bundle_path": "release/vendor/node/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "unzip portable node; no installer",
+      "offline_verify": "node --version",
+      "fallback": "n/a if OpenCode ships self-contained"
+    },
+    {
+      "name": "office-doc-wheels",
+      "version": "PENDING_DECISION (python-pptx, openpyxl latest stable at prefetch)",
+      "source": "pip download python-pptx openpyxl -d release/vendor/wheels-office/",
+      "why": "Direct .pptx/.xlsx generation without Office COM. Capability framework currently ships stdlib-only scaffolds (slide_outline.md/slide_spec.json/.csv/.bas); these wheels upgrade that to real files.",
+      "status": "optional",
+      "bundle_path": "release/vendor/wheels-office/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "py -3.11 -m pip install --no-index --find-links release/vendor/wheels-office python-pptx openpyxl",
+      "offline_verify": "py -3.11 -c \"import pptx, openpyxl\"",
+      "fallback": "stdlib scaffolds + manual transfer into PowerPoint/Excel (already validated locally)"
+    },
+    {
+      "name": "pywin32",
+      "version": "PENDING_DECISION",
+      "source": "pip download pywin32 -d release/vendor/wheels-com/",
+      "why": "COM control of Excel/Word/PowerPoint/SolidWorks/HWP, only if direct app automation is adopted. VBA macro scaffolds work without it.",
+      "status": "optional",
+      "bundle_path": "release/vendor/wheels-com/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "py -3.11 -m pip install --no-index --find-links release/vendor/wheels-com pywin32",
+      "offline_verify": "py -3.11 -c \"import win32com.client\"",
+      "fallback": "generated .bas macros imported/run inside the app manually (app validation pending)"
+    },
+    {
+      "name": "browser-automation-wheels",
+      "version": "PENDING_DECISION (selenium or playwright — pick one after company policy check)",
+      "source": "pip download selenium -d release/vendor/wheels-browser/",
+      "why": "Real browser control for web/mail assistant workflows. Current browser_script scaffolds run on stdlib urllib only.",
+      "status": "optional",
+      "bundle_path": "release/vendor/wheels-browser/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "py -3.11 -m pip install --no-index --find-links release/vendor/wheels-browser selenium",
+      "offline_verify": "py -3.11 -c \"import selenium\"",
+      "fallback": "Chrome CDP via --remote-debugging-port=9222 (no wheel needed), or procedure documents"
+    },
+    {
+      "name": "7zip-portable",
+      "version": "latest stable at prefetch",
+      "source": "https://www.7-zip.org/",
+      "why": "Bundle extraction/verification convenience on the company PC.",
+      "status": "optional",
+      "bundle_path": "release/vendor/7zip/",
+      "sha256": "PENDING_DECISION",
+      "offline_install": "copy 7za.exe",
+      "offline_verify": "7za.exe i",
+      "fallback": "Python zipfile (stdlib) — already validated locally"
+    }
+  ],
+  "transfer": {
+    "format": "transparent ZIP or plain folder tree; no self-extracting executables, no encoded payloads",
+    "checksum_procedure": "generate release/manifest-sha256.txt via certutil -hashfile or Python hashlib; re-verify after transfer on the company PC",
+    "secret_policy": "bundle must contain no lig-api.env, no API keys, no internal hostnames; verify with a pre-zip scan"
+  },
+  "prefetch_files": [
+    {
+      "name": "python-embeddable",
+      "filename": "python-3.11.9-embed-amd64.zip",
+      "url": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip",
+      "sha256": "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b",
+      "size": 11249023,
+      "license": "PSF-2.0",
+      "purpose": "회사 PC 파이썬 런타임 (py -3.11 부재 시 — setup.bat [STOP] 경로)",
+      "category": "runtime-python-embed",
+      "status": "resolved"
+    },
+    {
+      "name": "et_xmlfile",
+      "filename": "et_xmlfile-2.0.0-py3-none-any.whl",
+      "url": "https://pypi.org/project/et-xmlfile/  (pip download --only-binary=:all: --platform win_amd64 --python-version 3.11 --implementation cp --abi cp311)",
+      "sha256": "7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa",
+      "size": 18059,
+      "license": "MIT",
+      "purpose": "openpyxl 의존",
+      "category": "python-wheels-win_amd64-cp311",
+      "status": "resolved"
+    },
+    {
+      "name": "lxml",
+      "filename": "lxml-6.1.1-cp311-cp311-win_amd64.whl",
+      "url": "https://pypi.org/project/lxml/  (pip download --only-binary=:all: --platform win_amd64 --python-version 3.11 --implementation cp --abi cp311)",
+      "sha256": "abbefa31eee84842140f67acef1c828e28bba8bbf0c3bc6e5492a9af88152c28",
+      "size": 4025469,
+      "license": "BSD-3-Clause",
+      "purpose": "python-pptx 의존",
+      "category": "python-wheels-win_amd64-cp311",
+      "status": "resolved"
+    },
+    {
+      "name": "openpyxl",
+      "filename": "openpyxl-3.1.5-py2.py3-none-any.whl",
+      "url": "https://pypi.org/project/openpyxl/  (pip download --only-binary=:all: --platform win_amd64 --python-version 3.11 --implementation cp --abi cp311)",
+      "sha256": "5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2",
+      "size": 250910,
+      "license": "MIT",
+      "purpose": "xlsx ingest/생성",
+      "category": "python-wheels-win_amd64-cp311",
+      "status": "resolved"
+    },
+    {
+      "name": "pillow",
+      "filename": "pillow-12.3.0-cp311-cp311-win_amd64.whl",
+      "url": "https://pypi.org/project/pillow/  (pip download --only-binary=:all: --platform win_amd64 --python-version 3.11 --implementation cp --abi cp311)",
+      "sha256": "8e95e1385e4998ae9694eeaa4730ba5457ff61185b3a55e2e7bea0880aef452a",
+      "size": 7233653,
+      "license": "MIT-CMU (HPND)",
+      "purpose": "python-pptx 의존(이미지)",
+      "category": "python-wheels-win_amd64-cp311",
+      "status": "resolved"
+    },
+    {
+      "name": "python_pptx",
+      "filename": "python_pptx-1.0.2-py3-none-any.whl",
+      "url": "https://pypi.org/project/python-pptx/  (pip download --only-binary=:all: --platform win_amd64 --python-version 3.11 --implementation cp --abi cp311)",
+      "sha256": "160838e0b8565a8b1f67947675886e9fea18aa5e795db7ae531606d68e785cba",
+      "size": 472788,
+      "license": "MIT",
+      "purpose": "pptx 직접 생성",
+      "category": "python-wheels-win_amd64-cp311",
+      "status": "resolved"
+    },
+    {
+      "name": "pywin32",
+      "filename": "pywin32-312-cp311-cp311-win_amd64.whl",
+      "url": "https://pypi.org/project/pywin32/  (pip download --only-binary=:all: --platform win_amd64 --python-version 3.11 --implementation cp --abi cp311)",
+      "sha256": "d11417d84412f859b722fad0841b3614459ed0047f7542d8362e77884f6b6e8a",
+      "size": 6928825,
+      "license": "PSF",
+      "purpose": "COM 어댑터(excel/word/ppt/outlook/hwp/solidworks)",
+      "category": "python-wheels-win_amd64-cp311",
+      "status": "resolved"
+    },
+    {
+      "name": "typing_extensions",
+      "filename": "typing_extensions-4.16.0-py3-none-any.whl",
+      "url": "https://pypi.org/project/typing-extensions/  (pip download --only-binary=:all: --platform win_amd64 --python-version 3.11 --implementation cp --abi cp311)",
+      "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+      "size": 45571,
+      "license": "PSF-2.0",
+      "purpose": "python-pptx 의존",
+      "category": "python-wheels-win_amd64-cp311",
+      "status": "resolved"
+    },
+    {
+      "name": "xlsxwriter",
+      "filename": "xlsxwriter-3.2.9-py3-none-any.whl",
+      "url": "https://pypi.org/project/xlsxwriter/  (pip download --only-binary=:all: --platform win_amd64 --python-version 3.11 --implementation cp --abi cp311)",
+      "sha256": "9a5db42bc5dff014806c58a20b9eae7322a134abb6fce3c92c181bfb275ec5b3",
+      "size": 175315,
+      "license": "BSD-2-Clause",
+      "purpose": "python-pptx 의존",
+      "category": "python-wheels-win_amd64-cp311",
+      "status": "resolved"
+    },
+    {
+      "name": "qwen2.5-7b-instruct-q4_k_m-part1",
+      "filename": "qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf",
+      "url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf",
+      "sha256": "dfce12e3862a5283ccfb88221b48480e58745165de856439950d0f22590580db",
+      "size": 3993201344,
+      "license": "Apache-2.0",
+      "purpose": "로컬 real-LLM 서빙(llama.cpp) 7B Q4_K_M 분할 1/2",
+      "category": "llm-gguf",
+      "status": "resolved (HF LFS pointer)"
+    },
+    {
+      "name": "qwen2.5-7b-instruct-q4_k_m-part2",
+      "filename": "qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf",
+      "url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf",
+      "sha256": "539cf93f78e887edea1c04e2d7d8cdaca9d01dae9c9025bcb8accbe29df3d72a",
+      "size": 689872288,
+      "license": "Apache-2.0",
+      "purpose": "로컬 real-LLM 서빙 7B Q4_K_M 분할 2/2",
+      "category": "llm-gguf",
+      "status": "resolved (HF LFS pointer)"
+    },
+    {
+      "name": "whisper-ggml-medium",
+      "filename": "ggml-medium.bin",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
+      "sha256": "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
+      "size": 1533763059,
+      "license": "MIT",
+      "purpose": "P20 음성입력(whisper.cpp) medium 모델 선반입",
+      "category": "asr-model",
+      "status": "resolved (HF LFS pointer)"
+    },
+    {
+      "name": "llama.cpp-win-cuda",
+      "filename": "llama-<ver>-bin-win-cuda-x64.zip",
+      "url": "https://github.com/ggml-org/llama.cpp/releases (최신 win cuda/avx2 zip — 회사 GPU에 맞춰 선택)",
+      "sha256": "DEFERRED_NOT_IN_PILOT",
+      "size": null,
+      "license": "MIT",
+      "purpose": "GGUF 로컬 서빙 서버(llama-server) — local_openai 프로필 전용. company_gateway 파일럿에서는 불필요.",
+      "category": "binary-github",
+      "status": "deferred (파일럿 불필요 — 회사는 company_gateway 프로필로 사내 게이트웨이가 LLM 서빙. 로컬서빙(local_openai)을 채택할 때만 집/개발 PC에서 prefetch)"
+    },
+    {
+      "name": "whisper.cpp-win",
+      "filename": "whisper-bin-x64.zip",
+      "url": "https://github.com/ggerganov/whisper.cpp/releases (최신 win x64 zip)",
+      "sha256": "DEFERRED_NOT_IN_PILOT",
+      "size": null,
+      "license": "MIT",
+      "purpose": "음성 STT 실행기(P20) — 음성 입력 도입 시점(파일럿 이후)",
+      "category": "binary-github",
+      "status": "deferred (파일럿 불필요 — P20 음성은 파일럿 이후 순서. 그때 집/개발 PC에서 prefetch)"
+    },
+    {
+      "name": "ffmpeg-win64",
+      "filename": "ffmpeg-win64-gpl.zip",
+      "url": "https://github.com/BtbN/FFmpeg-Builds/releases (win64 gpl) 또는 https://www.gyan.dev/ffmpeg/builds/",
+      "sha256": "DEFERRED_NOT_IN_PILOT",
+      "size": null,
+      "license": "GPL-3.0 (gpl 빌드) / LGPL 선택 가능",
+      "purpose": "오디오 전처리(P20) — 음성 입력 도입 시점(파일럿 이후)",
+      "category": "binary-github",
+      "status": "deferred (파일럿 불필요 — P20 음성 종속. 음성 도입 시 whisper.cpp와 함께 prefetch)"
+    }
+  ],
+  "prefetch_note": "per-file manifest. status=resolved 항목은 sha256/size 확정(wheel=pip 실측, gguf/모델=HF LFS pointer 공식값). **파일럿 번들에 실제 필요한 것은 office/COM wheel 8종(전부 resolved)뿐** — 회사는 오프라인 내부망이지만 company_gateway 프로필로 사내 게이트웨이가 LLM을 서빙하므로 로컬 llama.cpp/GGUF는 파일럿에 불필요하다. status=deferred 3종(llama.cpp/whisper.cpp/ffmpeg)은 로컬서빙(local_openai) 또는 음성(P20)을 채택할 때만 집/개발 PC에서 prefetch한다(그 경로만 GitHub 릴리스 접근 필요). llm-gguf/asr-model(resolved)도 로컬서빙·음성 전용으로 파일럿 번들에는 넣지 않는다. 바이너리/모델은 release/prefetch/에 두고 git 미커밋(.gitignore)."
+}

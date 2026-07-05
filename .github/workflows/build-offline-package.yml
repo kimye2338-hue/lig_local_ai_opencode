@@ -207,10 +207,29 @@ jobs:
             pause
             exit /b 1
           )
+          rem Project-local opencode config: disable autoupdate so an offline
+          rem PC never waits on update checks at startup.
+          (
+            echo {
+            echo   "autoupdate": false
+            echo }
+          ) > "%WS%\opencode.json"
+          rem Launcher hardening (past field fix for slow window open):
+          rem kill leftover opencode processes, pin userdata/XDG paths, and
+          rem block update/default-plugin network attempts before launch.
           (
             echo @echo off
             echo set "OCODE_EXE=%%USERPROFILE%%\OpenCodeLIG\bin\opencode.exe"
             echo set "AGENTOPS_HOME=%%USERPROFILE%%\OpenCodeLIG\workspace"
+            echo set "OPENCODE_USERDATA=%%USERPROFILE%%\OpenCodeLIG\userdata"
+            echo set "XDG_CONFIG_HOME=%%OPENCODE_USERDATA%%\config"
+            echo set "XDG_DATA_HOME=%%OPENCODE_USERDATA%%\data"
+            echo set "XDG_CACHE_HOME=%%OPENCODE_USERDATA%%\cache"
+            echo set "OPENCODE_DISABLE_DEFAULT_PLUGINS=1"
+            echo set "OPENCODE_PURE=1"
+            echo set "NO_UPDATE_NOTIFIER=1"
+            echo if not exist "%%OPENCODE_USERDATA%%" mkdir "%%OPENCODE_USERDATA%%"
+            echo tasklist /FI "IMAGENAME eq opencode.exe" 2^>nul ^| find /I "opencode.exe" ^>nul ^&^& taskkill /F /IM opencode.exe ^>nul 2^>nul
             echo cd /d "%%AGENTOPS_HOME%%"
             echo "%%OCODE_EXE%%" %%*
           ) > "%WS%\RUN_OPENCODE_LIG.bat"

@@ -1,0 +1,67 @@
+{
+  "probe": "env",
+  "version": 1,
+  "timestamp": "2026-07-03 09:59:45",
+  "os": "Windows-10-10.0.19045-SP0",
+  "python": "3.11.9",
+  "py_launcher_311": true,
+  "ram_gb": 15.9,
+  "disk_free_gb": 456.2,
+  "apps": {
+    "excel": {
+      "installed": true,
+      "curver": "Excel.Application.16"
+    },
+    "word": {
+      "installed": true,
+      "curver": "Word.Application.16"
+    },
+    "powerpoint": {
+      "installed": true,
+      "curver": "PowerPoint.Application.16"
+    },
+    "outlook": {
+      "installed": true,
+      "curver": "Outlook.Application.16"
+    },
+    "hwp": {
+      "installed": true,
+      "curver": "HWPFrame.HwpObject.2"
+    },
+    "solidworks": {
+      "installed": false,
+      "curver": ""
+    },
+    "chrome": {
+      "installed": true,
+      "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+    },
+    "matlab_exe": "",
+    "accoreconsole_exe": "",
+    "fluent_exe": ""
+  },
+  "office_macro_security": {
+    "excel": {
+      "office_ver_key": "16.0",
+      "AccessVBOM": "키 없음(기본: 0=차단)",
+      "VBAWarnings": "1"
+    },
+    "word": {
+      "office_ver_key": "",
+      "AccessVBOM": "키 없음",
+      "VBAWarnings": "키 없음"
+    },
+    "powerpoint": {
+      "office_ver_key": "",
+      "AccessVBOM": "키 없음",
+      "VBAWarnings": "키 없음"
+    },
+    "outlook": {
+      "office_ver_key": "",
+      "AccessVBOM": "키 없음",
+      "VBAWarnings": "키 없음"
+    }
+  },
+  "office_product_ids": "O365ProPlusRetail",
+  "pywin32": false
+}
