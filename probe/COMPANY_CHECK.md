@@ -4,19 +4,27 @@
 
 ## 쓰는 법
 
-1. `probe/company_check.py` **하나만** 회사 PC로 반입 (USB 등).
+1. `probe/company_check.py` **하나만** 회사 PC로 반입 (USB 등). 회사에 이미 있는 것
+   (Python 3.11 / pywin32 / 각 앱)은 그대로 재활용 — 추가 반입물 없음.
 2. 실행 (사전에 `lig-api.env`가 있으면 gateway까지 측정됨):
    ```bat
    py -3.11 company_check.py
    ```
-   - 빠르게(gateway+환경만, 앱/COM/MATLAB 생략): `py -3.11 company_check.py --quick`
+   - 빠르게(런타임+gateway+환경만, 앱/COM/MATLAB 생략): `py -3.11 company_check.py --quick`
+   - 부록 JSON을 별도 파일로도: `py -3.11 company_check.py --json` (기본은 .md 하나)
    - 더블클릭도 가능(끝에 Enter 대기).
-3. 같은 폴더에 생기는 **`company_check_result.md` + `.json`** 두 파일을 전달.
+3. 같은 폴더에 생기는 **`company_check_result.md` 하나**를 전달 (전체 JSON은 그 안 부록 A에 포함).
+
+> **번들(agent_ops)을 같이 두면 런타임까지 자동 점검**: 이 스크립트 옆이나
+> `workspace-template/` 안에 agent_ops가 있으면 섹션 0에서 `doctor` + `mock work` E2E를
+> 자동 실행한다. 없으면 "환경만 점검"으로 정직 표기(실패 아님) — 이번처럼 스크립트만
+> 반입하면 환경 점검, 나중에 번들 반입 후 같은 파일 재실행하면 런타임까지 한 번에.
 
 ## 측정 항목
 
 | 구분 | 내용 |
 |------|------|
+| **0. 현재 빌드 런타임** | (agent_ops 동봉 시 자동) `doctor` 종료코드 + capabilities/adapters/artifact/LLM 인벤토리, `work --mode mock` E2E 1회 |
 | Gateway | 3라우트 응답, **function calling(tools) 지원 여부**, tool-call 원문, 스트리밍, 512토큰 지연, think_on 라우트 존재, /models |
 | 앱 COM 실동작 | **Excel 실왕복 + VBProject 접근**(매크로 자동주입 실동작), Outlook/HWP/SolidWorks 접속, MATLAB `-batch` 실실행, Chrome CDP 실기동 |
 | OpenCode | `--version` cold/warm 시간(느림 판정), 구버전 proxy(8765)·lig_diag 잔재, 신버전 표식, 강화 env 적용 여부 |

@@ -1,15 +1,22 @@
 # -*- coding: utf-8 -*-
-"""OpenCodeLIG 회사 PC 종합 계측기 — 파일 하나, 실행 한 번, 보고서 하나.
+"""OpenCodeLIG 회사 PC 종합 계측기 — 파일 하나, 실행 한 번, 보고서 하나(.md).
 
-목적: 다음 회사 방문에서 남은 미지수를 한 번에 측정한다. 반입물은 이 .py 하나뿐.
+목적: 회사(내부망) 환경이 현재 빌드가 요구하는 것을 지원하는지 한 번에 측정한다.
+반입물은 이 .py 하나뿐 (회사에 이미 있는 것 — Python 3.11 / pywin32 / 각종 앱 — 은 재활용).
+
+무엇을 점검하나 (지금 기준):
+  0. 현재 빌드(agent_ops) 런타임 — 이 스크립트 옆(또는 번들 workspace-template 안)에
+     agent_ops가 있으면 doctor + mock work E2E를 자동 실행. 없으면 '환경만 점검'이라 정직 표기.
+  1. Gateway(LLM) — 3라우트/function calling/streaming/지연/모델ID (현 _ROUTE_DEFAULTS와 동일)
+  2. 앱/COM 실동작, 3. OpenCode 기동, 4. Office 매크로 정책, 5. 앱 경로, 6. 업무 시나리오 6종
 
 실행 (택1):
   py -3.11 company_check.py           (더블클릭도 가능 — 끝에 대기)
-  py -3.11 company_check.py --quick   (앱/COM/MATLAB 무거운 검사 생략, gateway+환경만)
+  py -3.11 company_check.py --quick   (앱/COM/MATLAB 무거운 검사 생략, 런타임+gateway+환경만)
+  py -3.11 company_check.py --json    (부록 JSON을 별도 .json으로도 저장 — 기본은 .md 하나)
 
 산출물 (실행 폴더에 생성):
-  company_check_result.json   기계 판독용 전체
-  company_check_result.md     사람 판독용 요약  ← 이거 열어서 내용 복사해 전달하면 됨
+  company_check_result.md     ← 이 '하나'만 전달하면 됨. 사람 요약 + 부록에 전체 JSON 포함.
 
 안전:
   - stdlib만 사용. 외부 패키지 불필요 (pywin32는 있으면 COM 검사, 없으면 스킵).
@@ -43,6 +50,7 @@ TIMEOUT_SCN_MATLAB = 150
 TIMEOUT_SCN_HWP = 60
 TIMEOUT_SCN_OUTLOOK = 40
 TIMEOUT_SCN_AUTOCAD = 120
+TIMEOUT_AGENTOPS = 130
 
 # ---------------------------------------------------------------- 마스킹 ---
 
@@ -753,6 +761,74 @@ def scn_autocad_script() -> dict:
             pass
 
 
+# ------------------------------------ 현재 빌드 런타임 (동봉 시 자동) ---
+
+def _find_agentops() -> str:
+    """이 스크립트와 함께(또는 번들 안에) agent_ops가 있으면 그 agentops.py 경로."""
+    here = Path(os.path.abspath(__file__)).parent
+    env_home = os.environ.get("AGENTOPS_HOME", "")
+    cands = []
+    if env_home:
+        cands.append(Path(env_home) / "agentops.py")
+        cands.append(Path(env_home) / "agent_ops" / "agentops.py")
+    cands += [
+        here / "agent_ops" / "agentops.py",
+        here.parent / "agent_ops" / "agentops.py",
+        here.parent / "workspace-template" / "agent_ops" / "agentops.py",
+        Path.cwd() / "agent_ops" / "agentops.py",
+        Path.cwd() / "workspace-template" / "agent_ops" / "agentops.py",
+    ]
+    for c in cands:
+        try:
+            if c and c.exists():
+                return str(c.resolve())
+        except OSError:
+            continue
+    return ""
+
+
+def probe_agentops() -> dict:
+    """현재 빌드(agent_ops)가 이 회사 PC에서 실제로 로드·기동되는지.
+    동봉 안 됐으면 환경만 점검했다고 정직히 보고(실패 아님)."""
+    ap = _find_agentops()
+    if not ap:
+        return {"ok": None, "found": False,
+                "status": "agent_ops 미동봉 — 이 스크립트 단독 실행이라 '환경'만 점검함. "
+                          "번들(workspace-template)을 같은 위치에 두고 재실행하면 런타임까지 자동 점검."}
+    workdir = str(Path(ap).parent.parent)   # workspace-template
+    out = {"ok": True, "found": True, "root": _mask_path(workdir)}
+
+    def run(args, timeout):
+        r = subprocess.run([sys.executable, ap] + args, capture_output=True, text=True,
+                           timeout=timeout, cwd=workdir, encoding="utf-8", errors="replace",
+                           env=dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8"))
+        return r.returncode, (r.stdout or ""), (r.stderr or "")
+
+    # 1) doctor — capabilities/adapters/artifact pipeline/LLM endpoints 인벤토리
+    try:
+        rc, so, se = run(["doctor"], 90)
+        out["doctor_exit"] = rc
+        out["doctor_tail"] = _mask_path(so[-1800:] or se[-400:])
+    except subprocess.TimeoutExpired:
+        out["doctor_exit"] = "timeout"
+    except Exception as e:
+        out["doctor_exit"] = "error"; out["doctor_error"] = f"{type(e).__name__}: {e}"
+
+    # 2) mock work 스모크 — gateway 없이도 도는 파이프라인 (E2E 1회). --quick면 생략.
+    if os.environ.get("CC_QUICK") == "1":
+        out["mock_work_exit"] = "skipped(--quick)"
+    else:
+        try:
+            rc, so, se = run(["work", "--task", "회의록 초안 만들어줘", "--mode", "mock"], 100)
+            out["mock_work_exit"] = rc
+            out["mock_work_tail"] = _mask_path((so or se)[-700:])
+        except subprocess.TimeoutExpired:
+            out["mock_work_exit"] = "timeout"
+        except Exception as e:
+            out["mock_work_exit"] = "error"; out["mock_work_error"] = f"{type(e).__name__}: {e}"
+    return out
+
+
 ISOLATED = {
     "gateway": (probe_gateway, TIMEOUT_GATEWAY),
     "excel": (probe_excel_com, TIMEOUT_COM),
@@ -762,6 +838,7 @@ ISOLATED = {
     "matlab": (probe_matlab, TIMEOUT_MATLAB),
     "chrome": (probe_chrome_cdp, TIMEOUT_CHROME),
     "opencode": (probe_opencode_startup, TIMEOUT_OPENCODE),
+    "agentops": (probe_agentops, TIMEOUT_AGENTOPS),
     # 시나리오 (실제 1회 끝까지)
     "scn_agent": (scn_gateway_agent, TIMEOUT_SCN_AGENT),
     "scn_excel_macro": (scn_excel_macro, TIMEOUT_SCN_EXCEL),
@@ -886,6 +963,23 @@ def _md(report: dict) -> str:
          f"- OS: {report['environment']['os']} / Python {report['environment']['python']}"
          f" / RAM {report['environment']['ram_gb']}GB / pywin32 {report['environment']['pywin32']}",
          ""]
+    ao = report.get("live", {}).get("agentops", {})
+    L += ["## 0. 현재 빌드(agent_ops) 런타임 — 지금 기준", ""]
+    if ao.get("found") is False:
+        L.append(f"- {ao.get('status', '미점검')}")
+        L.append("- (이번 반입은 이 스크립트 하나 = **환경만 점검**. 런타임은 번들 반입 후 동일 파일 재실행 시 자동.)")
+    elif ao.get("found"):
+        L.append(f"- agent_ops 위치: {ao.get('root')}")
+        L.append(f"- **doctor 종료코드**: {ao.get('doctor_exit')} (0=정상 로드)")
+        L.append(f"- **mock work E2E**: {ao.get('mock_work_exit')} (0=파이프라인 정상)")
+        L.append("")
+        L.append("doctor 출력(끝부분 — capabilities/adapters/artifact/LLM 인벤토리):")
+        L.append("```")
+        L.append(str(ao.get("doctor_tail", ""))[-1400:])
+        L.append("```")
+    else:
+        L.append("- 점검 안 됨")
+    L.append("")
     g = report.get("gateway", {})
     L += ["## 1. Gateway (LLM) — 최우선", ""]
     if g.get("ok"):
@@ -960,22 +1054,25 @@ def _md(report: dict) -> str:
             L.append(f"- {labels.get(key, key)}: {mark} — {detail}{extra}")
         L += ["", "> 시나리오 ①이 OK면 real 업무 자동화(파일 읽고 처리)가 실제로 돈다는 뜻.",
               "> ②~⑥은 각 앱 자동화 어댑터의 실기 전제 확인."]
-    L += ["", "> 이 파일(.md)과 .json을 그대로 전달하면 됩니다. host/key/사용자명은 마스킹됨."]
+    L += ["", "> 이 .md 파일 하나만 그대로 전달하면 됩니다 (전체 JSON은 부록 A에 포함). "
+          "host/key/사용자명은 마스킹됨."]
     return "\n".join(L)
 
 
 def main() -> int:
     quick = "--quick" in sys.argv
+    if quick:
+        os.environ["CC_QUICK"] = "1"   # 자식 프로세스(agentops mock work)로 전파
     print("OpenCodeLIG 계측 시작 — 잠시 걸립니다 (앱/gateway 실검사 포함)...\n")
     report = {
-        "tool": "company_check", "version": 1,
+        "tool": "company_check", "version": 2,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "environment": collect_environment(),
         "apps": collect_apps(),
         "office_security": collect_office_security(),
         "gateway": {}, "live": {}, "scenarios": {},
     }
-    order = ["gateway", "opencode"]
+    order = ["agentops", "gateway", "opencode"]
     if not quick:
         order += ["excel", "outlook", "hwp", "solidworks", "chrome", "matlab"]
         order += SCENARIOS
@@ -997,13 +1094,20 @@ def main() -> int:
         if s and len(s) >= 3 and s in text:
             text = text.replace(s, "<MASKED>")
     report = json.loads(text)
-    out_json = Path.cwd() / "company_check_result.json"
+    # 결과는 .md 하나로 통합 — 사람 판독용 요약 + 부록에 전체 JSON(기계 판독용)을 접어 넣는다.
+    md = _mask(_md(report), secrets)
+    md += ("\n\n---\n\n## 부록 A. 전체 원자료 (JSON — 기계 판독용, 마스킹됨)\n\n"
+           "<details><summary>펼치기</summary>\n\n```json\n" + text + "\n```\n\n</details>\n")
     out_md = Path.cwd() / "company_check_result.md"
-    out_json.write_text(text, encoding="utf-8")
-    out_md.write_text(_mask(_md(report), secrets), encoding="utf-8")
-    print(f"\n완료. 아래 두 파일을 전달해 주세요 (host/key/사용자명 마스킹됨):")
-    print(f"  {out_json}")
-    print(f"  {out_md}")
+    out_md.write_text(md, encoding="utf-8")
+    outputs = [out_md]
+    if "--json" in sys.argv:   # 선택: 별도 .json도 원하면
+        out_json = Path.cwd() / "company_check_result.json"
+        out_json.write_text(text, encoding="utf-8")
+        outputs.append(out_json)
+    print("\n완료. 아래 파일 '하나'만 전달해 주세요 (host/key/사용자명 마스킹됨, JSON은 부록에 포함):")
+    for p in outputs:
+        print(f"  {p}")
     return 0
 
 

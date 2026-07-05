@@ -7,7 +7,7 @@
 ## ★ 가장 빠른 길: 계측기 하나만 반입
 
 `probe/company_check.py` **파일 하나**를 회사 PC로 가져가 `py -3.11 company_check.py`
-실행 → 생기는 `company_check_result.md`/`.json`을 전달하면, 아래 목록의 측정 대부분이
+실행 → 생기는 `company_check_result.md` **하나**를 전달하면(전체 JSON은 부록 A 포함), 아래 목록의 측정 대부분이
 한 번에 끝난다 (gateway function calling / Excel VBProject / MATLAB·Chrome 실동작 /
 OpenCode 기동 시간 / 앱·정책 전수). 사용법은 `probe/COMPANY_CHECK.md`.
 
