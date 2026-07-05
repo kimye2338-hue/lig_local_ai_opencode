@@ -33,7 +33,7 @@ SolidWorks COM 접속 / Chrome CDP 148 / MATLAB -batch 50.6s.
 | ③ | MATLAB -batch 계산 | ✅ mean=12.50 max=13.90 (44s) |
 | ④ | HWP 문서 생성+저장 | ✅ |
 | ⑤ | Outlook 받은편지함/일정 read | ✅ |
-| ⑥ | **AutoCAD accoreconsole .scr** | ❌ exit 53 — **테스트 스크립트 버그**(아래) |
+| ⑥ | **AutoCAD accoreconsole .scr** | ✅ (재검증) — `/i` 시드 방식으로 실행·저장 성공. 최초 ❌는 계측기 `/i` 누락 버그였음(아래) |
 
 ## ⑥ AutoCAD exit 53 — 원인 확정 (제품 결함 아님)
 
@@ -52,7 +52,8 @@ Fluent v241, Chrome). RAM 128GB / 디스크 260GB 여유 / py3.11.3 / pywin32 Tr
 
 ## 이 결과로 확정되는 것
 
-- **어댑터 app validation 달성** → office(Excel)/outlook/matlab/hwp를 `available: True`로 전환
-  (Fable 승인, 2026-07-05). solidworks는 connect만 확인(매크로 실행은 파일럿), autocad는 계측기
-  버그로 미검증, fluent 미검증 → 계속 pending.
+- **어댑터 app validation 달성** → office(Excel)/outlook/matlab/hwp/**autocad**를 `available: True`로
+  전환 (Fable 승인, 2026-07-05). autocad는 단독 재점검(`/i` 시드)으로 실행·저장 성공 확인.
+  solidworks는 connect만(매크로 실행은 파일럿), fluent 미검증, Word/PPT 변환 미검증 → pending.
 - **파일럿(P19-02)의 핵심 전제(실 파이프라인·앱 실행)가 실측으로 섰다** → 남은 건 12종 UX 실주행.
+- **업무 시나리오 6/6 전부 성공**(AutoCAD 재검증 포함).

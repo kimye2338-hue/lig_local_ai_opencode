@@ -600,7 +600,7 @@ def main() -> None:
           and "company validation pending" in summary["browser"]["pending"])
     # Adapters available only with recorded validation evidence; the rest stay
     # pending. (office/outlook/matlab/hwp validated on the company PC 2026-07-05.)
-    validated_available = {"browser", "office", "outlook", "matlab", "hwp"}
+    validated_available = {"browser", "office", "outlook", "matlab", "hwp", "autocad"}
     for adapter_id, a in summary.items():
         if adapter_id in validated_available:
             check(f"{adapter_id} available carries validation evidence",

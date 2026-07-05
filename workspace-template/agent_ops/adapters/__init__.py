@@ -82,10 +82,10 @@ ADAPTERS: Dict[str, Dict[str, Any]] = {
     "autocad": {
         "description": "AutoCAD 2019 accoreconsole 배치 실행",
         "consumes": ["autocad_script"],
-        "available": False,
+        "available": True,
         "requires": ["AutoCAD 2019 accoreconsole.exe", "ACCORECONSOLE_EXE 또는 표준 설치 경로"],
-        "pending": "app validation pending: 회사 AutoCAD 2019 accoreconsole에서 /i 사본 dwg + /s scr 검증"
-                   " (2026-07-05 계측기 시나리오가 /i 누락으로 exit 53 — 제품 어댑터는 /i 사용, 재검증 필요)",
+        "validated": "회사 AutoCAD 2019 accoreconsole /i 시드 + /s scr 실행·저장 성공 (2026-07-05)",
+        "pending": "",
         "execute": autocad_batch.execute,
     },
     "fluent": {

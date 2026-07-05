@@ -46,6 +46,9 @@
 
 ## 이력 (상태 변경 시 한 줄씩 추가 — 최신이 위)
 
+- 2026-07-05 **AutoCAD 재검증 성공 → available 전환 (Fable 승인)**: 계측기 `/i` 누락 버그를 고친 단독 스크립트(제품 autocad_batch와 동일하게 `/i` 시드 dwg + `/s` scr)를 회사 AutoCAD 2019 accoreconsole에서 실행 → 원 그리기+SAVEAS 저장 성공. autocad 어댑터 `available:True`(validated 기록), test_batch_adapters/capability_bench 갱신. **이로써 업무 시나리오 6/6 전부 성공.** app-validation 완료 어댑터 = office(Excel)/outlook/matlab/hwp/autocad + browser. 잔여 pending = solidworks(connect만), fluent(미검증), office Word/PPT 변환. 회귀 green 유지.
+
+
 - 2026-07-05 **★ 회사 실측 — 현재 빌드가 회사 PC에서 실제로 작동 확인 (CHECK_FULL 패키지)**: company_check(런타임 동봉) 실행 결과 = **섹션0 real agent E2E exit 0**(실 게이트웨이 tool-use 루프), doctor 0, mock work 0. 게이트웨이 3라우트/function calling/streaming 정상. **업무 시나리오 5/6 성공**(①LLM tool왕복 ②Excel매크로 A1=42 ③MATLAB계산 ④HWP저장 ⑤Outlook read). 증거: probe/results/company_check_20260705.md. **[Fable 승인] 어댑터 app validation 달성 → available 전환**: office(Excel)/outlook/matlab/hwp = `available:True`(validated 기록). solidworks=connect만(매크로 실행 파일럿 대기), fluent=미검증 → pending 유지. **⑥ AutoCAD exit 53 = 계측기 버그**(제품 autocad_batch는 `/i` 사용, 시나리오가 누락) → 시나리오를 `/i` 시드 방식으로 수정(제품과 동일), autocad는 재검증까지 pending. **부수 발견/수정**: work `--execute`의 `_adapter_execution_summary`가 미배선 스텁 action("artifact")을 호출하던 것(어댑터 전부 unavailable이라 가려져 있던 잠복 버그) → available 전환으로 노출 → "available(실행 매핑 파일럿 대기)" 보고로 교체. test_secretary 주간보고 아티팩트 창이 실 벽시계 mtime 의존이라 날짜 롤오버 시 flaky → seed mtime 고정으로 결정화. 회귀 20 green(RED 3=Windows 전용), 어댑터/능력 테스트 전부 갱신·통과, secret scan 통과.
 
 
