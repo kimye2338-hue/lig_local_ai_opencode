@@ -1,70 +1,39 @@
-# Fable prompt: connect Hamster Pet Overlay to the existing OpenCodeLIG system
+# Fable prompt: connect Hamster Pet Overlay to OpenCodeLIG
 
-Read this repository and integrate the hamster pet overlay with the existing OpenCodeLIG runtime.
+Integrate the hamster pet overlay with the existing OpenCodeLIG runtime.
 
-## Goal
+Goal: make the pet reflect the real agent lifecycle, not only diagnostic-file inference.
 
-The overlay already reads diagnostics, but it should be connected to the real agent lifecycle so it feels like a Codex-style pet.
+Required lifecycle events:
 
-## Required connections
+- task start: write working status
+- each tool start: write working status with tool name
+- each tool success: append event and keep working status
+- approval or user input needed: write needs_user status
+- execution error: write error status
+- repeated failure, timeout, or no progress: write stalled status
+- final completion: write done status with concise result summary
 
-1. Import `agent_ops.status_writer` from long-running agent paths.
-2. On task start, call:
+Use `agent_ops.status_writer.publish_status` and `agent_ops.status_writer.publish_event` from long-running agent paths. All writes must be best-effort and must never break the agent.
 
-```python
-publish_event("TASK_STARTED", status="working", task=<short task>, message="작업을 시작했습니다.")
-```
+Keep the overlay separate from the core loop. Core logic should only publish status and events. The overlay should continue to read:
 
-3. Before each tool call, call:
+- `%LIG_STATE_DIR%\current_status.json`
+- `%LIG_STATE_DIR%\events.ndjson`
+- `%LIG_DIAG_DIR%\agent-loop-last.json`
+- `%LIG_DIAG_DIR%\tool-dispatch-last.json`
+- `%LIG_DIAG_DIR%\tool-dispatch-history.jsonl`
 
-```python
-publish_event("TOOL_STARTED", status="working", task=<tool name>, message=f"{tool_name} 실행 중입니다.")
-```
+Complete package handoff:
 
-4. After each tool call:
-   - success: `publish_event("TOOL_DONE", status="working", task=<tool name>, message="다음 단계를 진행 중입니다.")`
-   - failure:
-     - missing approval/user input: `status="needs_user"`
-     - normal error: `status="error"`
+- ZIP: `OpenCodeLIG_Complete_Hamster_Pet_Overlay_20260705.zip`
+- SHA256: `ce1a5565f2831bd819b6c65c898424065b5ec7e366368d136f2d31e627654f29`
 
-5. On final completion:
+That ZIP contains the full Windows overlay implementation plus binary PNG/ICO assets extracted from the user-provided hamster image. Add those binary assets through normal git or by copying from the ZIP.
 
-```python
-publish_event("TASK_DONE", status="done", task=<short task>, message=<final concise summary>)
-```
+Constraints:
 
-6. On loop cutoff, repeated failure, max turns, or stalled condition:
-   - `status="stalled"` when the agent appears stuck
-   - `status="needs_user"` when user action or approval is required
-   - `status="error"` for actual execution/LLM failures
-
-7. Keep all status writes best-effort. Failure to write status must never break the agent.
-
-## Files provided by the complete ZIP
-
-- `agent_ops/ui/hamster_overlay.py`
-- `agent_ops/status_writer.py`
-- `agent_ops/ui/assets/hamster_pet/*.png`
-- `launch/hamster.bat`
-- `launch/hamster-test-status.bat`
-
-## Important constraints
-
-- Do not add self-extracting BAT payloads.
-- Do not embed base64 ZIP payloads in BAT files.
-- Keep installer/cmd files ASCII-only where possible.
-- Keep the overlay separate from core logic; core logic only publishes status/events.
-- Preserve restart/resume durability and existing diagnostics behavior.
-
-## Expected user experience
-
-- Hamster appears as an always-on-top pet while OpenCodeLIG works.
-- User can drag it and its position is remembered.
-- Tray icon can show/hide/details/exit.
-- State changes use the matching 3-frame animation:
-  - `done`
-  - `needs_user`
-  - `working`
-  - `error`
-  - `stalled`
-  - `idle`
+- no self-extracting BAT
+- no base64 ZIP payload inside BAT
+- keep cmd installers ASCII-only where possible
+- preserve restart/resume durability and existing diagnostics behavior
