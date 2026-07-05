@@ -335,6 +335,8 @@ def cmd_remember(args):
         return 2
     item = add_user_memory(text, title=args.title or "User instruction")
     print(json.dumps(item, ensure_ascii=False, indent=2))
+    from agent_ops.knowledge_book import rebuild_quietly
+    rebuild_quietly()   # 기억이 쌓일 때마다 지식책도 최신으로
     return 0
 
 def cmd_recall(args):
@@ -741,9 +743,21 @@ def cmd_schedule(args):
 
 def cmd_briefing(args):
     from agent_ops.secretary import build_briefing
+    from agent_ops.knowledge_book import rebuild_quietly
     path, text = build_briefing()
     print(text)
     print(f"브리핑 저장: {path}")
+    rebuild_quietly()   # 아침마다 지식책 자동 갱신 (리마인더 등록 시 무인 동작)
+    return 0
+
+
+def cmd_book(args):
+    """지식책 생성(+열기). 기억 원장/위키/활동기록을 한 권의 HTML로 엮는다."""
+    from agent_ops.knowledge_book import build_book
+    path = build_book()
+    print(f"지식책 생성: {path}")
+    if getattr(args, "open", False) and os.name == "nt":
+        os.startfile(str(path))  # noqa: S606
     return 0
 
 
@@ -790,6 +804,7 @@ def main(argv=None):
     sp = sched.add_parser("sync-outlook"); sp.add_argument("--days", type=int, default=7); sp.set_defaults(func=cmd_schedule)
     sub.add_parser("briefing").set_defaults(func=cmd_briefing)
     sub.add_parser("weekly").set_defaults(func=cmd_weekly)
+    p = sub.add_parser("book"); p.add_argument("--open", action="store_true"); p.set_defaults(func=cmd_book)
     p = sub.add_parser("safety-check"); p.add_argument("text", nargs="*"); p.set_defaults(func=cmd_safety_check)
     p = sub.add_parser("safe-write"); p.add_argument("target"); p.add_argument("content_file"); p.set_defaults(func=cmd_safe_write)
     args = parser.parse_args(argv)

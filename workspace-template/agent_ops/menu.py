@@ -28,6 +28,7 @@ MENU = """
    5. 오늘/이번주 일정 보기
    6. Outlook 일정 가져오기
    7. 상태 진단        (doctor)
+   8. 지식책 보기      (배운 것/기억 히스토리북)
    0. 종료
  --------------------------------------------"""
 
@@ -81,6 +82,7 @@ def main() -> int:
         "5": lambda: _run(["schedule", "list", "--when", "week"]),
         "6": lambda: _run(["schedule", "sync-outlook"]),
         "7": lambda: _run(["doctor"]),
+        "8": lambda: _run(["book", "--open"]),
     }
     while True:
         print(MENU)

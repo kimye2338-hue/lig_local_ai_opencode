@@ -83,9 +83,10 @@ def gateway_env(ud: Path, interactive: bool) -> None:
 def run_doctor(workspace: Path, ud: Path) -> bool:
     _say("6/6", "자가 진단 중 ...")
     out = ud / "diagnostics" / "setup_doctor.txt"
+    env = dict(os.environ, USERPROFILE=str(workspace.parents[1]), HOME=str(workspace.parents[1]))
     r = subprocess.run([sys.executable, str(workspace / "agent_ops" / "agentops.py"), "doctor"],
                        cwd=str(workspace), capture_output=True, text=True,
-                       encoding="utf-8", errors="replace")
+                       encoding="utf-8", errors="replace", env=env)
     out.write_text((r.stdout or "") + (r.stderr or ""), encoding="utf-8")
     if r.returncode != 0:
         print(f"[주의] 진단에서 경고 — {out} 참고.")
@@ -263,12 +264,18 @@ WIKI_SEED = """# 업무 위키 (전역 기억 — 폴더가 달라도 공유)
 """
 
 
-def seed_wiki(home: Path) -> None:
+def seed_wiki(home: Path, workspace: Path) -> None:
     wiki = home / "OpenCodeLIG_USERDATA" / "memory" / "WIKI.md"
-    if wiki.exists():
-        return
-    wiki.parent.mkdir(parents=True, exist_ok=True)
-    wiki.write_text(WIKI_SEED, encoding="utf-8")
+    if not wiki.exists():
+        wiki.parent.mkdir(parents=True, exist_ok=True)
+        wiki.write_text(WIKI_SEED, encoding="utf-8")
+    # 지식책 최초 생성 (이후 remember/브리핑 때마다 자동 갱신)
+    env = dict(os.environ, USERPROFILE=str(home), HOME=str(home))
+    r = subprocess.run([sys.executable, str(workspace / "agent_ops" / "agentops.py"), "book"],
+                       cwd=str(workspace), capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", env=env)
+    if r.returncode == 0:
+        print("       지식책 생성: USERDATA\\memory\\book\\knowledge_book.html")
 
 
 def desktop_launcher(home: Path) -> None:
@@ -281,6 +288,11 @@ def desktop_launcher(home: Path) -> None:
     content = ('@echo off\r\n'
                'call "%USERPROFILE%\\OpenCodeLIG\\workspace\\launch\\menu.bat"\r\n')
     (desktop / "AI비서.bat").write_bytes(content.encode("ascii"))
+    book = home / "OpenCodeLIG_USERDATA" / "memory" / "book" / "knowledge_book.html"
+    if book.exists():
+        content = ('@echo off\r\n'
+                   'start "" "%USERPROFILE%\\OpenCodeLIG_USERDATA\\memory\\book\\knowledge_book.html"\r\n')
+        (desktop / "지식책.bat").write_bytes(content.encode("ascii"))
     oc = home / "OpenCodeLIG" / "bin" / "oc.bat"
     if oc.exists():
         content = ('@echo off\r\n'
@@ -306,7 +318,7 @@ def main(argv=None) -> int:
     ok &= run_doctor(workspace, ud)
     install_global_brain(home, workspace)
     install_opencode(home, workspace)
-    seed_wiki(home)
+    seed_wiki(home, workspace)
     desktop_launcher(home)
 
     print()

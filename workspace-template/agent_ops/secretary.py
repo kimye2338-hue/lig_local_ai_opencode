@@ -162,6 +162,16 @@ def build_briefing(now: datetime | None = None) -> tuple[Path, str]:
     if not (today or week or due_soon):
         lines += ["> 일정이 비어 있습니다 — AI비서 메뉴의 [일정 추가]로 등록하거나 "
                   "[Outlook 일정 가져오기]로 동기화하세요.", ""]
+    # 오늘의 복습 — 오래된 지식 1개를 결정적으로 회전(지식책과 동일 규칙, 일 단위)
+    try:
+        from agent_ops.knowledge_book import review_picks, _load_entries
+        picks = review_picks(_load_entries(), current, limit=3)
+        if picks:
+            pick = picks[current.toordinal() % len(picks)]
+            lines += ["## 오늘의 복습",
+                      f"- {pick.get('title')}: {str(pick.get('body', ''))[:160]}", ""]
+    except Exception:  # noqa: BLE001 - 복습 실패가 브리핑을 막으면 안 된다
+        pass
     text = "\n".join(lines)
     path = RESULTS / "reports" / f"briefing_{current.strftime('%Y%m%d')}.md"
     atomic_write_text(path, text)

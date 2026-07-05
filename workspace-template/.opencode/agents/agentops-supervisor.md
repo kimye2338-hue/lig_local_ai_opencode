@@ -48,6 +48,8 @@ permission:
 - 새 대화 시작 시 관련 기억을 먼저 조회: `python agent_ops/agentops.py recall <핵심 키워드>`
 - 사용자가 "기억해/앞으로는/다음부터" 라고 하면: `python agent_ops/agentops.py remember "<내용>"`
 - 반복 실수·실패를 발견하면: `python agent_ops/agentops.py log-failure "<교훈>"`
+- 기억이 쌓이면 '지식책'(USERDATA\memory\book\knowledge_book.html)이 자동 갱신된다 —
+  사용자가 "배운 것 보여줘/지식책" 하면 `python agent_ops/agentops.py book --open` 실행.
 - 축적된 규칙의 사람용 사본: %USERPROFILE%\OpenCodeLIG_USERDATA\memory\WIKI.md —
   사용자가 새 '항상 지킬 규칙'을 주면 remember와 함께 이 위키에도 한 줄 append 하라.
 - 기억·일정·감사는 %USERPROFILE%\OpenCodeLIG_USERDATA 에 전역 저장된다 — 어떤 폴더에서
