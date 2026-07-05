@@ -26,6 +26,7 @@ ACTIONS = (
     "snapshot",
     "find_clickables",
     "click",
+    "fill",
     "screenshot",
     "wait_for_selector",
     "list_tabs",
@@ -33,6 +34,11 @@ ACTIONS = (
     "new_tab",
     "spa_map",
 )
+
+# 마지막으로 작업한 탭 id — 액션마다 새로 접속해도 같은 탭을 계속 본다.
+# 이게 없으면 open_url 한 탭과 click/snapshot 이 보는 탭이 달라질 수 있다
+# (탭 순서는 크롬이 임의로 바꾼다 — 2026-07-05 헤드리스 실측에서 재현).
+_ACTIVE_TAB_ID: Optional[str] = None
 
 
 JS_CLICKABLES = r"""
@@ -143,6 +149,12 @@ class _CdpClient:
             return event.get("result", {})
 
 
+def _remember_tab(tab: Optional[dict]) -> None:
+    global _ACTIVE_TAB_ID
+    if isinstance(tab, dict) and tab.get("id"):
+        _ACTIVE_TAB_ID = str(tab["id"])
+
+
 def _connect(options: dict) -> _CdpClient:
     tabs = _json_get("/json")
     if not isinstance(tabs, list):
@@ -152,13 +164,20 @@ def _connect(options: dict) -> _CdpClient:
         picked = _pick_matching_tab(tabs, want)
         if picked is None:
             raise RuntimeError(f"열린 탭에서 '{want}' 을 찾지 못했습니다 — list_tabs로 확인하세요")
+        _remember_tab(picked)
         return _CdpClient(picked["webSocketDebuggerUrl"], timeout=float(options.get("timeout", 5)))
-    tab = _pick_tab(tabs)
+    tab = None
+    if _ACTIVE_TAB_ID:  # 직전에 쓰던 탭이 아직 열려 있으면 그 탭으로 (호출 간 일관성)
+        tab = next((t for t in tabs if t.get("id") == _ACTIVE_TAB_ID
+                    and t.get("type") == "page" and t.get("webSocketDebuggerUrl")), None)
+    if tab is None:
+        tab = _pick_tab(tabs)
     if tab is None:
         tab = _new_tab()
     ws_url = tab.get("webSocketDebuggerUrl")
     if not ws_url:
         raise RuntimeError("Chrome CDP tab has no webSocketDebuggerUrl")
+    _remember_tab(tab)
     return _CdpClient(ws_url, timeout=float(options.get("timeout", 5)))
 
 
@@ -199,9 +218,11 @@ def _pick_tab(tabs: list[dict]) -> Optional[dict]:
 def _new_tab(url: str = "about:blank") -> dict:
     encoded = urllib.parse.quote(url, safe="")
     try:
-        return _json_get(f"/json/new?{encoded}", method="PUT")
+        tab = _json_get(f"/json/new?{encoded}", method="PUT")
     except Exception:
-        return _json_get(f"/json/new?{encoded}")
+        tab = _json_get(f"/json/new?{encoded}")
+    _remember_tab(tab)
+    return tab
 
 
 def _select_tab(options: dict) -> dict:
@@ -218,6 +239,7 @@ def _select_tab(options: dict) -> dict:
     if not tab_id:
         raise RuntimeError("Chrome CDP tab has no id")
     _json_get("/json/activate/" + urllib.parse.quote(str(tab_id), safe=""))
+    _remember_tab(picked)
     return {"selected": {"id": tab_id, "title": picked.get("title", ""), "url": picked.get("url", "")}}
 
 
@@ -235,7 +257,9 @@ def _run_action(cdp: _CdpClient, action: str, options: dict) -> dict:
         cdp.call("Page.enable")
         cdp.call("Page.navigate", {"url": url})
         _wait_ready(cdp, float(options.get("load_timeout", 10)))
-        return {"url": url, "status": "loaded"}
+        # SPA는 readyState 이후에 JS가 그린다 — 본문 텍스트가 생길 때까지 잠깐 대기.
+        rendered = _wait_rendered(cdp, float(options.get("render_timeout", 3)))
+        return {"url": url, "status": "loaded", "rendered": rendered}
     if action == "get_title":
         title = _eval(cdp, "document.title")
         return {"title": title or ""}
@@ -249,6 +273,8 @@ def _run_action(cdp: _CdpClient, action: str, options: dict) -> dict:
         return _find_clickables(cdp, options)
     if action == "click":
         return _click(cdp, options)
+    if action == "fill":
+        return _fill(cdp, options)
     if action == "screenshot":
         return _screenshot(cdp, options)
     if action == "wait_for_selector":
@@ -270,20 +296,50 @@ def _eval(cdp: _CdpClient, expression: str, timeout: Optional[float] = None) -> 
     return value
 
 
-def _extract_text(cdp: _CdpClient) -> str:
-    expr = r"""
+JS_RENDERED_TEXT = r"""
 (() => {
   const body = document.body;
   if (!body) return '';
-  const text = body.innerText || body.textContent || '';
+  let text = body.innerText || '';
+  if (!String(text).trim()) {
+    // \ub80c\ub354 \uc804/\uc228\uae40 \uc0c1\ud0dc \ud3f4\ubc31: script/style \uc18c\uc2a4\uac00 \uc0c8\uc9c0 \uc54a\uac8c \uc81c\uac70 \ud6c4 textContent.
+    const clone = body.cloneNode(true);
+    clone.querySelectorAll('script,style,noscript,template').forEach(n => n.remove());
+    text = clone.textContent || '';
+  }
   return String(text).replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n').trim();
 })()
 """
-    text = _eval(cdp, expr) or ""
+
+
+def _extract_text(cdp: _CdpClient, wait_seconds: float = 2.0) -> str:
+    text = _eval(cdp, JS_RENDERED_TEXT) or ""
     if isinstance(text, str) and text.strip():
         return text
+    # SPA\uac00 \uc544\uc9c1 \uc548 \uadf8\ub838\uc744 \uc218 \uc788\ub2e4 \u2014 \ubcf8\ubb38\uc774 \uc0dd\uae38 \ub54c\uae4c\uc9c0 \uc9e7\uac8c \ud3f4\ub9c1 (\ube60\ub978 \ud398\uc774\uc9c0 \ubb34\uc601\ud5a5).
+    deadline = time.monotonic() + max(0.0, wait_seconds)
+    while time.monotonic() < deadline:
+        time.sleep(0.15)
+        text = _eval(cdp, JS_RENDERED_TEXT) or ""
+        if isinstance(text, str) and text.strip():
+            return text
     html_text = _outer_html(cdp)
     return _html_to_text(html_text)
+
+
+def _wait_rendered(cdp: _CdpClient, timeout: float) -> bool:
+    """\ubcf8\ubb38\uc5d0 \ub80c\ub354\ub41c \ud14d\uc2a4\ud2b8\uac00 \ub098\ud0c0\ub0a0 \ub54c\uae4c\uc9c0 \ub300\uae30. \uc2e4\ud328\ud574\ub3c4 \uc608\uc678 \uc5c6\uc774 False."""
+    deadline = time.monotonic() + max(0.0, timeout)
+    while True:
+        try:
+            text = _eval(cdp, JS_RENDERED_TEXT) or ""
+        except Exception:
+            text = ""
+        if isinstance(text, str) and text.strip():
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.15)
 
 
 def _outer_html(cdp: _CdpClient) -> str:
@@ -385,6 +441,61 @@ def _click(cdp: _CdpClient, options: dict) -> dict:
     return result
 
 
+def _fill(cdp: _CdpClient, options: dict) -> dict:
+    """입력창 채우기 — 포털 검색창/로그인 폼 탐색용. React 등 프레임워크 호환
+    (네이티브 value setter + input/change 이벤트). enter=True 면 Enter 전송."""
+    selector = options.get("selector")
+    text = options.get("text")  # placeholder/label/name 부분일치로 입력창 찾기
+    value = options.get("value")
+    if value is None:
+        raise ValueError("fill requires value")
+    if selector in (None, "") and text in (None, ""):
+        raise ValueError("fill requires selector or text")
+    payload = json.dumps({"selector": selector, "text": text, "value": str(value),
+                          "enter": bool(options.get("enter"))}, ensure_ascii=False)
+    expr = r"""
+((payload) => {
+  const args = JSON.parse(payload);
+  let el = null;
+  if (args.selector) el = document.querySelector(args.selector);
+  if (!el && args.text) {
+    const needle = String(args.text).toLowerCase();
+    const fields = Array.from(document.querySelectorAll('input, textarea, select, [contenteditable]'));
+    el = fields.find(x => ((x.placeholder || '') + ' ' + (x.name || '') + ' ' +
+      (x.getAttribute('aria-label') || '') + ' ' + (x.id || '') + ' ' +
+      ((x.labels && x.labels[0]) ? x.labels[0].innerText : '')).toLowerCase().includes(needle));
+  }
+  if (!el) return {ok: false, error: 'input element not found'};
+  el.focus();
+  if (el.isContentEditable) {
+    el.innerText = args.value;
+  } else {
+    const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype
+                : el.tagName === 'SELECT' ? window.HTMLSelectElement.prototype
+                : window.HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value');
+    if (setter && setter.set) setter.set.call(el, args.value); else el.value = args.value;
+  }
+  el.dispatchEvent(new Event('input', {bubbles: true}));
+  el.dispatchEvent(new Event('change', {bubbles: true}));
+  if (args.enter) {
+    for (const type of ['keydown', 'keypress', 'keyup']) {
+      el.dispatchEvent(new KeyboardEvent(type, {key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true}));
+    }
+    if (el.form && typeof el.form.requestSubmit === 'function') el.form.requestSubmit();
+  }
+  return {ok: true, tag: (el.tagName || '').toLowerCase(), id: el.id || '',
+          name: el.getAttribute('name') || '', value_length: String(args.value).length};
+})('PAYLOAD')
+""".replace("'PAYLOAD'", json.dumps(payload, ensure_ascii=False))
+    result = _eval(cdp, expr, timeout=float(options.get("timeout", 10)))
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(str((result or {}).get("error", "fill failed")))
+    if options.get("enter") and options.get("wait_after", True):
+        time.sleep(float(options.get("wait_seconds", 0.5)))
+    return result
+
+
 def _screenshot(cdp: _CdpClient, options: dict) -> dict:
     out_path = _screenshot_path(options.get("filename"))
     _capture_screenshot(cdp, out_path, options)
@@ -420,6 +531,7 @@ def _spa_map(cdp: _CdpClient, options: dict) -> dict:
     except Exception as exc:  # noqa: BLE001
         first_shot = Path(str(exc))
 
+    root_url = str(root_snapshot.get("url") or "")
     clickables = list(root_snapshot.get("clickables") or [])[:max_clicks]
     pages = []
     for i, item in enumerate(clickables, start=1):
@@ -431,6 +543,13 @@ def _spa_map(cdp: _CdpClient, options: dict) -> dict:
             pages.append(entry)
             continue
         try:
+            # 이전 클릭이 다른 페이지로 이동시켰다면 루트로 복귀 — 루트 페이지의
+            # 셀렉터 목록이 계속 유효하도록 (SPA 해시 이동은 그대로 둔다).
+            current = _eval(cdp, "location.href") or ""
+            if root_url and str(current).split("#", 1)[0] != root_url.split("#", 1)[0]:
+                cdp.call("Page.navigate", {"url": root_url})
+                _wait_ready(cdp, 10)
+                _wait_rendered(cdp, 3)
             clicked = _click(cdp, {"selector": selector, "wait_after": False})
             time.sleep(wait_seconds)
             snap = _snapshot(cdp, {"max_text_length": int(options.get("max_text_length", 3000)),

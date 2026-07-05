@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-07-05 - browser reliability: sticky tab, SPA render wait, fill action
+
+Defects found by a live headless-Chromium E2E (SPA page, JS-late render, JS click):
+
+- Sticky active tab: every action reconnected and re-picked "first tab", so the
+  tab opened by read_web_page and the tab seen by click/find_clickables could
+  differ (reproduced live: empty clickables, failed click). The adapter now
+  remembers the last used tab id and reuses it across calls; open_url/new_tab/
+  select_tab update it.
+- SPA render wait: open_url waited only for readyState, so early snapshots saw
+  an empty body and the textContent fallback leaked raw <script> source into
+  "rendered text". Now: innerText → script/style-stripped textContent →
+  html-to-text, plus a short render-settle poll (open_url returns rendered flag).
+- spa_map returns to the root URL after a click that navigated away, so the
+  root selector list stays valid for the remaining clicks.
+- New `fill` action (selector or placeholder/label/name text match, React-safe
+  native value setter + input/change events, optional Enter) — reachable via
+  browser_action for portal search/login forms.
+- Live E2E (13 checks vs a local SPA: render text w/o script leak, click by
+  text, view switch, fill+enter search, spa_map explore, sticky new_tab) now
+  regression-coded into test_browser_adapter's live section (26 checks green
+  with Chromium; static-only environments keep the SKIP path).
+
 ## 2026-07-05 - ocd folder profiles + shared global memory + patch package
 
 - New `ocd` command (installed to `%USERPROFILE%\OpenCodeLIG\bin`, on PATH):

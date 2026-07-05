@@ -50,7 +50,8 @@ _BROWSER_HINT = (" — 디버그 크롬이 필요합니다: launch\\chrome-debug
 _BROWSER_OPTION_KEYS = (
     "url", "tab", "selector", "text", "index", "timeout", "max_length",
     "max_text_length", "max_html_length", "limit", "filename", "wait_seconds",
-    "load_timeout", "output_dir", "max_clicks", "include_clickables",
+    "load_timeout", "render_timeout", "output_dir", "max_clicks",
+    "include_clickables", "value", "enter",
 )
 
 
@@ -150,7 +151,7 @@ REGISTRY: Dict[str, Dict[str, Any]] = {
     "run_diagnostic":  {"fn": tool_run_diagnostic,  "required": [],                       "optional": [],                    "description": "Check workspace health"},
     "browse_tabs":     {"fn": tool_browse_tabs,     "required": [],                       "optional": [],                    "description": "List open Chrome tabs (needs debug Chrome)"},
     "read_web_page":   {"fn": tool_read_web_page,   "required": [],                       "optional": ["url", "tab", "max_length"], "description": "Read rendered page text: url to open, or tab(index/title/url)"},
-    "browser_action":  {"fn": tool_browser_action,  "required": ["action"],               "optional": list(_BROWSER_OPTION_KEYS), "description": "Advanced Chrome CDP action: new_tab/select_tab/snapshot/find_clickables/click/screenshot/wait_for_selector/spa_map"},
+    "browser_action":  {"fn": tool_browser_action,  "required": ["action"],               "optional": list(_BROWSER_OPTION_KEYS), "description": "Advanced Chrome CDP action: new_tab/select_tab/snapshot/find_clickables/click/fill/screenshot/wait_for_selector/spa_map"},
     "new_tab":         {"fn": _browser_tool("new_tab"),          "required": [], "optional": ["url"], "description": "Open a new debug Chrome tab"},
     "snapshot":        {"fn": _browser_tool("snapshot"),         "required": [], "optional": ["tab", "max_length", "max_text_length", "max_html_length"], "description": "Snapshot rendered SPA page text/html"},
     "find_clickables": {"fn": _browser_tool("find_clickables"),  "required": [], "optional": ["tab", "limit"], "description": "List clickable page elements"},
