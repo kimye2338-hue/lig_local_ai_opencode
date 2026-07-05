@@ -515,11 +515,23 @@ def cmd_work(args):
                 print(f"  설정 파일: {SECRET_ENV_PATH} 를 채우면 내용까지 채워집니다.", file=sys.stderr)
         else:
             print("[mock 모드] 실제 모델 호출 없이 서식/규칙 기반으로 생성합니다 (--mode real 로 내용 채움).")
+        # 축적된 규칙/교훈을 기계 주입 — 페르소나가 잊어도 반영된다 (복리 구조의 쐐기돌)
+        memories_text = ""
+        try:
+            from agent_ops.memory_manager import (extract_keywords,
+                                                  format_recall_for_prompt, recall)
+            mem_items = recall(keywords=extract_keywords(task), limit=5)
+            memories_text = format_recall_for_prompt(mem_items) if mem_items else ""
+            if memories_text:
+                print(f"축적된 기억 {len(mem_items)}건 반영 (recall)")
+        except Exception:  # noqa: BLE001
+            pass
         artifact_result = generate_artifacts(task, plan["artifact_kinds"],
                                              out_dir=RESULTS / "artifacts" / run_id,
                                              context=ctx,
                                              enrich=llm_client is not None,
-                                             llm_client=llm_client)
+                                             llm_client=llm_client,
+                                             memories=memories_text or None)
         enr = artifact_result.get("enrichment", {})
         if enr.get("requested"):
             print(f"LLM 내용 채움: {enr.get('status', '')}")

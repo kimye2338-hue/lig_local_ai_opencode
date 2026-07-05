@@ -895,16 +895,20 @@ GENERATORS = {
 _ENRICHABLE_SUFFIXES = (".md", ".bas", ".py")
 
 
-def _enrich_prompt(kind: str, task: str, scaffold: str) -> str:
+def _enrich_prompt(kind: str, task: str, scaffold: str,
+                   memories: Optional[str] = None) -> str:
+    memo = (f"\n[축적된 사용자 규칙/교훈 — 내용에 반드시 반영]\n{memories}\n"
+            if memories else "")
     return (f"다음은 '{task}' 요청으로 생성된 {kind} scaffold입니다.\n"
             "TODO 항목을 요청에 맞는 실제 내용으로 채우세요.\n"
             "문서 구조(섹션/코드 골격), 안전 안내, 검증 상태/pending 표시는 그대로 유지해야 합니다.\n"
-            "파일 전체를 다시 출력하세요.\n\n" + scaffold)
+            f"파일 전체를 다시 출력하세요.\n{memo}\n" + scaffold)
 
 
 def _maybe_enrich(task: str, files_by_kind: Dict[str, List[str]], enrich: bool,
                   llm_client: Optional[Callable[[str], str]],
-                  required_terms: Optional[List[str]] = None) -> Dict[str, Any]:
+                  required_terms: Optional[List[str]] = None,
+                  memories: Optional[str] = None) -> Dict[str, Any]:
     """Optionally let an LLM fill scaffold TODOs — quality-gated, never lossy.
 
     A filled file replaces its scaffold only if the whole artifact set still
@@ -928,7 +932,7 @@ def _maybe_enrich(task: str, files_by_kind: Dict[str, List[str]], enrich: bool,
             if path.suffix not in _ENRICHABLE_SUFFIXES:
                 continue
             try:
-                candidate = llm_client(_enrich_prompt(kind, task, originals[p]))
+                candidate = llm_client(_enrich_prompt(kind, task, originals[p], memories))
             except Exception as exc:
                 result["fallback"].append(
                     {"file": path.name, "reason": f"llm error: {exc!r}"[:200]})
@@ -967,7 +971,8 @@ def generate_artifacts(task: str, kinds: List[str],
                        out_dir: Optional[Path] = None,
                        context: Optional[Dict[str, Any]] = None,
                        enrich: bool = False,
-                       llm_client: Optional[Callable[[str], str]] = None) -> Dict[str, Any]:
+                       llm_client: Optional[Callable[[str], str]] = None,
+                       memories: Optional[str] = None) -> Dict[str, Any]:
     """Generate scaffolds for the given kinds; never raises per-kind.
 
     Default out_dir is a per-run folder under results/artifacts/ so user
@@ -1002,6 +1007,7 @@ def generate_artifacts(task: str, kinds: List[str],
                for kind, paths in files_by_kind.items()}
     quality_ok = all(v["ok"] for v in quality.values()) if quality else True
     enrichment = _maybe_enrich(task, files_by_kind, enrich, llm_client,
+                               memories=memories,
                                required_terms=required_terms)
     if enrichment["requested"]:
         _record_enrich_diag(task, enrichment)

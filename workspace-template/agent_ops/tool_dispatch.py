@@ -219,6 +219,17 @@ def run_agent_loop(
         {"role": "system", "content": AGENT_SYSTEM_PROMPT},
         {"role": "user", "content": prompt},
     ]
+    # 복리 기억의 쐐기돌: 축적된 규칙/교훈을 '기계적으로' 주입한다.
+    # 페르소나가 recall을 잊어도 같은 실수를 반복하지 않도록 — 선의가 아닌 구조.
+    try:
+        from .memory_manager import extract_keywords, format_recall_for_prompt, recall
+        mem = recall(keywords=extract_keywords(prompt), limit=5)
+        if mem:
+            messages.insert(1, {"role": "system",
+                                "content": "이전에 축적된 사용자 규칙/교훈 — 반드시 반영:\n"
+                                           + format_recall_for_prompt(mem)})
+    except Exception:  # noqa: BLE001 - 기억 주입 실패가 작업을 막으면 안 된다
+        pass
     tool_results: List[Dict[str, Any]] = []
     outcome = "max_turns_exceeded"
     final_content = ""

@@ -120,6 +120,45 @@ def main() -> None:
     r = run_cli(root, "briefing")
     check("briefing includes 오늘의 복습", "오늘의 복습" in r.stdout, r.stdout[-400:])
 
+    # --- 복리의 쐐기돌: 기억이 '기계적으로' 작업 경로에 주입된다 ---------------
+    from agent_ops.memory_manager import format_recall_for_prompt, recall, extract_keywords
+    from agent_ops.artifact_generators import generate_artifacts
+    run_cli(root, "remember", "회의록 참석자에는 직급을 함께 쓴다")
+    for mod in list(sys.modules):
+        if mod.startswith("agent_ops"):
+            del sys.modules[mod]
+    from agent_ops.memory_manager import recall as recall2, extract_keywords as kw2, \
+        format_recall_for_prompt as fmt2
+    from agent_ops.artifact_generators import generate_artifacts as gen2
+    captured: list = []
+
+    def capture_client(prompt: str) -> str:
+        captured.append(prompt)
+        raise RuntimeError("capture only")
+
+    mem_text = fmt2(recall2(keywords=kw2("회의록 초안"), limit=5))
+    check("recall finds the remembered rule", "직급" in mem_text, mem_text)
+    out = Path(tempfile.mkdtemp(prefix="inj_"))
+    gen2("회의록 초안 만들어줘", ["meeting_minutes"], out_dir=out,
+         enrich=True, llm_client=capture_client, memories=mem_text)
+    check("enrich prompt mechanically carries memories",
+          captured and "직급" in captured[0] and "반드시 반영" in captured[0],
+          (captured or ["-"])[0][:200])
+
+    from agent_ops.tool_dispatch import run_agent_loop
+    from agent_ops.mock_transport import MOCK_ENV, make_mock_transport
+    seen: dict = {}
+    inner = make_mock_transport()
+
+    def spy(url, payload, headers, timeout):
+        seen.setdefault("msgs", payload.get("messages", []))
+        return inner(url, payload, headers, timeout)
+
+    run_agent_loop("회의록 만들어줘", WS, env=MOCK_ENV, transport=spy, max_turns=2)
+    sys_msgs = [m["content"] for m in seen.get("msgs", []) if m.get("role") == "system"]
+    check("agent loop mechanically carries memories",
+          any("직급" in c for c in sys_msgs), str([c[:60] for c in sys_msgs]))
+
     print(f"\nALL {PASS} CHECKS PASSED (knowledge book)")
 
 

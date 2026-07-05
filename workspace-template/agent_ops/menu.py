@@ -29,6 +29,7 @@ MENU = """
    6. Outlook 일정 가져오기
    7. 상태 진단        (doctor)
    8. 지식책 보기      (배운 것/기억 히스토리북)
+   9. 매일 아침 자동 브리핑 켜기/끄기
    0. 종료
  --------------------------------------------"""
 
@@ -69,6 +70,16 @@ def do_task() -> None:
     _open_folder(_latest_artifact_dir())
 
 
+def _reminder() -> None:
+    if os.name != "nt":
+        print(" Windows에서만 지원합니다 (schtasks).")
+        return
+    launch = WS / "launch"
+    ans = input(" 켜기(i) / 끄기(u) ? ").strip().lower()
+    bat = launch / ("install-reminder.bat" if ans == "i" else "uninstall-reminder.bat")
+    subprocess.call(["cmd", "/c", str(bat)], cwd=str(launch))
+
+
 def main() -> int:
     if not AGENTOPS.exists():
         print(f"[오류] agentops.py 를 찾지 못했습니다: {AGENTOPS}")
@@ -83,6 +94,7 @@ def main() -> int:
         "6": lambda: _run(["schedule", "sync-outlook"]),
         "7": lambda: _run(["doctor"]),
         "8": lambda: _run(["book", "--open"]),
+        "9": _reminder,
     }
     while True:
         print(MENU)
