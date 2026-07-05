@@ -89,7 +89,7 @@ def make_selfheal_plan() -> Dict[str, Any]:
         "latest_failure": latest,
         "failure_type": ftype,
         "actions": actions,
-        "next_owner": "agentops-repair" if ftype in {"PY_SYNTAX_ERROR", "LONG_COMMAND_ESCAPE_FAIL", "ENCODING_GARBAGE"} else "agentops-supervisor",
+        "next_owner": "agentops-repair" if ftype in {"PY_SYNTAX_ERROR", "LONG_COMMAND_ESCAPE_FAIL", "ENCODING_GARBAGE"} else "agent",
         "requires_user": ftype in {"SESSION_EXPIRED", "RISKY_ACTION_BLOCKED", "UNAPPROVED_RESUME_ACTION"},
     }
     lines = ["# Self-Heal Plan", "", f"- Generated: {plan['timestamp']}", f"- Failure type: `{ftype}`", f"- Next owner: `{plan['next_owner']}`", f"- Requires user: `{plan['requires_user']}`", "", "## Recommended actions"]

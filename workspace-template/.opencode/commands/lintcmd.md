@@ -1,6 +1,6 @@
 ---
 description: Check a proposed shell command for approval-window corruption
-agent: agentops-autopilot
+agent: agent
 subtask: false
 ---
 

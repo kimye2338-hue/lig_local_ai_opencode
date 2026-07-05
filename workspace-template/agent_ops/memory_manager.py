@@ -112,6 +112,38 @@ def recall(task_kind: str = "", keywords: List[str] | None = None, limit: int = 
     scored.sort(key=lambda x: (-x[0], str(x[1].get("created_at", ""))))
     return [r for _, r in scored[:limit]]
 
+def pinned_recall(limit: int = 5, error_days: int = 14) -> List[Dict[str, Any]]:
+    """키워드와 무관하게 '항상' 주입할 기억 — 회상 보장의 핵심.
+
+    recall 은 키워드 점수제라 작업 문구가 다르면 놓칠 수 있다. 하지만
+    ① 사용자가 직접 시킨 규칙(source=user)과 ② 최근 자가 관찰 실수
+    (error_pattern)는 어떤 작업에서든 반영돼야 한다 — "기억해놓으면 꼭 회상".
+    """
+    ensure_memory()
+    rows = load_memory(status="active")
+    user_prefs = [r for r in rows if r.get("source") == "user"]
+    # 우선순위 high 먼저, 같은 급에서는 최신 먼저 (안정 정렬 2단).
+    user_prefs.sort(key=lambda r: str(r.get("created_at", "")), reverse=True)
+    user_prefs.sort(key=lambda r: 0 if r.get("priority") == "high" else 1)
+    cutoff = now()[:10]
+    try:
+        from datetime import datetime, timedelta
+        cutoff = (datetime.fromisoformat(now()[:10]) - timedelta(days=error_days)).strftime("%Y-%m-%d")
+    except Exception:
+        pass
+    recent_errors = sorted(
+        [r for r in rows if r.get("kind") == "error_pattern"
+         and str(r.get("created_at", ""))[:10] >= cutoff],
+        key=lambda r: str(r.get("created_at", "")), reverse=True)
+    picked: List[Dict[str, Any]] = []
+    seen: set = set()
+    for r in user_prefs[:limit] + recent_errors[:max(2, limit - 2)]:
+        if r.get("id") not in seen:
+            seen.add(r.get("id"))
+            picked.append(r)
+    return picked[: limit + 2]
+
+
 def format_recall_for_prompt(items: List[Dict[str, Any]]) -> str:
     if not items:
         return "No relevant prior memory found."

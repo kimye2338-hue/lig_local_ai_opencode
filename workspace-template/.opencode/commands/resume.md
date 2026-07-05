@@ -1,6 +1,6 @@
 ---
 description: Resume after restart or compaction
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

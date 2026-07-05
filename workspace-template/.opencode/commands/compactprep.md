@@ -1,6 +1,6 @@
 ---
 description: Prepare compact handoff
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

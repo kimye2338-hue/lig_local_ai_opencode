@@ -1,6 +1,6 @@
 ---
 description: Recall relevant memory
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

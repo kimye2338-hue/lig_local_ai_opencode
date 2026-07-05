@@ -1,6 +1,6 @@
 ---
 description: Create or update files without heredoc/cat/long python -c
-agent: agentops-autopilot
+agent: agent
 subtask: false
 ---
 

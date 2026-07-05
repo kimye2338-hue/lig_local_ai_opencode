@@ -356,13 +356,18 @@ def run_agent_loop(
     # 주입 순서(제품 문서 §6.3): 전역 기억 → 폴더 프로필(기억/페르소나/규칙) → 작업.
     inserts: List[Dict[str, Any]] = []
     try:
-        from .memory_manager import extract_keywords, format_recall_for_prompt, recall
+        from .memory_manager import extract_keywords, format_recall_for_prompt, pinned_recall, recall
         keywords = extract_keywords(prompt)
-        mem = recall(keywords=keywords, limit=5)
+        # 회상 보장: 사용자 규칙 + 최근 실수는 키워드가 안 맞아도 항상 주입,
+        # 키워드 매칭분은 그 위에 추가 (id 로 중복 제거).
+        pinned = pinned_recall(limit=5)
+        matched = recall(keywords=keywords, limit=5)
+        seen_ids = {r.get("id") for r in pinned}
+        mem = pinned + [r for r in matched if r.get("id") not in seen_ids]
         if mem:
             inserts.append({"role": "system",
                             "content": "이전에 축적된 사용자 규칙/교훈 — 반드시 반영:\n"
-                                       + format_recall_for_prompt(mem)})
+                                       + format_recall_for_prompt(mem[:8])})
         # 복리 recall: 개별 사건보다 '주제 페이지'(증류된 지식)가 강하다.
         # 기록이 쌓일수록 같은 주제 발췌가 저절로 풍부해진다 (LLM Wiki 층).
         from .wiki_manager import recall_pages
@@ -382,6 +387,12 @@ def run_agent_loop(
         pass
     for offset, msg in enumerate(inserts):
         messages.insert(1 + offset, msg)
+    # 비서펫(오버레이) 라이브 상태 — 실패해도 작업을 막지 않는다.
+    try:
+        from .status_writer import publish_status
+        publish_status("working", message="에이전트 작업 시작", task=prompt[:60])
+    except Exception:  # noqa: BLE001
+        pass
     tool_results: List[Dict[str, Any]] = []
     outcome = "max_turns_exceeded"
     final_content = ""
@@ -429,6 +440,24 @@ def run_agent_loop(
         "turns": turns,
         "tool_results": tool_results,
     }
+    try:
+        from .status_writer import publish_event
+        status = {"completed": "done", "llm_failed": "error",
+                  "tool_loop_cutoff": "needs_user",
+                  "max_turns_exceeded": "needs_user"}.get(outcome, "done")
+        publish_event("AGENT_" + outcome.upper(), status=status,
+                      message=(final_content or outcome)[:120], task=prompt[:60])
+    except Exception:  # noqa: BLE001
+        pass
+    # 시행착오의 기계적 학습: 루프가 비정상 종료하면 그 패턴을 기억에 남긴다.
+    # 다음 작업에서 pinned_recall 이 이 교훈을 '반드시' 주입한다.
+    if outcome in ("tool_loop_cutoff", "llm_failed", "max_turns_exceeded"):
+        try:
+            from .memory_manager import record_self_error
+            record_self_error(f"에이전트 루프 {outcome}",
+                              (final_content or outcome)[:200], task=prompt[:80])
+        except Exception:  # noqa: BLE001
+            pass
     try:
         diag = Path(diag_dir) if diag_dir else DIAG_DIR
         diag.mkdir(parents=True, exist_ok=True)

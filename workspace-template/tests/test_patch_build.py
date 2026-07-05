@@ -73,6 +73,11 @@ def main() -> None:
     mem.mkdir(parents=True)
     (mem / "memory.jsonl").write_text('{"id":"mem_keep"}\n', encoding="utf-8")
     (mem / "WIKI.md").write_text("# 위키 원본\n", encoding="utf-8")
+    # 구버전 모드 파일이 남아 있는 설치 — 패치가 정리해야 한다 (모드 3개 체계).
+    old_agents = target / ".opencode" / "agents"
+    old_agents.mkdir(parents=True)
+    (old_agents / "agentops-supervisor.md").write_text("old\n", encoding="utf-8")
+    (old_agents / "agentops-autopilot.md").write_text("old\n", encoding="utf-8")
 
     r = subprocess.run([sys.executable, str(extract / "patch" / "patch_impl.py"),
                         "--home", str(home)],
@@ -88,6 +93,10 @@ def main() -> None:
     check("memory.jsonl untouched", (mem / "memory.jsonl").read_text(encoding="utf-8") == '{"id":"mem_keep"}\n')
     check("WIKI.md untouched", (mem / "WIKI.md").read_text(encoding="utf-8") == "# 위키 원본\n")
     check("bin launchers regenerated", (home / "OpenCodeLIG" / "bin" / "ocd.bat").is_file())
+    check("obsolete mode files removed by patch",
+          not (old_agents / "agentops-supervisor.md").exists()
+          and not (old_agents / "agentops-autopilot.md").exists()
+          and (old_agents / "agent.md").is_file(), str(sorted(p.name for p in old_agents.glob('*'))))
     check("patch reports memory preserved", "보존" in r.stdout, r.stdout[-500:])
 
     # --- 설치 없는 PC에서는 정직하게 중단 ---

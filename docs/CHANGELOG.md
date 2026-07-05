@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-07-05 - 3 modes, guaranteed recall, image pet, IME mitigation
+
+- **Modes reduced to 3**: built-in `build`(일반) / `plan`(계획) + one unified
+  `agent`(에이전트 — agent_ops runtime + specialist subagents, work recipes,
+  memory rules, command-guard rules). The old agentops-supervisor/autopilot/
+  plan primaries are merged into `agent.md`; installer and patch actively
+  remove the obsolete files from existing installs so Tab cycles only 3.
+  Approval stays orthogonal: Shift+Tab ASK/AUTO (AUTO = auto-approve once
+  each; command guard still blocks dangerous commands).
+- **Guaranteed recall** ("기억해놓으면 꼭 회상"): user-sourced memories and
+  recent error lessons are now ALWAYS injected into the agent loop
+  (`pinned_recall`), regardless of keyword overlap; keyword recall adds on
+  top (id-deduped). Agent-loop failures (tool_loop_cutoff/llm_failed/
+  max_turns) auto-record an error_pattern that the next run recalls —
+  mechanical trial-and-error learning. New `test_recall_guarantee.py`
+  (7 checks).
+- **Pet overlay uses the user's sticker set**: 6 state images (idle/working/
+  done/needs_user/error/stalled) cut from the provided sheet into
+  `agent_ops/ui/assets/pet/`; overlay renders them (procedural fallback,
+  `LIG_PET_DIR` override). `run_agent_loop` publishes live status via
+  status_writer so the pet reflects real work; desktop [비서펫] shortcut.
+- **Korean IME input-lag mitigation**: `oc.bat` sets chcp 65001; the
+  double-click [오픈코드] launcher opens in Windows Terminal when available
+  (legacy conhost IME composition lag is the main suspect) — company-PC
+  validation pending; RUNBOOK entry added.
+
 ## 2026-07-05 - LLM Wiki: compounding topic pages (Karpathy pattern, offline-first)
 
 Memory grows into an Obsidian-compatible wiki instead of only an event list:

@@ -69,6 +69,42 @@ def main() -> None:
     events = read_recent_events(state, diag, limit=5)
     check("recent events read from history", len(events) == 2 and "click" in events[-1], str(events))
 
+    # --- 펫 이미지 에셋 (사용자 제공 스티커, 2026-07-05) ---
+    import os
+    from agent_ops.ui.hamster_overlay import STATUS_LABELS, load_pet_images, pet_asset_dir
+    assets = pet_asset_dir()
+    for status in STATUS_LABELS:
+        p = assets / f"{status}.png"
+        check(f"pet asset {status}.png shipped",
+              p.is_file() and p.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", str(p))
+
+    class FakeTk:
+        class PhotoImage:
+            def __init__(self, file):
+                self.file = file
+    imgs = load_pet_images(FakeTk)
+    check("loader maps every status to an image", set(imgs) == set(STATUS_LABELS), str(set(imgs)))
+    os.environ["LIG_PET_DIR"] = str(root / "no_such_dir")
+    check("missing pet dir falls back gracefully", load_pet_images(FakeTk) == {})
+    os.environ.pop("LIG_PET_DIR")
+
+    # --- 에이전트 루프가 라이브 상태를 발행 → 펫이 실시간으로 읽는다 ---
+    os.environ["LIG_STATE_DIR"] = str(state)
+    from agent_ops.tool_dispatch import run_agent_loop
+
+    def transport(url, payload, headers, timeout):
+        return {"choices": [{"message": {"content": "끝"}}]}
+
+    run_agent_loop("펫 상태 테스트", root, env={"LIG_GATEWAY_BASE_URL": "http://127.0.0.1:9",
+                                               "LIG_API_KEY": "x"},
+                   transport=transport, diag_dir=diag)
+    current = json.loads((state / "current_status.json").read_text(encoding="utf-8"))
+    check("agent loop publishes live status for pet",
+          current["status"] == "done" and current["task"].startswith("펫 상태"), str(current))
+    snap = load_snapshot(state, diag)
+    check("pet snapshot reflects agent completion", snap.status == "done", str(snap))
+    os.environ.pop("LIG_STATE_DIR")
+
     print(f"\nALL {PASS} CHECKS PASSED (hamster overlay state)")
 
 

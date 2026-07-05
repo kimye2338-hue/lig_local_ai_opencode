@@ -1,6 +1,6 @@
 ---
 description: Run one bounded AgentOps task
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

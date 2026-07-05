@@ -158,10 +158,12 @@ def main(argv=None) -> int:
 
     print(f"[1/3] 프로그램 갱신: 변경 {updated}개 (백업: {backup_root if updated else '불필요'}), 추가 {added}개")
 
-    # 런처/전역 페르소나 재생성 (setup_impl 재사용 — 로직 중복 금지)
+    # 런처/전역 페르소나 재생성 + 구버전 모드 파일 정리 (setup_impl 재사용)
     sys.path.insert(0, str(BUNDLE / "patch"))
     try:
         import setup_impl
+        if hasattr(setup_impl, "remove_obsolete"):
+            setup_impl.remove_obsolete(home, target)
         setup_impl.install_global_brain(home, target)
         setup_impl.install_bin_launchers(home)
         print("[2/3] 런처(ocd/ai)·전역 페르소나 갱신 완료")

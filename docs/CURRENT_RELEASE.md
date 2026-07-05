@@ -50,7 +50,7 @@ If a newer successful run exists on `main`, use that newer artifact. This file r
 - Hidden files were present after extraction:
   - `workspace/.opencode/commands/permission.md`
   - `workspace/.opencode/commands/agentmode.md`
-  - `workspace/.opencode/agents/agentops-supervisor.md`
+  - `workspace/.opencode/agents/agent.md`
   - `workspace/.opencode/plugins/command-guard.ts`
 - Context files were present after extraction:
   - `workspace/docs/AI_HANDOFF.md`

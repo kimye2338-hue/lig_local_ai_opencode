@@ -1,6 +1,6 @@
 ---
 description: Stop external AgentOps
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

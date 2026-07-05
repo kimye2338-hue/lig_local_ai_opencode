@@ -1,6 +1,6 @@
 ---
 description: Explain the permission approval policy (ASK/AUTO) and how to toggle it
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

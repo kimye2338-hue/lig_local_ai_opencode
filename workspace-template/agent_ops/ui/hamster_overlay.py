@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 """Always-on-top OpenCodeLIG hamster status overlay.
 
-Stdlib-only by design: tkinter + JSON files.  It does not embed any stock image
-or copyrighted asset.  The hamster is drawn procedurally on a Tk canvas so it is
-safe to ship inside the company/offline bundle.
+Stdlib-only by design: tkinter + JSON files.  The pet face uses the user's own
+sticker set under assets/pet/<status>.png (user-provided image, 2026-07-05);
+when an asset is missing the hamster is drawn procedurally on a Tk canvas so
+the overlay still works. Swap the whole look by pointing LIG_PET_DIR at a
+folder with idle/working/done/needs_user/error/stalled .png files.
 
 Data sources, in priority order:
-  1. %LIG_STATE_DIR%/current_status.json      (future explicit status writer)
+  1. %LIG_STATE_DIR%/current_status.json      (run_agent_loop publishes live)
   2. %LIG_DIAG_DIR%/agent-loop-last.json      (existing run_agent_loop result)
   3. %LIG_DIAG_DIR%/tool-dispatch-last.json   (existing tool dispatch result)
 
@@ -39,6 +41,28 @@ STATUS_LABELS = {
     "error": "오류",
     "stalled": "멈춤 의심",
 }
+
+
+def pet_asset_dir() -> Path:
+    override = os.environ.get("LIG_PET_DIR")
+    if override:
+        return Path(override)
+    return Path(__file__).resolve().parent / "assets" / "pet"
+
+
+def load_pet_images(tk_module: Any) -> Dict[str, Any]:
+    """상태별 PNG 를 PhotoImage 로 로드. 없는/깨진 파일은 건너뜀 (절차적 폴백)."""
+    images: Dict[str, Any] = {}
+    base = pet_asset_dir()
+    for status in STATUS_LABELS:
+        path = base / f"{status}.png"
+        if not path.is_file():
+            continue
+        try:
+            images[status] = tk_module.PhotoImage(file=str(path))
+        except Exception:
+            continue
+    return images
 
 @dataclass
 class Snapshot:
@@ -206,7 +230,10 @@ class HamsterOverlay:
         self.tk = tk
         self.root = root
         self.root.title(APP_NAME)
-        self.root.geometry("330x168+40+40")
+        self.pet_images = load_pet_images(tk)          # 참조 유지 필수 (GC 방지)
+        self.width = 400 if self.pet_images else 330
+        self.height = 180 if self.pet_images else 168
+        self.root.geometry(f"{self.width}x{self.height}+40+40")
         self.root.attributes("-topmost", True)
         self.bg = "#ff00ff"
         self.root.configure(bg=self.bg)
@@ -216,7 +243,7 @@ class HamsterOverlay:
                 self.root.wm_attributes("-transparentcolor", self.bg)
         except Exception:
             pass
-        self.canvas = tk.Canvas(root, width=330, height=168, bg=self.bg, highlightthickness=0)
+        self.canvas = tk.Canvas(root, width=self.width, height=self.height, bg=self.bg, highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
         self._drag_x = 0
         self._drag_y = 0
@@ -283,21 +310,27 @@ class HamsterOverlay:
         message = self.snapshot.message
         task = self.snapshot.task
 
+        img = self.pet_images.get(status) or self.pet_images.get("idle")
+        bx = 172 if img else 112                      # 이미지 폭만큼 말풍선을 밀어냄
+
         # Speech bubble.
-        self._round_rect(112, 12, 320, 118, 18, fill="#fff9ea", outline="#9a7a52", width=2)
-        c.create_polygon(122, 92, 96, 105, 118, 75, fill="#fff9ea", outline="#9a7a52")
-        c.create_text(128, 28, anchor="nw", text=label, fill="#5b3a1e", font=("Malgun Gothic", 11, "bold"))
+        self._round_rect(bx, 12, self.width - 10, 118, 18, fill="#fff9ea", outline="#9a7a52", width=2)
+        c.create_polygon(bx + 10, 92, bx - 16, 105, bx + 6, 75, fill="#fff9ea", outline="#9a7a52")
+        c.create_text(bx + 16, 28, anchor="nw", text=label, fill="#5b3a1e", font=("Malgun Gothic", 11, "bold"))
         wrapped = "\n".join(textwrap.wrap(message, width=20))
-        c.create_text(128, 52, anchor="nw", text=wrapped, fill="#2f2418", font=("Malgun Gothic", 9))
+        c.create_text(bx + 16, 52, anchor="nw", text=wrapped, fill="#2f2418", font=("Malgun Gothic", 9))
         if task:
-            c.create_text(128, 98, anchor="nw", text=_clean_text(task, 34), fill="#6f675d", font=("Malgun Gothic", 8))
+            c.create_text(bx + 16, 98, anchor="nw", text=_clean_text(task, 34), fill="#6f675d", font=("Malgun Gothic", 8))
 
         # Close button.
-        c.create_oval(300, 125, 322, 147, fill="#fff9ea", outline="#9a7a52", tags=("close",))
-        c.create_text(311, 136, text="x", fill="#5b3a1e", font=("Arial", 10, "bold"), tags=("close",))
+        c.create_oval(self.width - 30, 125, self.width - 8, 147, fill="#fff9ea", outline="#9a7a52", tags=("close",))
+        c.create_text(self.width - 19, 136, text="x", fill="#5b3a1e", font=("Arial", 10, "bold"), tags=("close",))
         c.tag_bind("close", "<Button-1>", lambda e: self.root.destroy())
 
-        self._draw_hamster(status)
+        if img is not None:
+            c.create_image(8, self.height - 4, anchor="sw", image=img)
+        else:
+            self._draw_hamster(status)
 
     def _round_rect(self, x1: int, y1: int, x2: int, y2: int, r: int, **kw: Any) -> None:
         c = self.canvas

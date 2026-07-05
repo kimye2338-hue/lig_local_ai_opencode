@@ -1,6 +1,6 @@
 ---
 description: Enqueue a task
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

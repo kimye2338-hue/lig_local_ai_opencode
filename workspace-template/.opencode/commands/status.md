@@ -1,6 +1,6 @@
 ---
 description: Show AgentOps status
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

@@ -166,9 +166,11 @@ def main() -> None:
     for _ in range(2):   # 두 번 실패해도 같은 날은 1건만
         gen3("회의록 초안 만들어줘", ["meeting_minutes"], out_dir=out2,
              enrich=True, llm_client=lambda p: "그냥 잡담", self_learn=True)
-    self_errs = [r for r in load_memory() if r.get("source") == "self_observed"]
+    # 루프 실패(max_turns 등)도 self_observed 로 남으므로 품질검증 건만 센다.
+    self_errs = [r for r in load_memory() if r.get("source") == "self_observed"
+                 and "품질검증 실패" in str(r.get("title", ""))]
     check("self-observed quality failure recorded once (dedup)",
-          len(self_errs) == 1 and "품질검증 실패" in self_errs[0]["title"], str(self_errs))
+          len(self_errs) == 1, str(self_errs))
 
     # --- 블로그형 책: 네비/필터 칩/월별 아카이브 ------------------------------
     r = run_cli(root, "book")

@@ -301,7 +301,7 @@ jobs:
             'workspace\.gitignore',
             'workspace\.opencode\commands\permission.md',
             'workspace\.opencode\commands\agentmode.md',
-            'workspace\.opencode\agents\agentops-supervisor.md',
+            'workspace\.opencode\agents\agent.md',
             'workspace\agent_ops\agentops.py',
             'workspace\docs\AI_HANDOFF.md',
             'workspace\patches\opencode-permission-mode-toggle.patch'

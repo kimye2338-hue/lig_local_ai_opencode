@@ -1,6 +1,6 @@
 ---
 description: Start here — recover state and show a plain-language status
-agent: agentops-supervisor
+agent: agent
 subtask: false
 ---
 

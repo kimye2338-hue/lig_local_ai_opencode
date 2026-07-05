@@ -14,7 +14,13 @@ def now_iso() -> str:
 
 
 def state_dir() -> Path:
-    return Path(os.environ.get("LIG_STATE_DIR") or (Path.home() / "OpenCodeLIG_USERDATA" / "state"))
+    # 우선순위: LIG_STATE_DIR(명시) > AGENTOPS_ROOT/.state(테스트 격리) > USERDATA 전역
+    explicit = os.environ.get("LIG_STATE_DIR")
+    if explicit:
+        return Path(explicit)
+    if os.environ.get("AGENTOPS_ROOT"):
+        return Path(os.environ["AGENTOPS_ROOT"]) / ".state"
+    return Path.home() / "OpenCodeLIG_USERDATA" / "state"
 
 
 def _read_current(path: Path) -> Dict[str, Any]:
