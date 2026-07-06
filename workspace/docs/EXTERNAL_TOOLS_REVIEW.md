@@ -122,6 +122,13 @@ PyAutoGUI로 실행(비전 모델 불필요, 선택적).
 |---|---|---|
 | kenn-io/agentsview | ⭕ **패턴만 참고, 도입 skip** | MIT지만 Go+Node+SQLite 데몬(무거운 비-Python 스택)+우리 로그 어댑터 없음+대시보드/watch와 중복. 익명 텔레메트리(opt-out). **유용 아이디어(활동 타임라인·멈춤 시각화)는 우리 audit로 자체 구현** → `activity_timeline.py`(`agentops timeline`): audit.jsonl 기반 자립형 HTML 타임라인, 이벤트 간격 큰 구간을 '멈춤 의심'으로 강조(무한대기 감시 시각화). 외부 의존 0 |
 
+## 7차 검토 (2026-07-07, opencode-manager / maestro)
+
+| 항목 | 라이선스 | 판정 | 이유 |
+|---|---|---|---|
+| chriswritescode-dev/opencode-manager | MIT | ❌ skip | 여러 OpenCode를 웹 PWA로 관리(Node/Bun+Docker+SQLite+React), **OpenCode 서버 모드 필요**. 망분리 단일 PC엔 무거운 서버스택+모바일/다기기 무의미. 우리 런처·세션상태·orchestrator·schedule과 중복 |
+| sharpdeveye/maestro | MIT | ⭕ 패턴만 참고 | 워크플로 개선 skill/명령(/diagnose·/fortify·/refine). 오프라인 가능하나 Claude/MCP-skill 형식(런타임 불일치). 진단·감시·기억은 우리 doctor/verify/watch/memory + HARNESS_PRINCIPLES로 이미 커버 |
+
 ## 원칙 (앞으로 외부도구 도입 시)
 
 - **런타임에 인터넷 0**이면 채택 후보. 설치 시 인터넷이 필요해도 **오프라인 설치본
