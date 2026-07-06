@@ -100,6 +100,15 @@ PyAutoGUI로 실행(비전 모델 불필요, 선택적).
 | mattpocock/emilkowalski/addyosmani/vercel skills | ⭕ 부분 참고/skip | 실행형 SKILL.md(코딩/웹 중심). 문서화/PRD 패턴만 아이디어 참고, 통째 도입 skip |
 | getdesign.md / styles.refero / find-skills / gist | ❌ skip | 온라인 웹 UI 갤러리/검색 서비스. 문서/PPT와 무관하거나 오프라인 불가 |
 
+## 4차 검토 (2026-07-06, harness/compression/browser-agent)
+
+| 항목 | 라이선스 | 판정 | 이유/반영 |
+|---|---|---|---|
+| walkinglabs/learn-harness-engineering (ko) | 미명시(방법론) | ✅ **가이드 채택** | 하네스 설계 방법론(닫힌루프·상태·검증·관측성·종료). `docs/HARNESS_PRINCIPLES.md`로 우리 구성요소 매핑·점검 규칙화 |
+| headroomlabs/headroom | Apache-2.0 | ⭕ **개념 참고(보류)** | 컨텍스트 압축 레이어. 아이디어 유용하나 Rust빌드+AVX2+모델 다운로드로 무겁고 우리 truncation과 부분중복. 향후 최적화 시 재검토 |
+| microsoft/Webwright | MIT | ⭕ **패턴만 참고/skip** | 브라우저 code-as-action 에이전트. 로컬 게이트웨이 연동 미확인+Playwright+웹도메인(browser_cdp/browser-use로 커버). 루프 설계만 참고 |
+| x.com 트윗 | — | ⚠️ 접근불가 | 로그인/결제 벽(HTTP 402). 내용 붙여주면 검토 |
+
 ## 원칙 (앞으로 외부도구 도입 시)
 
 - **런타임에 인터넷 0**이면 채택 후보. 설치 시 인터넷이 필요해도 **오프라인 설치본
