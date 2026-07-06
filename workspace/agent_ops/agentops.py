@@ -292,6 +292,21 @@ def cmd_watch(args):
     return code
 
 
+def cmd_report_html(args):
+    """CSV → 자립형 HTML 리포트(표+막대차트). 브라우저로 여는 산출물."""
+    from pathlib import Path as _P
+    from agent_ops.html_report import report_from_csv
+    src = _P(args.input)
+    if not src.exists():
+        print(f"[report-html] 입력 파일 없음: {src}")
+        return 1
+    out_dir = _P("agent_ops/results/reports")
+    path = report_from_csv(src, out_dir, title=(args.title or None))
+    print(f"HTML 리포트 생성: {path}")
+    print("브라우저로 열면 표/차트가 보입니다 (오프라인, 외부 리소스 없음).")
+    return 0
+
+
 def cmd_resume(args):
     interruption = detect_interruption()
     if interruption.get("interrupted"):
@@ -863,6 +878,7 @@ def main(argv=None):
     sub.add_parser("dashboard").set_defaults(func=cmd_dashboard)
     sub.add_parser("resume").set_defaults(func=cmd_resume)
     p = sub.add_parser("watch"); p.add_argument("--max-age", dest="max_age", type=int, default=600); p.set_defaults(func=cmd_watch)
+    p = sub.add_parser("report-html"); p.add_argument("--input", required=True); p.add_argument("--title", default=""); p.set_defaults(func=cmd_report_html)
     p = sub.add_parser("checkpoint"); p.add_argument("--note", default=""); p.set_defaults(func=cmd_checkpoint)
     sub.add_parser("doctor").set_defaults(func=cmd_doctor)
     sub.add_parser("verify").set_defaults(func=cmd_verify)
