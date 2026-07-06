@@ -26,7 +26,8 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from . import (autocad_batch, browser_cdp, excel_com, fluent_batch, hwp_com,
-               matlab_batch, office_convert, outlook_com, solidworks_com)
+               matlab_batch, ocr_screen, office_convert, outlook_com,
+               solidworks_com)
 
 
 def _office_execute(action: str, options: Dict[str, Any]) -> Dict[str, Any]:
@@ -109,6 +110,15 @@ ADAPTERS: Dict[str, Dict[str, Any]] = {
         "validated": "회사 한글 10.0 문서 생성+저장 성공 (2026-07-05 company_check)",
         "pending": "",
         "execute": hwp_com.execute,
+    },
+    "ocr_screen": {
+        "description": "화면 스크린샷 OCR (한/영) — 막힐 때 화면을 눈으로 읽어 판단",
+        "consumes": [],
+        "available": True,
+        "requires": ["OCR 엔진 반입(tools/ocr: RapidOCR onnx 또는 Tesseract kor+eng)",
+                     "스크린샷은 mss/Pillow 없으면 PowerShell 폴백(무설치)"],
+        "pending": "app validation pending: 회사 PC에서 OCR 엔진 반입 후 read_screen 검증",
+        "execute": ocr_screen.execute,
     },
 }
 
