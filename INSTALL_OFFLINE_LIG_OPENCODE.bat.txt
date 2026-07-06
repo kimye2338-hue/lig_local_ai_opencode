@@ -66,7 +66,6 @@ if errorlevel 8 (
   pause
   exit /b 1
 )
-\
 rem Project-local opencode config: disable autoupdate so an offline
 rem PC never waits on update checks at startup.
 (

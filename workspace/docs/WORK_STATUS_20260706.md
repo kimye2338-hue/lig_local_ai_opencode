@@ -21,7 +21,22 @@ git 백업: `01e5e4f`(수정 전) → `b787b2d`(1차 수정 커밋). 문제 시 
 - 의도적 스킵: test_capability_floor(실LLM), test_real_llm_smoke, test_office_live_smoke.
 - test_batch_adapters autocad utf16le 실패는 동시부하 flake였음 — 단독실행 시 통과.
 
+## 추가 완료 (커밋 이력, 전 스위트 24 PASS / 실실패 0)
+- 마스터플랜: docs/PRODUCT_MASTER_PLAN_FABLE5.md (요청 통합 제품상 + 목표구조 + Phase).
+- Obsidian 위키: agent_ops/wiki_vault.py(.obsidian 시드, 멱등) + launch/wiki.bat + tools/ + docs/OBSIDIAN_WIKI.md.
+- 화면 OCR(한/영): agent_ops/adapters/ocr_screen.py(스크린샷 mss→Pillow→PowerShell 폴백,
+  백엔드 RapidOCR/Tesseract 플러거블) + 레지스트리 등록(검증대기) + docs/OCR_SCREEN.md.
+- 공식 API 근거 코퍼스: agent_ops/api_reference.py(프롬프트→소프트웨어 감지→공식문서 주입,
+  환각 방지) + knowledge/apis/*.md(Haiku 리서치, Excel/Outlook/AutoCAD/MATLAB 공식검증,
+  SolidWorks/Fluent partial) + tool_dispatch 주입 배선.
+- 위키 커뮤니티기능 병합: 별칭확장/모순후보/백링크/강화신호 + knowledge_book 모순배너
+  (test_wiki_manager 27→34). = "GitHub 아이디어 차용" 실현.
+- 설치 스크립트 고아 `\` 줄 제거.
+
 ## 남은 작업 (우선순위)
+0. [권장 별도 세션] 폴더 대개편(P7): §목표구조 적용은 INSTALL/SHA256SUMS/테스트경로(parents[N])/
+   빌드워크플로우 동시 갱신 + 전 테스트 재검증이 필요. 세션한도 중 강행은 트리 파손 위험 →
+   백업(git)과 전 테스트 green 전제로 단일 세션에서 수행 권장.
 1. [진행] 패치zip 위키 커뮤니티기능 병합: aliases.json 별칭확장, 모순후보 탐지, 백링크,
    반복확인 강화신호, knowledge_book 모순배너, agentops 매일 위키 lint.
    근거 소스: rohitg00 LLM Wiki, green-dalii/obsidian-llm-wiki, Karpathy. (= GitHub 아이디어 차용)
