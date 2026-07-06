@@ -411,6 +411,14 @@ def run_agent_loop(
             inserts.append({"role": "system", "content": domain_ref})
     except Exception:  # noqa: BLE001 - 도메인 맥락 주입 실패도 작업을 막으면 안 된다
         pass
+    try:
+        # 프로세스 스킬 자동 적용: 작업 유형에 맞는 '일하는 절차'를 넣어 방법까지 따르게 한다.
+        from .skill_router import context_for_prompt as _skill_ctx
+        skill_ref = _skill_ctx(prompt)
+        if skill_ref:
+            inserts.append({"role": "system", "content": skill_ref})
+    except Exception:  # noqa: BLE001 - 스킬 주입 실패도 작업을 막으면 안 된다
+        pass
     for offset, msg in enumerate(inserts):
         messages.insert(1 + offset, msg)
     # 비서펫(오버레이) 라이브 상태 — 실패해도 작업을 막지 않는다.
