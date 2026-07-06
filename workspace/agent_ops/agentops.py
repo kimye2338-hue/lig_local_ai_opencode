@@ -307,6 +307,17 @@ def cmd_report_html(args):
     return 0
 
 
+def cmd_timeline(args):
+    """audit.jsonl → 활동 타임라인 HTML(멈춤 의심 구간 강조). 무한대기 감시 시각화."""
+    from pathlib import Path as _P
+    from agent_ops.activity_timeline import build_timeline
+    out_dir = _P("agent_ops/results/reports")
+    path = build_timeline(out_dir, stall_gap=int(getattr(args, "gap", 600) or 600))
+    print(f"활동 타임라인 생성: {path}")
+    print("브라우저로 열면 활동·멈춤 의심 구간이 보입니다 (오프라인).")
+    return 0
+
+
 def cmd_resume(args):
     interruption = detect_interruption()
     if interruption.get("interrupted"):
@@ -879,6 +890,7 @@ def main(argv=None):
     sub.add_parser("resume").set_defaults(func=cmd_resume)
     p = sub.add_parser("watch"); p.add_argument("--max-age", dest="max_age", type=int, default=600); p.set_defaults(func=cmd_watch)
     p = sub.add_parser("report-html"); p.add_argument("--input", required=True); p.add_argument("--title", default=""); p.set_defaults(func=cmd_report_html)
+    p = sub.add_parser("timeline"); p.add_argument("--gap", type=int, default=600); p.set_defaults(func=cmd_timeline)
     p = sub.add_parser("checkpoint"); p.add_argument("--note", default=""); p.set_defaults(func=cmd_checkpoint)
     sub.add_parser("doctor").set_defaults(func=cmd_doctor)
     sub.add_parser("verify").set_defaults(func=cmd_verify)

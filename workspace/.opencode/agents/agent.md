@@ -98,6 +98,7 @@ permission:
 | 웹페이지/사내 포털 분석·요약 | ① `launch\chrome-debug.bat`로 크롬 열게 안내 ② `python agent_ops/agentops.py agent --mode real --task "열린 탭 중 <대상> 페이지를 읽고 요약"` |
 | 데이터(CSV 등)를 표/차트로 보기 좋게 → HTML 리포트 | `python agent_ops/agentops.py report-html --input "<파일.csv>"` — 표+막대차트가 있는 자립형 HTML(오프라인, 브라우저로 열림). 계산/정리한 데이터는 먼저 `write_file`로 CSV(헤더+행)로 저장한 뒤 이 명령을 돌려라 |
 | 상태 점검/문제 진단 | `python agent_ops/agentops.py doctor` |
+| 에이전트 활동/멈춤 지점 눈으로 보기 → 타임라인 HTML | `python agent_ops/agentops.py timeline` (audit 기반, 멈춤 의심 구간 강조. 브라우저로 열림) |
 | 배운 것/지식책 보기 | `python agent_ops/agentops.py book --open` (위키 정리는 `wiki`) |
 
 - 산출물: `agent_ops/results/artifacts/<run_id>/`, 보고서: `agent_ops/results/reports/`.

@@ -116,6 +116,12 @@ PyAutoGUI로 실행(비전 모델 불필요, 선택적).
 | community.obsidian.md 플러그인 | ✅ 추천 확대 | 오프라인 로컬 플러그인(Dataview/Templater/Excalidraw/Advanced Tables) 위키 문서에 추가. 수동 zip 설치 |
 | xandemon/developer-icons | ❌ skip | React/npm 브랜드 로고셋(정적 SVG 불명확), 우리 도메인과 무관, **상표권 리스크**(브랜드 로고). 대신 HTML 리포트에 직접 그린 범용 상태 아이콘(합격/경고) 자체 추가 |
 
+## 6차 검토 (2026-07-06, agentsview)
+
+| 항목 | 판정 | 반영 |
+|---|---|---|
+| kenn-io/agentsview | ⭕ **패턴만 참고, 도입 skip** | MIT지만 Go+Node+SQLite 데몬(무거운 비-Python 스택)+우리 로그 어댑터 없음+대시보드/watch와 중복. 익명 텔레메트리(opt-out). **유용 아이디어(활동 타임라인·멈춤 시각화)는 우리 audit로 자체 구현** → `activity_timeline.py`(`agentops timeline`): audit.jsonl 기반 자립형 HTML 타임라인, 이벤트 간격 큰 구간을 '멈춤 의심'으로 강조(무한대기 감시 시각화). 외부 의존 0 |
+
 ## 원칙 (앞으로 외부도구 도입 시)
 
 - **런타임에 인터넷 0**이면 채택 후보. 설치 시 인터넷이 필요해도 **오프라인 설치본
