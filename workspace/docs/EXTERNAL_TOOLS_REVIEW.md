@@ -129,6 +129,25 @@ PyAutoGUI로 실행(비전 모델 불필요, 선택적).
 | chriswritescode-dev/opencode-manager | MIT | ❌ skip | 여러 OpenCode를 웹 PWA로 관리(Node/Bun+Docker+SQLite+React), **OpenCode 서버 모드 필요**. 망분리 단일 PC엔 무거운 서버스택+모바일/다기기 무의미. 우리 런처·세션상태·orchestrator·schedule과 중복 |
 | sharpdeveye/maestro | MIT | ⭕ 패턴만 참고 | 워크플로 개선 skill/명령(/diagnose·/fortify·/refine). 오프라인 가능하나 Claude/MCP-skill 형식(런타임 불일치). 진단·감시·기억은 우리 doctor/verify/watch/memory + HARNESS_PRINCIPLES로 이미 커버 |
 
+## 8차 검토 (2026-07-07, Office 문서 자동화 15종)
+
+핵심 결론: 대부분 **python-docx/python-pptx/openpyxl** 기반(Office 없이 오프라인 생성) 또는
+COM 기반 MCP 서버 / SKILL.md. **라이브러리 접근법을 네이티브로 채택**(office_writer.py),
+MCP 서버·스킬은 통째 도입 skip(런타임 불일치/무거움), 운영 원칙만 참고.
+
+| 항목 | 판정 | 이유/반영 |
+|---|---|---|
+| excel-mcp-server / Office-Word-MCP / Office-PowerPoint-MCP / office-editor-mcp | ⭕ 라이브러리만 채택 | python-docx/pptx/openpyxl 접근법 = 우리 갭. → `office_writer.py` 네이티브 구현(실제 xlsx/docx/pptx 생성 검증). MCP 서버(Node/Docker) 자체는 skip |
+| iOfficeAI/OfficeCLI | ⭕ 아이디어 참고 | 단일 바이너리·Office 없이 렌더링→"보고 수정" 루프. 우리는 markitdown(읽기)+office_writer(쓰기)+html_report(보기)로 동등 커버. 바이너리 반입까진 불필요 |
+| OfficeMCP / dachent/skills | ℹ️ 이미 보유 | Windows COM 제어 = 우리 excel_com/office_convert/hwp_com 어댑터로 이미 있음 |
+| anthropics/skills(xlsx·pptx·pdf), tfriedel/claude-office-skills, brand-docs | ⭕ 원칙만 참고 | Office 작업 운영원칙(템플릿 보존·수식 정합·출력 검증). SKILL.md 문구 미복제, 우리말 원칙으로 design 코퍼스에 반영 |
+| hewliyang/office-agents | ❌ skip | Office Add-in(Office.js) 패널 — 다른 메커니즘, 우리 오프라인 CLI/COM과 불일치 |
+| ForLegalAI/mcp-ms-office-documents, opendocswork-mcp | ❌ skip | Docker/Rust MCP — 무거운 스택, python-lib 접근법으로 대체 |
+| VoltAgent/awesome-agent-skills | ℹ️ 인덱스 | 스킬 큐레이션 목록(참고용). 개별 유용분은 필요 시 원칙만 차용 |
+
+→ 반영: `office_writer.py`(+CLI `report-xlsx`/`office-doc`) — Office 설치 없이 오프라인
+.xlsx/.docx/.pptx 생성. wheel 미반입 시 우아한 안내. docs/OFFICE_WRITER.md.
+
 ## 원칙 (앞으로 외부도구 도입 시)
 
 - **런타임에 인터넷 0**이면 채택 후보. 설치 시 인터넷이 필요해도 **오프라인 설치본

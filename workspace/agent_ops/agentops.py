@@ -307,6 +307,56 @@ def cmd_report_html(args):
     return 0
 
 
+def cmd_report_xlsx(args):
+    """CSV → 서식 있는 .xlsx (Office 설치 불필요, openpyxl). 헤더 굵게/숫자 우측정렬."""
+    from pathlib import Path as _P
+    from agent_ops.html_report import build_from_csv
+    from agent_ops.office_writer import write_xlsx
+    src = _P(args.input)
+    if not src.exists():
+        print(f"[report-xlsx] 입력 파일 없음: {src}")
+        return 1
+    headers, rows, _ = build_from_csv(src)
+    out = _P(args.out) if args.out else (_P("agent_ops/results/reports") / f"{src.stem}.xlsx")
+    r = write_xlsx(out, headers, rows)
+    if not r.get("ok"):
+        print(f"[report-xlsx] 실패: {r.get('error')}\n  {r.get('hint','')}")
+        return 1
+    print(f"XLSX 생성: {r['path']}")
+    return 0
+
+
+def cmd_office_doc(args):
+    """JSON 스펙 → .docx/.pptx (Office 설치 불필요, python-docx/pptx).
+
+    docx 스펙: {"title","sections":[{heading,paragraphs[],bullets[],table:{headers,rows}}]}
+    pptx 스펙: {"title","slides":[{title(=핵심 메시지),points[]}]}
+    """
+    from pathlib import Path as _P
+    spec_path = _P(args.spec)
+    if not spec_path.exists():
+        print(f"[office-doc] 스펙 파일 없음: {spec_path}")
+        return 1
+    try:
+        spec = json.loads(spec_path.read_text(encoding="utf-8-sig", errors="replace"))
+    except Exception as exc:
+        print(f"[office-doc] 스펙 JSON 파싱 실패: {exc!r}")
+        return 1
+    title = str(spec.get("title") or "문서")
+    out = _P(args.out) if args.out else (_P("agent_ops/results/reports") / f"{title}.{args.kind}")
+    if args.kind == "docx":
+        from agent_ops.office_writer import write_docx
+        r = write_docx(out, title, spec.get("sections", []) or [])
+    else:
+        from agent_ops.office_writer import write_pptx
+        r = write_pptx(out, spec.get("slides", []) or [], title=title)
+    if not r.get("ok"):
+        print(f"[office-doc] 실패: {r.get('error')}\n  {r.get('hint','')}")
+        return 1
+    print(f"{args.kind.upper()} 생성: {r['path']}")
+    return 0
+
+
 def cmd_timeline(args):
     """audit.jsonl → 활동 타임라인 HTML(멈춤 의심 구간 강조). 무한대기 감시 시각화."""
     from pathlib import Path as _P
@@ -891,6 +941,8 @@ def main(argv=None):
     p = sub.add_parser("watch"); p.add_argument("--max-age", dest="max_age", type=int, default=600); p.set_defaults(func=cmd_watch)
     p = sub.add_parser("report-html"); p.add_argument("--input", required=True); p.add_argument("--title", default=""); p.set_defaults(func=cmd_report_html)
     p = sub.add_parser("timeline"); p.add_argument("--gap", type=int, default=600); p.set_defaults(func=cmd_timeline)
+    p = sub.add_parser("report-xlsx"); p.add_argument("--input", required=True); p.add_argument("--out", default=""); p.set_defaults(func=cmd_report_xlsx)
+    p = sub.add_parser("office-doc"); p.add_argument("--kind", required=True, choices=["docx", "pptx"]); p.add_argument("--spec", required=True); p.add_argument("--out", default=""); p.set_defaults(func=cmd_office_doc)
     p = sub.add_parser("checkpoint"); p.add_argument("--note", default=""); p.set_defaults(func=cmd_checkpoint)
     sub.add_parser("doctor").set_defaults(func=cmd_doctor)
     sub.add_parser("verify").set_defaults(func=cmd_verify)
