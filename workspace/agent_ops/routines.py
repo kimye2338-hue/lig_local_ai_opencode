@@ -105,6 +105,30 @@ def load_routine(name_or_slug: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def import_routine(path: Path) -> Dict[str, Any]:
+    """JSON 파일에서 루틴을 등록(프리셋). 관리자/사용자가 미리 정의한 절차를 반입한다.
+
+    파일 형식: {"name": "...", "steps": [{"tool": "...", "arguments": {...}}, ...]}
+    또는 steps 만 있는 리스트. 검증된 프리셋만 넣을 것(재생은 command_guard 를 통과한다).
+    """
+    p = Path(path)
+    if not p.exists():
+        return {"ok": False, "error": f"파일 없음: {path}"}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8-sig", errors="replace"))
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"JSON 파싱 실패: {exc!r}"}
+    if isinstance(data, list):
+        name, steps = p.stem, data
+    else:
+        name, steps = data.get("name") or p.stem, data.get("steps") or []
+    steps = [{"tool": str(s.get("tool")), "arguments": s.get("arguments", {})}
+             for s in steps if isinstance(s, dict) and s.get("tool")]
+    if not steps:
+        return {"ok": False, "error": "유효한 steps 가 없습니다"}
+    return save_routine(name, steps, description=(data.get("description", "") if isinstance(data, dict) else ""))
+
+
 def run_routine(name_or_slug: str, dispatcher: Any) -> Dict[str, Any]:
     """루틴을 ToolDispatcher 로 순서대로 재생. 실패 단계에서 멈추고 결과 보고."""
     routine = load_routine(name_or_slug)

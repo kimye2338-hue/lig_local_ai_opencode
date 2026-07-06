@@ -119,6 +119,8 @@ permission:
 | 데이터(CSV 등)를 표/차트로 보기 좋게 → HTML 리포트 | `python agent_ops/agentops.py report-html --input "<파일.csv>"` — 표+막대차트가 있는 자립형 HTML(오프라인, 브라우저로 열림). 계산/정리한 데이터는 먼저 `write_file`로 CSV(헤더+행)로 저장한 뒤 이 명령을 돌려라 |
 | 데이터 → 진짜 Excel 파일(.xlsx, Office 없이) | 데이터를 CSV로 저장 후 `python agent_ops/agentops.py report-xlsx --input "<파일.csv>"` (헤더 굵게·숫자 우측정렬) |
 | 보고서/PPT를 진짜 .docx/.pptx로(Office 없이) | 스펙을 `write_file`로 JSON 저장 후 `python agent_ops/agentops.py office-doc --kind docx --spec "<spec.json>"` (docx: title/sections[heading,paragraphs,bullets,table], pptx: title/slides[title,points]). 1슬라이드=1메시지 |
+| 사내 정형 문서(시험성적서/품질보고서/주간보고/회의록) | `python agent_ops/agentops.py doc-template <종류> [--input 데이터.csv] [--html]` — 표준 골격으로 docx/HTML 생성(불합격 자동 강조) |
+| 검증된 포털/반복 절차를 프리셋으로 | `routine import <프리셋.json>` 로 등록 → `routine run <이름>` 재생. 직접 한 작업은 `routine save` |
 | 상태 점검/문제 진단 | `python agent_ops/agentops.py doctor` |
 | 에이전트 활동/멈춤 지점 눈으로 보기 → 타임라인 HTML | `python agent_ops/agentops.py timeline` (audit 기반, 멈춤 의심 구간 강조. 브라우저로 열림) |
 | 방금 성공한 반복작업을 저장해 다음부터 자동 재생(LLM 없이) | 성공 직후 `python agent_ops/agentops.py routine save "<이름>"` → 다음엔 `routine run "<이름>"` (검증된 도구 호출을 그대로 재생. 재생 결과 성공/실패는 반드시 확인) |

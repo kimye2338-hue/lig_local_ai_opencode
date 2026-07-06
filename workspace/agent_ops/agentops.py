@@ -372,6 +372,16 @@ def cmd_routine(args):
         for it in items:
             print(f"- {it['name']} (steps {it['steps']}, {it['created']})")
         return 0
+    if op == "import":
+        if not args.name:
+            print("사용: routine import <프리셋.json>")
+            return 2
+        res = R.import_routine(_P(args.name))
+        if not res.get("ok"):
+            print(f"[routine import] {res.get('error')}")
+            return 1
+        print(f"프리셋 등록: {res['slug']} (단계 {res['step_count']}) → routine run 으로 재생")
+        return 0
     if op == "save":
         if not args.name:
             print("사용: routine save <이름>")
@@ -397,6 +407,23 @@ def cmd_routine(args):
         print(f"루틴 재생 중단: {res.get('stopped_at')}단계에서 실패 — {res.get('reason')}")
         return 1
     return 2
+
+
+def cmd_doc_template(args):
+    """사내 정형 문서 템플릿(시험성적서/품질보고서/주간보고/회의록) → docx/HTML."""
+    from pathlib import Path as _P
+    from agent_ops.doc_templates import generate, TEMPLATES
+    if args.kind not in TEMPLATES:
+        print(f"[doc-template] 종류: {' | '.join(TEMPLATES)}")
+        return 2
+    out_dir = _P(args.out) if args.out else _P("agent_ops/results/reports")
+    res = generate(args.kind, out_dir, input_csv=(args.input or None),
+                   title=(args.title or None), as_html=args.html, note=args.note)
+    if not res.get("ok"):
+        print(f"[doc-template] 실패: {res.get('error')}" + (f"\n  {res.get('hint','')}" if res.get("hint") else ""))
+        return 1
+    print(f"{res.get('kind')} 생성({res.get('format')}): {res['path']}")
+    return 0
 
 
 def cmd_ocr(args):
@@ -1014,8 +1041,9 @@ def main(argv=None):
     p = sub.add_parser("timeline"); p.add_argument("--gap", type=int, default=600); p.set_defaults(func=cmd_timeline)
     p = sub.add_parser("report-xlsx"); p.add_argument("--input", required=True); p.add_argument("--out", default=""); p.set_defaults(func=cmd_report_xlsx)
     p = sub.add_parser("office-doc"); p.add_argument("--kind", required=True, choices=["docx", "pptx"]); p.add_argument("--spec", required=True); p.add_argument("--out", default=""); p.set_defaults(func=cmd_office_doc)
-    p = sub.add_parser("routine"); p.add_argument("op", choices=["save", "list", "run"]); p.add_argument("name", nargs="?", default=""); p.add_argument("--desc", default=""); p.set_defaults(func=cmd_routine)
+    p = sub.add_parser("routine"); p.add_argument("op", choices=["save", "list", "run", "import"]); p.add_argument("name", nargs="?", default=""); p.add_argument("--desc", default=""); p.set_defaults(func=cmd_routine)
     p = sub.add_parser("ocr"); p.add_argument("--image", default=""); p.add_argument("--lang", default="korean+english"); p.set_defaults(func=cmd_ocr)
+    p = sub.add_parser("doc-template"); p.add_argument("kind"); p.add_argument("--input", default=""); p.add_argument("--out", default=""); p.add_argument("--title", default=""); p.add_argument("--note", default=""); p.add_argument("--html", action="store_true"); p.set_defaults(func=cmd_doc_template)
     p = sub.add_parser("checkpoint"); p.add_argument("--note", default=""); p.set_defaults(func=cmd_checkpoint)
     sub.add_parser("doctor").set_defaults(func=cmd_doctor)
     sub.add_parser("verify").set_defaults(func=cmd_verify)

@@ -102,6 +102,38 @@ def seed_obsidian_vault(vault_dir: Path | None = None) -> Dict[str, Any]:
         )
         seeded.append("0-위키-안내.md")
 
+    # 대시보드 노트 (없을 때만). Dataview 플러그인이 있으면 쿼리가 표로 렌더되고,
+    # 없어도 일반 노트로 읽힌다. 일정/기억은 아래 폴더의 노트를 스캔한다.
+    dashboard = vault / "0-대시보드.md"
+    if not dashboard.exists():
+        dashboard.write_text(
+            "# 대시보드\n\n"
+            "> Dataview 플러그인을 켜면 아래가 표로 자동 집계됩니다. (설치: docs/OBSIDIAN_WIKI.md)\n\n"
+            "## 미결 액션아이템\n\n"
+            "```dataview\n"
+            "TASK\n"
+            "WHERE !completed\n"
+            "```\n\n"
+            "## 최근 활동 (기억 위키)\n\n"
+            "```dataview\n"
+            "TABLE file.mtime AS \"수정\"\n"
+            "FROM \"\"\n"
+            "SORT file.mtime DESC\n"
+            "LIMIT 15\n"
+            "```\n\n"
+            "## 최근 정리된 주제 페이지\n\n"
+            "```dataview\n"
+            "LIST\n"
+            "FROM \"\"\n"
+            "WHERE file.name != this.file.name\n"
+            "SORT file.mtime DESC\n"
+            "LIMIT 20\n"
+            "```\n\n"
+            "미결 할 일은 아무 노트에서나 `- [ ] 내용` 으로 적으면 위 목록에 모입니다.\n",
+            encoding="utf-8",
+        )
+        seeded.append("0-대시보드.md")
+
     return {"vault": str(vault), "seeded": seeded, "already_ready": not seeded}
 
 
