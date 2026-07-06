@@ -73,6 +73,13 @@ rem PC never waits on update checks at startup.
   echo   "autoupdate": false
   echo }
 ) > "%WS%\opencode.json"
+
+rem Remove stale old-mode files from a previous install (enforce primary=agent).
+rem Best-effort: skip silently if Python is unavailable (launcher retries at start).
+pushd "%WS%"
+py -3.11 -m agent_ops.clean_stale 2>nul || python -m agent_ops.clean_stale 2>nul
+popd
+
 if exist "%WS%\RUN_OPENCODE_LIG.bat" (
   echo [OK] Unified launcher ready: %WS%\RUN_OPENCODE_LIG.bat
 ) else (

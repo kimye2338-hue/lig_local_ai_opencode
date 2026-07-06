@@ -61,6 +61,10 @@ if exist "%AGENTOPS_HOME%\launch\hamster_hidden.vbs" (
 )
 
 cd /d "%AGENTOPS_HOME%"
+
+rem 구 모드/primary 정리 (best-effort) — 패치 후에도 primary=agent 하나 강제.
+py -3.11 -m agent_ops.clean_stale >nul 2>&1 || python -m agent_ops.clean_stale >nul 2>&1
+
 "%OCODE_EXE%" %*
 
 exit /b %errorlevel%

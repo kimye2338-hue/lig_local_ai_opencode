@@ -258,6 +258,40 @@ def cmd_status(args):
     print(json.dumps(data, ensure_ascii=False, indent=2))
     return 0
 
+def cmd_watch(args):
+    """감시용 1회 판정 — 에이전트 모드의 메인이 위임 작업이 '먹통'인지 폴링한다.
+
+    출력: 한 줄 판정 + JSON. 종료코드로 분기 가능:
+      0 = 진행중/대기(정상), 3 = 멈춤 의심(stale heartbeat), 4 = 정지 요청됨.
+    메인은 위임(orchestrator/work 등) 사이사이 이 명령을 돌려, 멈춤이면 개입한다.
+    """
+    max_age = int(getattr(args, "max_age", 0) or 600)
+    interruption = detect_interruption(max_age_seconds=max_age)
+    active = read_json(STATE / "ACTIVE_TASK.json", {})
+    run_state = read_json(STATE / "RUN_STATE.json", {})
+    stopped = is_stop_requested()
+    if stopped:
+        verdict, code = "정지 요청됨 — 실행을 멈추고 사용자에게 확인", 4
+    elif interruption.get("interrupted"):
+        verdict, code = f"멈춤 의심 — {interruption.get('reason')}. 개입 필요(원인 확인→재지시/이관)", 3
+    elif str(run_state.get("status") or "") in {"continuous", "continuous_external", "continuous_parallel", "running", "active", "orchestrator_once"}:
+        verdict, code = "진행중 — 하트비트 정상", 0
+    else:
+        verdict, code = "대기/유휴 — 실행 중인 작업 없음", 0
+    data = {
+        "timestamp": now(),
+        "verdict": verdict,
+        "stalled": bool(interruption.get("interrupted")),
+        "stop_requested": stopped,
+        "run_status": run_state.get("status"),
+        "last_heartbeat": run_state.get("last_heartbeat"),
+        "active_task": {k: active.get(k) for k in ("task", "status", "blocked_reason") if k in active},
+    }
+    print(verdict)
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+    return code
+
+
 def cmd_resume(args):
     interruption = detect_interruption()
     if interruption.get("interrupted"):
@@ -828,6 +862,7 @@ def main(argv=None):
     p = sub.add_parser("fix"); p.add_argument("--ko", action="store_true"); p.set_defaults(func=cmd_fix)
     sub.add_parser("dashboard").set_defaults(func=cmd_dashboard)
     sub.add_parser("resume").set_defaults(func=cmd_resume)
+    p = sub.add_parser("watch"); p.add_argument("--max-age", dest="max_age", type=int, default=600); p.set_defaults(func=cmd_watch)
     p = sub.add_parser("checkpoint"); p.add_argument("--note", default=""); p.set_defaults(func=cmd_checkpoint)
     sub.add_parser("doctor").set_defaults(func=cmd_doctor)
     sub.add_parser("verify").set_defaults(func=cmd_verify)
