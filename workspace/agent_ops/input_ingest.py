@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .encoding_ops import decode_file_bytes
+from . import doc_convert
 
 try:
     import openpyxl  # type: ignore
@@ -190,9 +191,34 @@ def ingest_inputs(paths: Sequence[Any], max_files: int = MAX_FILES) -> Dict[str,
         errors.append(f"입력 파일이 많아 앞 {max_files}개만 분석 (초과분은 건너뜀)")
     for path in resolved:
         suffix = path.suffix.lower()
+        # PDF/DOCX/PPTX/HTML 등은 markitdown(오프라인)으로 Markdown 변환 후 텍스트 분석.
+        if suffix not in SUPPORTED_SUFFIXES and doc_convert.can_convert(suffix):
+            conv = doc_convert.convert_file(path)
+            if not conv.get("ok"):
+                unsupported.append({"name": path.name,
+                                    "reason": conv.get("error", "문서 변환 불가")
+                                    + (f" — {conv['hint']}" if conv.get("hint") else "")})
+                continue
+            try:
+                size = path.stat().st_size
+                text = _mask_secrets(conv.get("markdown", "")[:MAX_BYTES_FULL])
+                facts, notable = _text_facts(text)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{path.name}: 문서 분석 실패 {exc!r}"[:200])
+                continue
+            facts.insert(0, f"{suffix[1:].upper()} 문서를 markitdown 으로 Markdown 변환 ({conv.get('chars', 0):,}자)")
+            files.append({"name": path.name, "path": str(path), "size_bytes": size,
+                          "type": f"doc:{suffix[1:]}", "facts": facts,
+                          "notable": [f"{path.name}: {n}" for n in notable],
+                          "preview": _preview(text)})
+            continue
         if suffix not in SUPPORTED_SUFFIXES:
+            hint = ""
+            if doc_convert.can_convert(suffix):  # 도달 안 하지만 방어적
+                hint = f" — {doc_convert._hint_for(suffix)} 반입 시 지원"
             unsupported.append({"name": path.name,
-                                "reason": f"확장자 {suffix or '(없음)'} 미지원 — 텍스트 계열(MD/TXT/CSV/LOG/PY/BAS/BAT/JSON)만 직접 읽음"})
+                                "reason": f"확장자 {suffix or '(없음)'} 미지원 — 텍스트 계열(MD/TXT/CSV/LOG/PY/BAS/BAT/JSON)만 직접 읽음"
+                                          "; 문서(PDF/DOCX/PPTX/HTML)는 markitdown 반입 필요" + hint})
             continue
         if suffix == ".xlsx":
             if openpyxl is None:
