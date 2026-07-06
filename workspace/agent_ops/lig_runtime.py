@@ -126,6 +126,7 @@ def call_llm(
     simplified = False
     outcome, last_trigger, parse = "stop", "", {}
     content = ""
+    emergency_local = False
 
     for _ in range(max_steps):
         cfg = providers[current]
@@ -187,6 +188,35 @@ def call_llm(
         outcome = "stop"
         last_trigger = last_trigger or "max_steps_exceeded"
 
+    # 비상 로컬 폴백(옵트인): 사내 게이트웨이가 전부 실패했을 때, LIG_EMERGENCY_LOCAL_BASE_URL
+    # 이 설정돼 있으면(예: llamafile/Ollama/LM Studio 로컬 OpenAI 호환) 로컬 모델로 한 번
+    # 시도해 비서가 멈추지 않게 한다. env 미설정 시 완전 무동작(기존 동작 유지).
+    if outcome != "ok":
+        emerg_url = (env.get("LIG_EMERGENCY_LOCAL_BASE_URL") or "").rstrip("/")
+        if emerg_url:
+            emerg_model = env.get("LIG_EMERGENCY_LOCAL_MODEL") or "qwen2.5:7b-instruct"
+            emerg_headers = {"Content-Type": "application/json"}
+            if env.get("LIG_EMERGENCY_LOCAL_KEY"):
+                emerg_headers["Authorization"] = "Bearer " + env["LIG_EMERGENCY_LOCAL_KEY"]
+            try:
+                epayload: Dict[str, Any] = {"model": emerg_model, "messages": list(messages),
+                                            "temperature": 0.2}
+                if tools:
+                    epayload["tools"] = tools
+                response = transport(emerg_url, epayload, emerg_headers, 180)
+                parse = parse_tool_calls(response, available_tools=available_tool_names or None)
+                try:
+                    content = ((response.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+                except Exception:
+                    content = parse.get("raw_excerpt", "")
+                if content.strip() or parse.get("tool_calls"):
+                    outcome = "ok"
+                    emergency_local = True
+                    trail.append({"provider": "emergency_local", "event": "used", "model": emerg_model})
+            except Exception as exc:  # noqa: BLE001
+                trail.append({"provider": "emergency_local", "event": "failed",
+                              "detail": _redact(str(exc), env)})
+
     tool_call_mode = {"ok": "native", "repaired": "text_fallback"}.get(
         parse.get("parse_status", ""), "none")
     result = {
@@ -204,6 +234,7 @@ def call_llm(
         "profile": get_profile(env),
         "fallback_trigger": last_trigger,
         "attempts": sum(attempts.values()),
+        "emergency_local": emergency_local,
         "trail": trail,
     }
     diag = diag_dir or DIAG_DIR
