@@ -357,6 +357,47 @@ def cmd_office_doc(args):
     return 0
 
 
+def cmd_routine(args):
+    """검증된 작업을 저장→LLM 없이 재생. save(직전 성공 블록)/list/run."""
+    from pathlib import Path as _P
+    from agent_ops.lig_providers import DIAG_DIR
+    from agent_ops import routines as R
+    op = args.op
+    if op == "list":
+        items = R.list_routines()
+        if not items:
+            print("저장된 루틴이 없습니다. 작업을 성공시킨 뒤 'routine save <이름>'.")
+            return 0
+        for it in items:
+            print(f"- {it['name']} (steps {it['steps']}, {it['created']})")
+        return 0
+    if op == "save":
+        if not args.name:
+            print("사용: routine save <이름>")
+            return 2
+        steps = R.routine_from_history(DIAG_DIR)
+        res = R.save_routine(args.name, steps, description=args.desc)
+        if not res.get("ok"):
+            print(f"[routine save] {res.get('error')}")
+            return 1
+        print(f"루틴 저장: {res['slug']} (단계 {res['step_count']}) → {res['path']}")
+        print("재생: python agent_ops/agentops.py routine run \"" + args.name + "\"")
+        return 0
+    if op == "run":
+        if not args.name:
+            print("사용: routine run <이름>")
+            return 2
+        from agent_ops.tool_dispatch import ToolDispatcher
+        disp = ToolDispatcher(_P.cwd())
+        res = R.run_routine(args.name, disp)
+        if res.get("ok"):
+            print(f"루틴 재생 완료: {res['total']}단계 모두 성공")
+            return 0
+        print(f"루틴 재생 중단: {res.get('stopped_at')}단계에서 실패 — {res.get('reason')}")
+        return 1
+    return 2
+
+
 def cmd_timeline(args):
     """audit.jsonl → 활동 타임라인 HTML(멈춤 의심 구간 강조). 무한대기 감시 시각화."""
     from pathlib import Path as _P
@@ -943,6 +984,7 @@ def main(argv=None):
     p = sub.add_parser("timeline"); p.add_argument("--gap", type=int, default=600); p.set_defaults(func=cmd_timeline)
     p = sub.add_parser("report-xlsx"); p.add_argument("--input", required=True); p.add_argument("--out", default=""); p.set_defaults(func=cmd_report_xlsx)
     p = sub.add_parser("office-doc"); p.add_argument("--kind", required=True, choices=["docx", "pptx"]); p.add_argument("--spec", required=True); p.add_argument("--out", default=""); p.set_defaults(func=cmd_office_doc)
+    p = sub.add_parser("routine"); p.add_argument("op", choices=["save", "list", "run"]); p.add_argument("name", nargs="?", default=""); p.add_argument("--desc", default=""); p.set_defaults(func=cmd_routine)
     p = sub.add_parser("checkpoint"); p.add_argument("--note", default=""); p.set_defaults(func=cmd_checkpoint)
     sub.add_parser("doctor").set_defaults(func=cmd_doctor)
     sub.add_parser("verify").set_defaults(func=cmd_verify)

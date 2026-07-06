@@ -101,6 +101,7 @@ permission:
 | 보고서/PPT를 진짜 .docx/.pptx로(Office 없이) | 스펙을 `write_file`로 JSON 저장 후 `python agent_ops/agentops.py office-doc --kind docx --spec "<spec.json>"` (docx: title/sections[heading,paragraphs,bullets,table], pptx: title/slides[title,points]). 1슬라이드=1메시지 |
 | 상태 점검/문제 진단 | `python agent_ops/agentops.py doctor` |
 | 에이전트 활동/멈춤 지점 눈으로 보기 → 타임라인 HTML | `python agent_ops/agentops.py timeline` (audit 기반, 멈춤 의심 구간 강조. 브라우저로 열림) |
+| 방금 성공한 반복작업을 저장해 다음부터 자동 재생(LLM 없이) | 성공 직후 `python agent_ops/agentops.py routine save "<이름>"` → 다음엔 `routine run "<이름>"` (검증된 도구 호출을 그대로 재생. 재생 결과 성공/실패는 반드시 확인) |
 | 배운 것/지식책 보기 | `python agent_ops/agentops.py book --open` (위키 정리는 `wiki`) |
 
 - 산출물: `agent_ops/results/artifacts/<run_id>/`, 보고서: `agent_ops/results/reports/`.

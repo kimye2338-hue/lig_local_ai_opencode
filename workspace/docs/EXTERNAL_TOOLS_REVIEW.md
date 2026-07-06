@@ -148,6 +148,22 @@ MCP 서버·스킬은 통째 도입 skip(런타임 불일치/무거움), 운영 
 → 반영: `office_writer.py`(+CLI `report-xlsx`/`office-doc`) — Office 설치 없이 오프라인
 .xlsx/.docx/.pptx 생성. wheel 미반입 시 우아한 안내. docs/OFFICE_WRITER.md.
 
+## 9차 검토 (2026-07-07, record & replay / GUI 에이전트 14종)
+
+관통 주제: **한 번 검증하면 다음부터 LLM 없이 재생(record & replay / RPA)**. 무거운
+VLM/ML 학습 스택은 오프라인 온디바이스 부담이라 skip, **재생 개념을 우리 인프라로 자체 구현**.
+
+| 항목 | 판정 | 이유 |
+|---|---|---|
+| laziobird/openclaw-rpa, hyperbrowserai/HyperAgent | ✅ **개념 자체 채택** | "검증된 루틴을 결정적 재생(LLM 없이)". → `routines.py`(+CLI `routine save/list/run`): tool-dispatch-history의 직전 성공 블록을 저장→ToolDispatcher로 재생(command_guard 통과). 루틴은 USERDATA에 보존 |
+| understudy-ai/understudy, lgy0404/LearnAct | ⭕ 방향 참고 | "시연→의도 학습→재사용 skill". 우리 방식은 성공한 도구호출을 그대로 저장(의도 재학습 대신 검증된 순서 재생) — 오프라인·안전에 더 적합 |
+| OpenAdaptAI(OpenAdapt/capture/ml) | ❌ skip | GUI 데모 기록+ML/VLM 학습 스택. 온디바이스 학습·모델 부담 큼(진짜 블로커: 학습 인프라) |
+| OthersideAI/self-operating-computer, bytedance/UI-TARS-desktop | ❌ skip | 비전 VLM으로 화면 보고 조작. 무거운 멀티모달 모델 필요. 우리는 UI Automation(desktop_ui/Windows-Use)+CDP로 대체 |
+| browser-use | (기존) ✅ 선택채택 | 1차 검토에서 승인 — 재생보다 자율 브라우저용 |
+| trycua/acu, showlab·ZJU-REAL Awesome-GUI-Agent, steel-dev/awesome-web-agents | ℹ️ 인덱스 | 논문/프로젝트 큐레이션. 조사 출발점, 도입 대상 아님 |
+
+→ 반영: `routines.py`(record & replay) — 반복 업무를 검증 1회 후 오프라인 자동 재생.
+
 ## 원칙 (앞으로 외부도구 도입 시)
 
 - **런타임에 인터넷 0**이면 채택 후보. 설치 시 인터넷이 필요해도 **오프라인 설치본
