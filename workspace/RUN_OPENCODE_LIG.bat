@@ -38,13 +38,32 @@ if not exist "%OCODE_EXE%" (
   pause
   exit /b 1
 )
+rem 처음이면 secret 파일을 템플릿에서 자동 생성(라우트/모델은 이미 채워져 있음).
+rem 사용자는 게이트웨이 주소/키 두 줄만 채우면 된다 — 직접 파일을 만들 필요 없음.
 if not exist "%LIG_API_ENV_FILE%" (
-  echo [ERROR] lig-api.env not found:
-  echo %LIG_API_ENV_FILE%
-  echo.
-  echo Fill this file first, then run again.
+  if exist "%AGENTOPS_HOME%\config\lig-api.env.example" (
+    copy /y "%AGENTOPS_HOME%\config\lig-api.env.example" "%LIG_API_ENV_FILE%" >nul
+    echo [설정] 게이트웨이 설정 파일을 만들었습니다:
+    echo   %LIG_API_ENV_FILE%
+    echo   두 줄만 채우면 됩니다: LIG_GATEWAY_BASE_URL(사내 게이트웨이 주소), LIG_API_KEY(키).
+    echo   (라우트/모델명은 이미 채워져 있습니다.) 메모장을 엽니다...
+    start "" notepad "%LIG_API_ENV_FILE%"
+    echo   채운 뒤 저장하고 이 창에서 아무 키나 누르면 계속합니다.
+    pause
+  ) else (
+    echo [ERROR] lig-api.env 및 템플릿을 찾지 못했습니다: %LIG_API_ENV_FILE%
+    pause
+    exit /b 1
+  )
+)
+
+rem 아직 플레이스홀더면 채우라고 안내(자동 감지).
+findstr /C:"REPLACE_WITH_INTERNAL_GATEWAY_BASE_URL" "%LIG_API_ENV_FILE%" >nul 2>&1 && (
+  echo [안내] 게이트웨이 주소가 아직 비어 있습니다. 아래 파일의 LIG_GATEWAY_BASE_URL 을 채우세요:
+  echo   %LIG_API_ENV_FILE%
+  start "" notepad "%LIG_API_ENV_FILE%"
+  echo   채운 뒤 저장하고 아무 키나 누르세요.
   pause
-  exit /b 1
 )
 
 rem Load lig-api.env into shell environment as well.
