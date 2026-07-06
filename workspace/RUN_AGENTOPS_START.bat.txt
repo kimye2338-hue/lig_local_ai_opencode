@@ -1,0 +1,9 @@
+@echo off
+setlocal EnableExtensions
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
+echo AgentOps START: recover state and show Korean status.
+python agent_ops\agentops.py init
+python agent_ops\agentops.py resume
+python agent_ops\agentops.py status --ko
+pause

@@ -1,0 +1,100 @@
+@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+set "ROOT=%USERPROFILE%\OpenCodeLIG"
+set "BIN=%ROOT%\bin"
+set "WS=%ROOT%\workspace"
+set "SUMS=%~dp0SHA256SUMS.txt"
+set "PAYLOAD_EXE=%~dp0payload\opencode.exe"
+echo.
+echo ============================================================
+echo LIG OpenCode patched offline installer
+echo ============================================================
+echo Target: %ROOT%
+echo.
+if not exist "%PAYLOAD_EXE%" (
+  echo [ERROR] Missing payload\opencode.exe
+  pause
+  exit /b 1
+)
+if not exist "%SUMS%" (
+  echo [ERROR] Missing SHA256SUMS.txt
+  pause
+  exit /b 1
+)
+set "EXPECTED="
+for /f "tokens=1,*" %%A in ('findstr /C:"payload/opencode.exe" "%SUMS%"') do set "EXPECTED=%%A"
+if not defined EXPECTED (
+  echo [ERROR] payload/opencode.exe entry missing in SHA256SUMS.txt
+  pause
+  exit /b 1
+)
+set "ACTUAL="
+for /f "tokens=1" %%A in ('certutil -hashfile "%PAYLOAD_EXE%" SHA256 ^| findstr /R "^[0-9A-Fa-f][0-9A-Fa-f]*$"') do if not defined ACTUAL set "ACTUAL=%%A"
+if not defined ACTUAL (
+  echo [ERROR] Failed to calculate payload checksum
+  pause
+  exit /b 1
+)
+if /I not "!EXPECTED!"=="!ACTUAL!" (
+  echo [ERROR] payload/opencode.exe checksum mismatch
+  echo Expected: !EXPECTED!
+  echo Actual:   !ACTUAL!
+  pause
+  exit /b 1
+)
+if exist "%ROOT%" (
+  set "BACKUP=%USERPROFILE%\OpenCodeLIG_backup_%RANDOM%"
+  echo Existing installation found. Backing up to !BACKUP!
+  robocopy "%ROOT%" "!BACKUP!" /E /NFL /NDL /NJH /NJS /NP >nul
+  if errorlevel 8 (
+    echo [ERROR] Existing installation backup failed
+    pause
+    exit /b 1
+  )
+)
+if not exist "%BIN%" mkdir "%BIN%"
+if not exist "%WS%" mkdir "%WS%"
+copy /y "%PAYLOAD_EXE%" "%BIN%\opencode.exe" >nul
+if errorlevel 1 (
+  echo [ERROR] Failed to copy opencode.exe
+  pause
+  exit /b 1
+)
+robocopy "%~dp0workspace" "%WS%" /E /NFL /NDL /NJH /NJS /NP >nul
+if errorlevel 8 (
+  echo [ERROR] Workspace copy failed
+  pause
+  exit /b 1
+)
+\
+rem Project-local opencode config: disable autoupdate so an offline
+rem PC never waits on update checks at startup.
+(
+  echo {
+  echo   "autoupdate": false
+  echo }
+) > "%WS%\opencode.json"
+if exist "%WS%\RUN_OPENCODE_LIG.bat" (
+  echo [OK] Unified launcher ready: %WS%\RUN_OPENCODE_LIG.bat
+) else (
+  echo [ERROR] RUN_OPENCODE_LIG.bat missing after workspace copy
+  pause
+  exit /b 1
+)
+(
+  echo @echo off
+  echo "%%USERPROFILE%%\OpenCodeLIG\bin\opencode.exe" --version
+  echo if errorlevel 1 exit /b 1
+  echo echo [OK] patched opencode.exe exists and runs.
+) > "%WS%\VERIFY_OFFLINE_INSTALL.bat"
+echo.
+echo [OK] Installed.
+echo Run:
+echo   %WS%\RUN_OPENCODE_LIG.bat
+echo Verify:
+echo   %WS%\VERIFY_OFFLINE_INSTALL.bat
+echo Docs:
+echo   %WS%\docs\AI_HANDOFF.md
+echo.
+pause
+exit /b 0
