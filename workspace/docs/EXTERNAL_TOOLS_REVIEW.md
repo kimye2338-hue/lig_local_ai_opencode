@@ -1,7 +1,7 @@
 # 외부 오픈소스 도입 검토 (2026-07-06)
 
-사용자 제시 5개 저장소를 "오프라인 내부망에 완전 이식 가능 + 우리 기능에 유용" 기준으로
-조사·판정했다. 조사 근거: 각 저장소 README/예제(1차 소스).
+사용자 제시 저장소(1차 5종 + 2차 4종)를 "오프라인 내부망에 이식 가능 + 우리 기능에 유용"
+기준으로 조사·판정했다. 조사 근거: 각 저장소 README/예제(1차 소스).
 
 > **채택 방침 (2026-07-06 사용자 확정):** 유용한데 **인터넷(런타임/설치 시 다운로드)
 > 때문에만** 보류한 도구는, **오프라인 설치본(wheel/installer/바이너리)을 반입해 깔 수
@@ -18,6 +18,10 @@
 | unclecode/crawl4ai | Apache-2.0 | ⭕ **채택 가능(우선순위 낮음)** | Chromium은 오프라인 반입 가능(방침상 블로커 해소). 단 browser_cdp+markitdown과 기능 겹쳐 실익 낮음 |
 | apify/crawlee | Apache-2.0 | ⭕ **채택 가능(비권장)** | Node 런타임 오프라인 설치는 가능하나 스택 이원화+기능 중복. 굳이면 crawlee-python |
 | lwthiker/curl-impersonate | MIT | ❌ 미채택(플랫폼 블로커) | **인터넷 문제 아님** — Windows 네이티브 빌드 자체가 없음. 게다가 내부 포털엔 불필요(CDP=실제 Chrome→실제 TLS) |
+| CursorTouch/Windows-Use | MIT | ✅ **채택 승인(선택 설치)** | 임의 Windows GUI 앱을 UI Automation으로 조작(비전 불필요). 로컬 LLM(게이트웨이) 연결. wheel 반입 오프라인. **COM/CDP 없는 앱의 갭을 메움** |
+| davidondrej/skills | MIT | ⭕ **부분 참고** | 범용 Agent Skill 마크다운(순수 콘텐츠). Claude용 SKILL.md 형식 — 우리 .opencode/agent_ops 런타임엔 직접 안 맞음. 유용 패턴만 참고 |
+| bergside/awesome-design-skills | MIT | ❌ 미채택 | 웹 UI 디자인 67종. 기계공학 오피스 비서와 무관 |
+| rednote-machine-learning/RedKnot | Apache-2.0 | ❌ 미채택(플랫폼 블로커) | NVIDIA GPU 서버+CUDA+Linux 전제. Windows 클라이언트 대상 아님(사내 H100 **서빙 서버** 쪽 사안) |
 
 ## ✅ markitdown — 채택 완료
 
@@ -45,6 +49,30 @@
 - 주의: 일반(비-CDP) 모드는 Playwright가 Chromium을 인터넷에서 받으므로 **CDP 연결 모드만** 쓴다.
 - LLM은 클라우드(ChatBrowserUse 기본값)를 쓰지 말고 사내 게이트웨이/로컬 모델로 지정한다.
 
+## ✅ Windows-Use — 채택 승인 (선택 설치, `agent_ops/adapters/desktop_ui.py`)
+
+우리 어댑터는 COM(Excel/HWP/Outlook/SolidWorks)·CDP(브라우저)·배치(AutoCAD/MATLAB/Fluent)로
+앱을 다룬다. 그러나 **COM API가 없는 앱**(사내 데스크톱 포털 클라이언트, 레거시 유틸,
+버튼만 있는 사내 프로그램)은 조작 수단이 없다. Windows-Use는 그 갭을 메운다:
+Windows **UI Automation 접근성 트리**를 읽어 LLM이 "무엇을 클릭/입력할지" 정하고
+PyAutoGUI로 실행(비전 모델 불필요, 선택적).
+
+- 라이선스 MIT, Python 3.10+, Windows 전용, pip wheel 반입만으로 오프라인 설치.
+- LLM은 클라우드 아닌 **사내 게이트웨이(OpenAI 호환)** 또는 로컬 모델로 지정.
+- 반입: 인터넷 PC에서 `pip download windows-use -d wheelhouse` → 회사 PC에서
+  `pip install --no-index --find-links wheelhouse windows-use`.
+- 통합점: `agent_ops/adapters/desktop_ui.py` (감지+capabilities, 미설치 시 반입 안내).
+  실제 앱 구동은 회사 PC 파일럿에서 Windows-Use API/호환성 검증 후 활성화(현재 available:False).
+- 유의: Excel 그리드·SolidWorks/AutoCAD 3D 뷰포트가 UI Automation 트리에 잘 노출되는지는
+  미검증 — 이런 앱은 기존 COM/배치 어댑터를 우선하고, Windows-Use는 **COM이 없는 앱**에 쓴다.
+
+## ⭕ davidondrej/skills — 부분 참고
+
+범용 워크플로우 스킬(연구/문서화/요약) 마크다운. 우리 런타임은 `.opencode/commands`+
+`agent_ops` 레시피 구조라 SKILL.md 를 그대로 쓰진 않는다. `thinking-and-docs`(문서화·요약)
+패턴 중 유용한 것을 우리 커맨드/에이전트 지침에 골라 반영하는 정도로 참고. MIT — 문구를
+그대로 벤더링할 경우 원저작권+MIT 전문 동봉.
+
 ## ❌ 미채택 근거 보강
 
 - **crawl4ai**: 표준 설치(`crawl4ai-setup`)가 브라우저 바이너리를 인터넷에서 받음 → air-gap 불가.
@@ -54,6 +82,10 @@
 - **curl-impersonate**: JA3/TLS 핑거프린트 위장 도구. 봇탐지 있는 **공개 웹**용. 방화벽 안 사내
   포털을 실제 Chrome(CDP)로 자동화하면 핸드셰이크가 이미 진짜 Chrome이라 풀 문제가 없음.
   Windows 네이티브 바이너리도 없음.
+- **RedKnot**: 모델이 아니라 SGLang 위 장문맥 추론 가속 레이어. NVIDIA 서버 GPU+CUDA+Linux
+  전제 = 플랫폼 블로커(인터넷 문제 아님). 우리 Windows 클라이언트가 아니라 **사내 H100 LLM
+  서빙 서버** 최적화에나 의미 — 그 서버 운영 주체가 별도로 검토할 사안.
+- **awesome-design-skills**: 웹 UI 디자인 스타일 67종. 기계공학 오피스 자동화와 무관.
 
 ## 원칙 (앞으로 외부도구 도입 시)
 

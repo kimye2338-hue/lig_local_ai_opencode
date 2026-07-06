@@ -25,8 +25,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from . import (autocad_batch, browser_cdp, excel_com, fluent_batch, hwp_com,
-               matlab_batch, ocr_screen, office_convert, outlook_com,
+from . import (autocad_batch, browser_cdp, desktop_ui, excel_com, fluent_batch,
+               hwp_com, matlab_batch, ocr_screen, office_convert, outlook_com,
                solidworks_com)
 
 
@@ -119,6 +119,14 @@ ADAPTERS: Dict[str, Dict[str, Any]] = {
                      "스크린샷은 mss/Pillow 없으면 PowerShell 폴백(무설치)"],
         "pending": "app validation pending: 회사 PC에서 OCR 엔진 반입 후 read_screen 검증",
         "execute": ocr_screen.execute,
+    },
+    "desktop_ui": {
+        "description": "임의 Windows GUI 앱 조작 (Windows-Use UI Automation) — COM 없는 앱용",
+        "consumes": [],
+        "available": False,
+        "requires": ["windows-use wheel 반입(pip)", "LLM은 사내 게이트웨이(OpenAI 호환)로 지정"],
+        "pending": "app validation pending: 회사 PC에서 windows-use 반입 + 대상 앱 UIA 노출 검증 후 run_task 활성화",
+        "execute": desktop_ui.execute,
     },
 }
 
