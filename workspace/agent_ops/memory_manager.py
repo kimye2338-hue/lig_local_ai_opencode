@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .core import MEMORY, REPORTS, now, read_jsonl, write_jsonl, atomic_write_text, read_text, file_lock
 
@@ -37,16 +37,20 @@ def add_memory_event(kind: str, title: str, body: str, status: str = "active", p
             "review_after_days": 14,
         }
         rows.append(item)
-        # Hard cap on active memory: auto-archive the oldest overflow as deprecated.
+        # Hard cap on active memory: 초과 시 **가치 낮은 것부터** 아카이브한다.
+        # 사용자 규칙/선호(source=user)·high 우선순위는 활동 기록이 아무리 쌓여도
+        # 밀려나지 않게 보호한다 (활동 자동적재로 규칙이 사라지면 안 되므로).
         MAX_ACTIVE = 500
         active_rows = [r for r in rows if r.get("status") == "active"]
         if len(active_rows) > MAX_ACTIVE:
-            overflow = sorted(active_rows, key=lambda r: str(r.get("created_at", "")))[:len(active_rows) - MAX_ACTIVE]
+            overflow = sorted(active_rows,
+                              key=lambda r: (_protect_rank(r), str(r.get("created_at", "")))
+                              )[:len(active_rows) - MAX_ACTIVE]
             ids = {r.get("id") for r in overflow if r.get("id")}
             for r in rows:
                 if r.get("id") in ids:
                     r["status"] = "deprecated"
-                    r["deprecated_reason"] = "memory cap exceeded; auto-archived"
+                    r["deprecated_reason"] = "memory cap exceeded; auto-archived (lowest value first)"
         write_jsonl(MEMORY_JSONL, rows)
     render_memory_views()
     # ingest 워크플로(LLM Wiki): 새 기록이 들어올 때마다 주제 페이지를 갱신한다.
@@ -57,6 +61,42 @@ def add_memory_event(kind: str, title: str, body: str, status: str = "active", p
     except Exception:
         pass
     return item
+
+def _protect_rank(row: Dict[str, Any]) -> int:
+    """캡 초과 시 아카이브 우선순위(작을수록 먼저 아카이브 = 보호 약함).
+
+    사용자 규칙/선호와 high 우선순위는 크게 가산해 활동 기록 홍수에도 살아남게 한다.
+    """
+    kind_rank = {"activity": 0, "log": 1, "note": 1, "lesson": 2,
+                 "error_pattern": 2, "preference": 3}.get(str(row.get("kind")), 1)
+    if row.get("source") == "user":
+        kind_rank += 10
+    if row.get("priority") == "high":
+        kind_rank += 5
+    return kind_rank
+
+
+def add_activity(task: str, outcome: str = "", tags: List[str] | None = None) -> Optional[Dict[str, Any]]:
+    """완료된 작업을 **간결하게** 기억에 자동 적재 → 증류되어 위키(Obsidian)에 정리된다.
+
+    - kind='activity', priority='low' (규칙/교훈보다 낮음, 캡에서 먼저 밀림).
+    - 같은 날 같은 제목은 한 번만(중복 홍수 방지). 빈 작업은 무시.
+    - recall 은 activity 에 가점을 안 주므로 사용자 규칙 회상을 밀어내지 않는다.
+    """
+    task = (task or "").strip()
+    if not task:
+        return None
+    title = task[:70]
+    today = now()[:10]
+    for r in load_memory(status="active"):
+        if r.get("kind") == "activity" and r.get("title") == title \
+                and str(r.get("created_at", ""))[:10] == today:
+            return None  # 오늘 같은 작업 이미 기록됨
+    body = (outcome or "").strip()[:280]
+    return add_memory_event("activity", title, body, status="active",
+                            priority="low", source="agent",
+                            tags=(tags or extract_keywords(task + " " + body)[:6]))
+
 
 def add_user_memory(text: str, title: str = "User instruction") -> Dict[str, Any]:
     return add_memory_event(

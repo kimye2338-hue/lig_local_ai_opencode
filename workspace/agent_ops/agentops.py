@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -398,6 +399,23 @@ def cmd_routine(args):
     return 2
 
 
+def cmd_ocr(args):
+    """화면 스크린샷 OCR(한/영) 또는 이미지 파일 OCR — 막힐 때 '화면을 눈으로' 읽는다."""
+    from agent_ops.adapters import ocr_screen
+    if getattr(args, "image", ""):
+        res = ocr_screen.execute("read_image", {"path": args.image, "lang": args.lang})
+    else:
+        res = ocr_screen.execute("read_screen", {"lang": args.lang})
+    if not res.get("ok"):
+        print(f"[ocr] {res.get('error')}" + (f"\n  {res.get('hint','')}" if res.get("hint") else ""))
+        return 1
+    text = (res.get("text") or "").strip()
+    print(text[:4000] if text else "(인식된 텍스트 없음)")
+    if res.get("source_image"):
+        print(f"\n[스크린샷: {res['source_image']}]", file=sys.stderr)
+    return 0
+
+
 def cmd_timeline(args):
     """audit.jsonl → 활동 타임라인 HTML(멈춤 의심 구간 강조). 무한대기 감시 시각화."""
     from pathlib import Path as _P
@@ -752,7 +770,19 @@ def cmd_work(args):
                                 audit_rows, adapter_summary)
     _audit_work(run_id, task, "report", "approved", report.name)
     print(f"최종 보고: {report}")
-    return 0 if (artifact_result.get("ok") and artifact_result.get("quality_ok", True)) else 1
+    ok = artifact_result.get("ok") and artifact_result.get("quality_ok", True)
+    # 완료된 작업을 기억에 자동 적재 → 증류되어 Obsidian 위키에 정리(사용자 개입 없이).
+    # 활동 기억은 low 우선순위라 사용자 규칙 회상을 밀어내지 않는다.
+    if ok:
+        try:
+            from agent_ops.memory_manager import add_activity
+            files = artifact_result.get("files", []) or []
+            outcome = f"산출물 {len(files)}건" + (f": {os.path.basename(str(files[0]))}" if files else "") \
+                + (f" (+{len(files) - 1})" if len(files) > 1 else "")
+            add_activity(task, outcome)
+        except Exception:  # noqa: BLE001 - 자동 적재 실패가 작업을 막으면 안 된다
+            pass
+    return 0 if ok else 1
 
 
 def cmd_plan(args):
@@ -985,6 +1015,7 @@ def main(argv=None):
     p = sub.add_parser("report-xlsx"); p.add_argument("--input", required=True); p.add_argument("--out", default=""); p.set_defaults(func=cmd_report_xlsx)
     p = sub.add_parser("office-doc"); p.add_argument("--kind", required=True, choices=["docx", "pptx"]); p.add_argument("--spec", required=True); p.add_argument("--out", default=""); p.set_defaults(func=cmd_office_doc)
     p = sub.add_parser("routine"); p.add_argument("op", choices=["save", "list", "run"]); p.add_argument("name", nargs="?", default=""); p.add_argument("--desc", default=""); p.set_defaults(func=cmd_routine)
+    p = sub.add_parser("ocr"); p.add_argument("--image", default=""); p.add_argument("--lang", default="korean+english"); p.set_defaults(func=cmd_ocr)
     p = sub.add_parser("checkpoint"); p.add_argument("--note", default=""); p.set_defaults(func=cmd_checkpoint)
     sub.add_parser("doctor").set_defaults(func=cmd_doctor)
     sub.add_parser("verify").set_defaults(func=cmd_verify)
