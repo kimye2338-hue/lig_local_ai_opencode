@@ -77,6 +77,28 @@ def decode_console_bytes(data: bytes) -> str:
     return data.decode("utf-8", errors="replace")
 
 
+def decode_file_bytes(data: bytes) -> str:
+    """사용자 파일 바이트를 한글이 깨지지 않게 디코드한다 (BOM 처리 포함).
+
+    Excel/메모장에서 내보낸 한국어 CSV/LOG/TXT는 UTF-8(BOM 유무)일 수도,
+    CP949(한국어 Windows 기본 ANSI)일 수도 있다. utf-8-sig 고정 디코드는
+    CP949 파일을 replacement 문자로 뭉갠다 — decode_console_bytes와 같은
+    폴백 사다리를 파일 입력에도 적용한다.
+    순서: UTF-8-SIG strict(BOM 제거) → CP949 strict → UTF-8 replace(최후).
+    """
+    if not data:
+        return ""
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        pass
+    try:
+        return data.decode("cp949")
+    except UnicodeDecodeError:
+        pass
+    return data.decode("utf-8", errors="replace")
+
+
 def edit_replace(path: Path, old: str, new: str, count: int = -1) -> Dict[str, Any]:
     """Replace text in a file, preserving its BOM and newline style."""
     text, style = read_text(path)

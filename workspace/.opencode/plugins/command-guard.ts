@@ -22,8 +22,25 @@ const WRITE_CODE = [
 ]
 
 const DANGEROUS = [
-  /\brm\s+-rf\b/i, /\bdel\s+\/[qsf]\b/i, /\brmdir\s+\/s\b/i,
-  /\bformat\s+[A-Za-z]:/i, /\bpowershell\b.+encodedcommand/i,
+  /\brm\s+-rf\b/i, /\bdel\s+\/[qsf]\b/i, /\bdel\s+\S/i,
+  /\brmdir\s+\/s\b/i, /\brd\s+\/s\b/i,
+  /\bformat\s+[A-Za-z]:/i, /\bformat\b(?:\s+\/\S+)+\s+[A-Za-z]:/i,
+  /\bpowershell\b.+encodedcommand/i,
+  /\b(?:powershell|pwsh)\b.*\s-e(?:n?c?o?d?e?d?c?o?m?m?a?n?d?)?\b/is,
+  /\bremove-item\b.*-(?:recurse|force)\b/is,
+  /\bstop-computer\b/i,
+  /\bshutdown\b(?=.*\s\/f\b)(?=.*\s\/[sr]\b)/is,
+  /\bvssadmin\s+delete\s+shadows\b/i,
+  /\bdiskpart\b/i,
+  /\breg\s+delete\b.*\s\/f\b/is,
+  /\bbcdedit\b/i,
+  /\bwmic\b.*\bcall\s+create\b/is,
+  /\btaskkill\b.*\s\/f\b/is,
+  /\bcipher\b.*\/w/is,
+  /\bnew-object\s+(?:system\.)?net\.webclient\b/i,
+  /\bdownloadstring\b/i,
+  /\b(?:iex|invoke-expression)\b.*\b(?:iwr|invoke-webrequest|wget|curl)\b/is,
+  /\b(?:iwr|invoke-webrequest|wget|curl)\b.*\b(?:iex|invoke-expression)\b/is,
   /\bcurl\b.+\|\s*(bash|sh|python)/i, /\biwr\b.+\|\s*(iex|powershell)/i,
 ]
 

@@ -59,12 +59,17 @@ def _rotate_if_needed(path: Path) -> None:
         if backup.exists():
             backup = path.with_name(f"audit_{stamp}_{os.getpid()}.jsonl.bak")
         path.rename(backup)
-    except Exception:
-        pass
+    except Exception as exc:
+        # Rotation failure must not stop recording; warn and continue appending.
+        print(f"[audit] WARNING: failed to rotate audit log: {exc}", file=sys.stderr)
 
 
-def record(event: Dict[str, Any]) -> None:
-    """Append one audit event. Failures warn to stderr but never raise."""
+def record(event: Dict[str, Any]) -> bool:
+    """Append one audit event.
+
+    Returns True on success, False on failure. Failures warn clearly to stderr
+    but never raise — audit failure must never crash the caller.
+    """
     try:
         audit_dir = Path(os.environ.get("LIG_AUDIT_DIR") or AUDIT_DIR)
         audit_dir.mkdir(parents=True, exist_ok=True)
@@ -72,5 +77,7 @@ def record(event: Dict[str, Any]) -> None:
         _rotate_if_needed(audit_path)
         with audit_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(_clean_event(event), ensure_ascii=False) + "\n")
+        return True
     except Exception as exc:
-        print(f"[WARN] audit record failed: {exc}", file=sys.stderr)
+        print(f"[audit] WARNING: failed to write audit record: {exc}", file=sys.stderr)
+        return False

@@ -19,7 +19,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .lig_providers import DIAG_DIR, build_providers, decide_fallback, get_profile, load_lig_env, record_fallback, route_reason, select_route
 from .toolcall_parser import parse_tool_calls
@@ -118,7 +118,10 @@ def call_llm(
     initial = current
 
     available_tool_names = [t.get("function", {}).get("name") or t.get("name", "") for t in (tools or [])]
-    attempts: Dict[str, int] = {}
+    # (provider, trigger)별로 시도 횟수를 센다 — lig-coding → lig-fallback로
+    # provider가 바뀌면 새 provider는 같은 trigger에 대해 자신만의 재시도 예산을
+    # 다시 얻는다(이전 provider의 소진분이 이월돼 즉시 포기하지 않도록).
+    attempts: Dict[Tuple[str, str], int] = {}
     trail: List[Dict[str, Any]] = []
     simplified = False
     outcome, last_trigger, parse = "stop", "", {}
@@ -163,9 +166,11 @@ def call_llm(
             break
 
         last_trigger = trigger
-        attempts[trigger] = attempts.get(trigger, 0) + 1
-        decision = decide_fallback(trigger, attempts[trigger], current)
-        trail.append({"provider": current, "trigger": trigger, "attempt": attempts[trigger], "action": decision["action"]})
+        key = (current, trigger)
+        attempts[key] = attempts.get(key, 0) + 1
+        attempt_n = attempts[key]
+        decision = decide_fallback(trigger, attempt_n, current)
+        trail.append({"provider": current, "trigger": trigger, "attempt": attempt_n, "action": decision["action"]})
         action = decision["action"]
         if action == "retry":
             continue

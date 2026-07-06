@@ -57,9 +57,27 @@ WRITE_CODE_PATTERNS = [
 DANGEROUS_PATTERNS = [
     r"\brm\s+-rf\b",
     r"\bdel\s+/[qsf]\b",
+    r"\bdel\s+\S",
     r"\brmdir\s+/s\b",
+    r"\brd\s+/s\b",
     r"\bformat\s+[A-Za-z]:",
+    r"\bformat\b(?:\s+/\S+)+\s+[A-Za-z]:",
     r"\bpowershell\b.+EncodedCommand",
+    r"\b(?:powershell|pwsh)\b.*\s-e(?:n?c?o?d?e?d?c?o?m?m?a?n?d?)?\b",
+    r"\bremove-item\b.*-(?:recurse|force)\b",
+    r"\bstop-computer\b",
+    r"\bshutdown\b(?=.*\s/f\b)(?=.*\s/[sr]\b)",
+    r"\bvssadmin\s+delete\s+shadows\b",
+    r"\bdiskpart\b",
+    r"\breg\s+delete\b.*\s/f\b",
+    r"\bbcdedit\b",
+    r"\bwmic\b.*\bcall\s+create\b",
+    r"\btaskkill\b.*\s/f\b",
+    r"\bcipher\b.*/w",
+    r"\bnew-object\s+(?:system\.)?net\.webclient\b",
+    r"\bdownloadstring\b",
+    r"\b(?:iex|invoke-expression)\b.*\b(?:iwr|invoke-webrequest|wget|curl)\b",
+    r"\b(?:iwr|invoke-webrequest|wget|curl)\b.*\b(?:iex|invoke-expression)\b",
     r"\bcurl\b.+\|\s*(bash|sh|python)",
     r"\biwr\b.+\|\s*(iex|powershell)",
 ]
@@ -82,6 +100,14 @@ SAFE_PREFIXES = [
     "dir",
     "type ",
 ]
+
+def _matches_safe_prefix(cmd: str, prefix: str) -> bool:
+    # Prefixes ending in a space are already token-bounded ("grep ", "type ").
+    # Bare prefixes ("dir", "git log") must match the whole token exactly or be
+    # followed by a space — otherwise "dir" would auto-allow "dirty.bat".
+    if prefix.endswith(" "):
+        return cmd.startswith(prefix)
+    return cmd == prefix or cmd.startswith(prefix + " ")
 
 def now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
@@ -155,7 +181,11 @@ def analyze(text: str) -> Dict[str, Any]:
         reasons.append("portal autonomous runner appears indefinite; long loops must run outside OpenCode bash with checkpoints and explicit stop file")
 
     normalized = command.strip().replace("\\", "/")
-    safe_prefix = any(normalized.startswith(p) for p in SAFE_PREFIXES)
+    safe_prefix = any(_matches_safe_prefix(normalized, p) for p in SAFE_PREFIXES)
+    # A command that begins with a safe prefix but chains another command via a
+    # separator (&& ; | & newline) must not be auto-allowed — force it to ASK.
+    if safe_prefix and re.search(r"[;&|\r\n]", command):
+        safe_prefix = False
     # P2-1: the orchestrator starts a long-running loop inside OpenCode bash.
     # Long loops must be launched by the external BAT only, so never auto-allow it.
     if "agentops.py orchestrator" in normalized:

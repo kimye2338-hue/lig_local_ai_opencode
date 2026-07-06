@@ -6,7 +6,7 @@ import json
 import uuid
 from typing import Any, Dict, Optional
 
-from .core import STATE, LOGS, ROOT, now, ensure_dirs, atomic_write_json, read_json, atomic_write_text, read_text, append_jsonl, is_stop_requested
+from .core import STATE, LOGS, ROOT, now, ensure_dirs, atomic_write_json, read_json, atomic_write_text, read_text, append_jsonl, is_stop_requested, file_lock
 
 def init_state() -> Dict[str, Any]:
     ensure_dirs()
@@ -43,17 +43,18 @@ def init_state() -> Dict[str, Any]:
 
 def heartbeat(status: str = "running") -> None:
     ensure_dirs()
-    state = read_json(STATE / "RUN_STATE.json", {})
-    if not isinstance(state, dict):
-        state = {}
-    state.setdefault("run_id", "run_" + uuid.uuid4().hex[:12])
-    state.update({
-        "status": status,
-        "last_heartbeat": now(),
-        "cwd": str(ROOT),
-        "stop_file_exists": is_stop_requested(),
-    })
-    atomic_write_json(STATE / "RUN_STATE.json", state)
+    with file_lock("runstate"):
+        state = read_json(STATE / "RUN_STATE.json", {})
+        if not isinstance(state, dict):
+            state = {}
+        state.setdefault("run_id", "run_" + uuid.uuid4().hex[:12])
+        state.update({
+            "status": status,
+            "last_heartbeat": now(),
+            "cwd": str(ROOT),
+            "stop_file_exists": is_stop_requested(),
+        })
+        atomic_write_json(STATE / "RUN_STATE.json", state)
     atomic_write_json(STATE / "HEARTBEAT.json", {
         "timestamp": now(),
         "status": status,
@@ -116,28 +117,29 @@ def update_checkpoint(note: str = "", active_task: Optional[Dict[str, Any]] = No
     ensure_dirs()
     if active_task is None:
         active_task = get_active_task()
-    current = read_json(STATE / "CHECKPOINT.json", {})
-    if not isinstance(current, dict):
-        current = {}
-    current.update({
-        "checkpoint_id": current.get("checkpoint_id") or ("ckpt_" + uuid.uuid4().hex[:10]),
-        "updated_at": now(),
-        "cwd": str(ROOT),
-        "note": note,
-        "active_task_id": active_task.get("task_id"),
-        "active_task_summary": {
-            "task_id": active_task.get("task_id"),
-            "status": active_task.get("status"),
-            "title": active_task.get("title"),
-            "kind": active_task.get("kind"),
-            "owner_agent": active_task.get("owner_agent"),
-            "risk": active_task.get("risk"),
-            "attempt_count": active_task.get("attempt_count"),
-        } if active_task else {},
-        "next_step_status": next_step_status,
-        "stop_file_exists": is_stop_requested(),
-    })
-    atomic_write_json(STATE / "CHECKPOINT.json", current)
+    with file_lock("checkpoint"):
+        current = read_json(STATE / "CHECKPOINT.json", {})
+        if not isinstance(current, dict):
+            current = {}
+        current.update({
+            "checkpoint_id": current.get("checkpoint_id") or ("ckpt_" + uuid.uuid4().hex[:10]),
+            "updated_at": now(),
+            "cwd": str(ROOT),
+            "note": note,
+            "active_task_id": active_task.get("task_id"),
+            "active_task_summary": {
+                "task_id": active_task.get("task_id"),
+                "status": active_task.get("status"),
+                "title": active_task.get("title"),
+                "kind": active_task.get("kind"),
+                "owner_agent": active_task.get("owner_agent"),
+                "risk": active_task.get("risk"),
+                "attempt_count": active_task.get("attempt_count"),
+            } if active_task else {},
+            "next_step_status": next_step_status,
+            "stop_file_exists": is_stop_requested(),
+        })
+        atomic_write_json(STATE / "CHECKPOINT.json", current)
     update_resume_plan(note)
     update_compact_handoff(note)
     heartbeat("checkpoint")

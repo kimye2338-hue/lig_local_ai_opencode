@@ -131,9 +131,13 @@ def tool_search_files(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
     root_resolved = root.resolve()
     matches: List[Dict[str, Any]] = []
     scanned = 0
+    truncated = False
     for path in sorted(base.glob(pattern)):
-        if not path.is_file() or scanned >= MAX_SEARCH_FILES:
+        if not path.is_file():
             continue
+        if scanned >= MAX_SEARCH_FILES:
+            truncated = True
+            break  # 스캔 상한 도달: 더 순회해도 결과가 없으므로 중단
         scanned += 1
         try:
             text = path.read_bytes().decode("utf-8-sig")
@@ -148,17 +152,22 @@ def tool_search_files(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
                 })
                 if len(matches) >= MAX_SEARCH_RESULTS:
                     return {"ok": True, "query": query, "matches": matches, "truncated": True}
-    return {"ok": True, "query": query, "matches": matches, "truncated": False}
+    return {"ok": True, "query": query, "matches": matches, "truncated": truncated}
 
 
 def tool_run_diagnostic(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
     """Lightweight workspace health check (no secrets, no network)."""
     root_resolved = root.resolve()
+    probe = root_resolved / ".agentops_write_probe.tmp"
     writable = True
     try:
-        probe = root_resolved / ".agentops_write_probe.tmp"
         probe.write_text("ok", encoding="utf-8")
-        probe.unlink()
     except Exception:
         writable = False
+    else:
+        # 쓰기는 성공 — 정리(unlink) 실패는 writable 판정을 뒤집지 않는다.
+        try:
+            probe.unlink()
+        except Exception:
+            pass
     return {"ok": True, "workspace_exists": root_resolved.is_dir(), "writable": writable}

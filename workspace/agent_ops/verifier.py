@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import py_compile
 
@@ -19,6 +20,11 @@ def scan_agents() -> list[dict]:
             issues.append({"file": str(path), "issue": "patch key present; use edit permission"})
         if "permission:" not in text:
             issues.append({"file": str(path), "issue": "permission block missing"})
+        # Regression guard: an agent must not grant broad bash allow. Flag either a
+        # direct `bash: allow` or a wildcard `"*": allow` inside the permission block.
+        if re.search(r'(?mi)^\s*bash\s*:\s*"?allow"?\s*$', text) or \
+                re.search(r'(?mi)^\s*"?\*"?\s*:\s*"?allow"?\s*$', text):
+            issues.append({"file": str(path), "issue": "broad bash allow permission; require ask or scoped allow"})
     return issues
 
 def verify() -> dict:

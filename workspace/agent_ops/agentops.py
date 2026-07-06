@@ -411,6 +411,12 @@ def cmd_safe_write(args):
     if not validation.get("ok"):
         if backup and backup.exists():
             target.write_text(backup.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+        else:
+            # 백업이 없던 신규 파일: 깨진 결과물을 디스크에 남기지 않는다.
+            try:
+                target.unlink()
+            except Exception:
+                pass
         print(json.dumps({"ok": False, "validation": validation}, ensure_ascii=False, indent=2), file=sys.stderr)
         return 1
     update_checkpoint(f"safe_write completed: {args.target}")

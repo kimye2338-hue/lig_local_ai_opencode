@@ -128,10 +128,17 @@ def _pid_alive(pid: int) -> bool:
                 # Could be access-denied (alive) or gone. Fall back to tasklist.
                 try:
                     out = subprocess.run(
-                        ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                        ["tasklist", "/FI", f"PID eq {pid}", "/NH", "/FO", "CSV"],
                         capture_output=True, text=True, timeout=5,
                     )
-                    return str(pid) in (out.stdout or "")
+                    # CSV의 PID 컬럼(2번째)을 정확히 대조 — 이미지명/메모리 사용량에
+                    # PID 숫자가 우연히 포함돼도 오탐하지 않는다.
+                    import csv as _csv
+                    import io as _io
+                    for parts in _csv.reader(_io.StringIO(out.stdout or "")):
+                        if len(parts) >= 2 and parts[1].strip() == str(pid):
+                            return True
+                    return False
                 except Exception:
                     return True  # unknown -> assume alive (do not delete a maybe-live lock)
             try:

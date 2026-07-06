@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import json
 import re
 import shutil
@@ -10,7 +11,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .core import atomic_write_json, now as now_text
+from .core import atomic_write_json, file_lock, now as now_text
 
 CATEGORIES = {"회의", "보고", "시험", "개인", "기타"}
 SOURCES = {"manual", "mail", "meeting", "outlook"}
@@ -60,6 +61,7 @@ def _load() -> Dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        print(f"[schedule] WARNING: could not parse {path}, starting empty (backup kept)", file=sys.stderr)
         return {"items": []}
     if isinstance(data, list):
         return {"items": data}
@@ -205,26 +207,30 @@ def add(title: str, due_text: str, category: Optional[str] = None,
     parsed = parse_due(due_text, now=now)
     if not parsed.get("ok"):
         return parsed
-    data = _load()
-    items = data["items"]
-    item = {
-        "id": _next_id(items),
-        "title": str(title or "").strip(),
-        "due": parsed["due"],
-        "category": infer_category(title, category),
-        "status": "open",
-        "source": source if source in SOURCES else "manual",
-        "created": now_text(),
-    }
-    items.append(item)
-    _save(data)
+    with file_lock("schedule"):
+        data = _load()
+        items = data["items"]
+        item = {
+            "id": _next_id(items),
+            "title": str(title or "").strip(),
+            "due": parsed["due"],
+            "category": infer_category(title, category),
+            "status": "open",
+            "source": source if source in SOURCES else "manual",
+            "created": now_text(),
+        }
+        items.append(item)
+        _save(data)
     return {"ok": True, "item": item}
 
 
-def _due_date(item: Dict[str, Any]) -> datetime:
+def _due_date(item: Dict[str, Any]) -> Optional[datetime]:
     text = str(item.get("due", ""))
     fmt = "%Y-%m-%d %H:%M" if " " in text else "%Y-%m-%d"
-    return datetime.strptime(text, fmt)
+    try:
+        return datetime.strptime(text, fmt)
+    except ValueError:
+        return None
 
 
 def list_items(when: str = "all", now: Optional[datetime] = None) -> List[Dict[str, Any]]:
@@ -235,6 +241,8 @@ def list_items(when: str = "all", now: Optional[datetime] = None) -> List[Dict[s
     result = []
     for item in items:
         due = _due_date(item)
+        if due is None:
+            continue
         is_open = item.get("status") == "open"
         if when == "today" and due.date() == base.date():
             result.append(item)
@@ -246,20 +254,22 @@ def list_items(when: str = "all", now: Optional[datetime] = None) -> List[Dict[s
 
 
 def mark_done(id: int) -> Dict[str, Any]:
-    data = _load()
-    for item in data["items"]:
-        if item.get("id") == id:
-            item["status"] = "done"
-            _save(data)
-            return {"ok": True, "item": item}
+    with file_lock("schedule"):
+        data = _load()
+        for item in data["items"]:
+            if item.get("id") == id:
+                item["status"] = "done"
+                _save(data)
+                return {"ok": True, "item": item}
     return {"ok": False, "error": "schedule item not found"}
 
 
 def remove(id: int) -> Dict[str, Any]:
-    data = _load()
-    before = len(data["items"])
-    data["items"] = [item for item in data["items"] if item.get("id") != id]
-    if len(data["items"]) == before:
-        return {"ok": False, "error": "schedule item not found"}
-    _save(data)
+    with file_lock("schedule"):
+        data = _load()
+        before = len(data["items"])
+        data["items"] = [item for item in data["items"] if item.get("id") != id]
+        if len(data["items"]) == before:
+            return {"ok": False, "error": "schedule item not found"}
+        _save(data)
     return {"ok": True, "removed": id}

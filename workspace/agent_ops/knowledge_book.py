@@ -310,7 +310,7 @@ def build_book(now: datetime | None = None) -> Path:
                      if (_parse_dt(r.get("created_at")) or current) >= week_ago]
     picks = review_picks(entries, current)
     activity = _audit_activity(current)
-    wiki_html = _md_to_html(WIKI_FILE.read_text(encoding="utf-8")) if WIKI_FILE.exists() else ""
+    wiki_html = _md_to_html(WIKI_FILE.read_text(encoding="utf-8", errors="replace")) if WIKI_FILE.exists() else ""
 
     parts: List[str] = []
     parts.append(f"<h1>지식책</h1><div class='sub'>내가 배운 것들의 기록 — "

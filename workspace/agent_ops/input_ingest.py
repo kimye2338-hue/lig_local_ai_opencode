@@ -24,6 +24,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from .encoding_ops import decode_file_bytes
+
 try:
     import openpyxl  # type: ignore
 except ImportError:  # optional dependency; xlsx degrades to unsupported
@@ -75,7 +77,8 @@ def _xlsx_facts(path: Path, max_rows: int = 2000) -> Tuple[List[str], List[str],
     for idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
         if idx > max_rows:
             break
-        values = ["" if cell is None else str(cell).strip() for cell in row]
+        # 다른 입력 경로와 동일하게 비밀번호/토큰 등 secret-like 셀은 마스킹한다.
+        values = ["" if cell is None else _mask_secrets(str(cell).strip()) for cell in row]
         if any(values):
             rows.append(values)
     if not rows:
@@ -162,18 +165,29 @@ def ingest_inputs(paths: Sequence[Any], max_files: int = MAX_FILES) -> Dict[str,
     errors: List[str] = []
     mails_all: List[Dict[str, str]] = []
     resolved: List[Path] = []
+    truncated = False
     for raw_path in paths:
         path = Path(str(raw_path)).expanduser()
         if not path.exists():
             errors.append(f"입력 경로 없음: {path}")
             continue
         if path.is_dir():
-            resolved.extend(sorted(p for p in path.rglob("*") if p.is_file()))
+            # max_files개를 모으면 즉시 중단 — 전체 트리를 is_file()로 훑지 않아
+            # OneDrive 클라우드 placeholder 파일의 대량 하이드레이션을 막는다.
+            collected: List[Path] = []
+            for p in path.rglob("*"):
+                if len(resolved) + len(collected) >= max_files:
+                    truncated = True
+                    break
+                if p.is_file():
+                    collected.append(p)
+            resolved.extend(sorted(collected))
+        elif len(resolved) >= max_files:
+            truncated = True
         else:
             resolved.append(path)
-    if len(resolved) > max_files:
-        errors.append(f"입력 파일이 많아 앞 {max_files}개만 분석 (전체 {len(resolved)}개)")
-        resolved = resolved[:max_files]
+    if truncated:
+        errors.append(f"입력 파일이 많아 앞 {max_files}개만 분석 (초과분은 건너뜀)")
     for path in resolved:
         suffix = path.suffix.lower()
         if suffix not in SUPPORTED_SUFFIXES:
@@ -200,7 +214,7 @@ def ingest_inputs(paths: Sequence[Any], max_files: int = MAX_FILES) -> Dict[str,
             size = path.stat().st_size
             with path.open("rb") as fh:
                 raw = fh.read(MAX_BYTES_FULL)
-            text = raw.decode("utf-8-sig", errors="replace")
+            text = decode_file_bytes(raw)
         except Exception as exc:
             errors.append(f"{path.name}: 읽기 실패 {exc!r}"[:200])
             continue

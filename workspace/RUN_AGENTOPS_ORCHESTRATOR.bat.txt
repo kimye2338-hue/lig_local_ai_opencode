@@ -1,7 +1,10 @@
 @echo off
-setlocal EnableExtensions
+chcp 65001 >nul
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 echo AgentOps external orchestrator. Stop with agent_ops\control\STOP or /agentstop.
-python agent_ops\agentops.py orchestrator --interval 60
+set "HERE=%~dp0"
+cd /d "%HERE%"
+call "%HERE%launch\_py.bat" || exit /b 9
+%PY% agent_opsgentops.py orchestrator --interval 60
 pause

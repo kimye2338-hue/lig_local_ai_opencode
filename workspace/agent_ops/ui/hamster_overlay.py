@@ -56,6 +56,31 @@ ATTENTION_STATES = {"done", "needs_user", "error", "stalled"}
 FRAME_STATES = ("idle", "working", "done", "needs_user", "error", "stalled")
 
 
+def pet_asset_dir() -> Path:
+    """단일 스티커 펫 이미지 폴더(assets/pet). 애니메이션 프레임(assets/hamster_pet)과 별개.
+
+    LIG_PET_DIR 환경변수로 재정의 가능(호출 시점에 읽는다)."""
+    override = os.environ.get("LIG_PET_DIR")
+    if override:
+        return Path(override)
+    return Path(__file__).resolve().parent / "assets" / "pet"
+
+
+def load_pet_images(tk: Any) -> Dict[str, Any]:
+    """각 STATUS_LABELS 상태를 <status>.png tk.PhotoImage 로 매핑.
+
+    폴더가 없으면 {} 반환(graceful fallback). 존재하는 png만 매핑한다."""
+    directory = pet_asset_dir()
+    if not directory.is_dir():
+        return {}
+    images: Dict[str, Any] = {}
+    for status in STATUS_LABELS:
+        path = directory / f"{status}.png"
+        if path.is_file():
+            images[status] = tk.PhotoImage(file=str(path))
+    return images
+
+
 @dataclass
 class Snapshot:
     status: str = "idle"

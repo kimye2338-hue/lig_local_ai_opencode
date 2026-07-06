@@ -78,7 +78,7 @@ def _audit(action: str, options: Dict[str, Any], result: Dict[str, Any]) -> None
     audit_record({
         "kind": "adapter",
         "name": f"excel_com.{action}",
-        "target": options.get("path") or options.get("bas_path") or _SESSION.get("copy_path", ""),
+        "target": options.get("path") or options.get("bas_path") or result.get("copy_path") or _SESSION.get("copy_path", ""),
         "risk": "dangerous",
         "verdict": "approved" if result.get("ok") else "failed",
         "detail": result.get("error") or result.get("fallback") or "",
@@ -122,6 +122,9 @@ def _open_copy(options: Dict[str, Any]) -> Dict[str, Any]:
         xl = win32com.client.DispatchEx("Excel.Application")
         xl.Visible = bool(options.get("visible", False))
         xl.DisplayAlerts = False
+        # xl 을 세션에 먼저 저장한다 — Workbooks.Open 이 실패해도 _close_session 이
+        # 이 EXCEL.EXE 를 Quit 하도록 (저장 전이면 고아 프로세스가 남는다).
+        _SESSION["xl"] = xl
         wb = xl.Workbooks.Open(str(copy_path))
     except Exception as exc:
         _close_session()
@@ -207,8 +210,10 @@ def execute(action: str, options: Dict[str, Any]) -> Dict[str, Any]:
                 _SESSION["wb"].Save()
                 result = {"ok": True, "path": _SESSION.get("copy_path", "")}
         elif action_name == "close":
+            # copy_path 를 세션이 비워지기 전에 캡처해 감사 기록의 target 이 빈 값이 되지 않게 한다.
+            closed_target = _SESSION.get("copy_path", "")
             _close_session(save_changes=False)
-            result = {"ok": True}
+            result = {"ok": True, "copy_path": closed_target}
     except Exception as exc:
         result = {"ok": False, "error": f"{action_name} failed: {exc.__class__.__name__}"}
     _audit(action_name, opts, result)
