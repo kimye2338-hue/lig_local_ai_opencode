@@ -394,6 +394,15 @@ def run_agent_loop(
             inserts.append({"role": "system", "content": api_ref})
     except Exception:  # noqa: BLE001 - API 참조 주입 실패도 작업을 막으면 안 된다
         pass
+    try:
+        # 디자인 가이드 주입: 보고서/문서/PPT 생성 작업이면 디자인·구성 원칙을 넣어
+        # 밋밋한 기본 결과 대신 위계·정렬·여백·1슬라이드1메시지를 지킨 결과물을 만들게 한다.
+        from .design_guidance import context_for_prompt as _design_ctx
+        design_ref = _design_ctx(prompt)
+        if design_ref:
+            inserts.append({"role": "system", "content": design_ref})
+    except Exception:  # noqa: BLE001 - 디자인 가이드 주입 실패도 작업을 막으면 안 된다
+        pass
     for offset, msg in enumerate(inserts):
         messages.insert(1 + offset, msg)
     # 비서펫(오버레이) 라이브 상태 — 실패해도 작업을 막지 않는다.
