@@ -385,6 +385,15 @@ def run_agent_loop(
             inserts.append({"role": "system", "content": project})
     except Exception:  # noqa: BLE001 - 프로필 주입 실패도 작업을 막으면 안 된다
         pass
+    try:
+        # 공식 API 근거 주입: 작업이 특정 소프트웨어(Excel/HWP/CAD 등)를 가리키면
+        # 그 소프트웨어의 공식 문서 발췌를 넣어 환각 API 대신 실제 명령으로 코딩하게 한다.
+        from .api_reference import context_for_prompt as _api_ctx
+        api_ref = _api_ctx(prompt)
+        if api_ref:
+            inserts.append({"role": "system", "content": api_ref})
+    except Exception:  # noqa: BLE001 - API 참조 주입 실패도 작업을 막으면 안 된다
+        pass
     for offset, msg in enumerate(inserts):
         messages.insert(1 + offset, msg)
     # 비서펫(오버레이) 라이브 상태 — 실패해도 작업을 막지 않는다.
