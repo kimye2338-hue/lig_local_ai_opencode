@@ -403,6 +403,14 @@ def run_agent_loop(
             inserts.append({"role": "system", "content": design_ref})
     except Exception:  # noqa: BLE001 - 디자인 가이드 주입 실패도 작업을 막으면 안 된다
         pass
+    try:
+        # 한국 회사 업무 맥락 주입: 메일/회의록/보고서/대외 문서면 관행·톤을 넣는다.
+        from .domain_context import context_for_prompt as _domain_ctx
+        domain_ref = _domain_ctx(prompt)
+        if domain_ref:
+            inserts.append({"role": "system", "content": domain_ref})
+    except Exception:  # noqa: BLE001 - 도메인 맥락 주입 실패도 작업을 막으면 안 된다
+        pass
     for offset, msg in enumerate(inserts):
         messages.insert(1 + offset, msg)
     # 비서펫(오버레이) 라이브 상태 — 실패해도 작업을 막지 않는다.

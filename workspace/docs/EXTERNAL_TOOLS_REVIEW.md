@@ -87,6 +87,19 @@ PyAutoGUI로 실행(비전 모델 불필요, 선택적).
   서빙 서버** 최적화에나 의미 — 그 서버 운영 주체가 별도로 검토할 사안.
 - **awesome-design-skills**: 웹 UI 디자인 스타일 67종. 기계공학 오피스 자동화와 무관.
 
+## 3차 검토 (2026-07-06, 14개 URL — skills/loops/design/도메인)
+
+| 항목 | 판정 | 반영 |
+|---|---|---|
+| VoltAgent/awesome-design-md (MIT) | ✅ 원칙 채택 | 디자인 코퍼스 보강(4단 위계·굵기≤2·강조색 절제·8pt 배수·tabular 숫자) |
+| refactoringenglish "design doc" | ✅ 원칙 참고 | 보고서 골격(목적→배경→범위→시나리오→다이어그램→일정). 원문 미복제, 재서술 |
+| Korean Business Navigator | ✅ **재작성 채택** | `knowledge/domain/korean_business.md` — 품의/완곡표현/격식/톤. 라이선스 불명→우리말 재작성. 메일/회의록/보고서 작업에 주입 |
+| Obsidian Smart Connections | ⭕ **선택 채택** | 로컬 임베딩 오프라인 가능. Obsidian 위키에 의미검색 추가. 수동 zip 설치 문서화(docs/OBSIDIAN_WIKI.md). 라이선스=소스공개 |
+| Karpathy gist (LLM Wiki) | ℹ️ 이미 반영 | 우리 위키(consolidate/lint/recall)의 원천 개념. Query→발견→위키 재반영 루프는 향후 정련 여지 |
+| forwardfuture/elorm "agent loops" | ℹ️ 이미 커버 | Independent Verifier/CI Watcher = 감시 패턴 → 우리 agent.md 감시 프로토콜 + `agentops watch`로 이미 구현. (사이트 SSL 오류로 원문 저신뢰, 재확인 권장) |
+| mattpocock/emilkowalski/addyosmani/vercel skills | ⭕ 부분 참고/skip | 실행형 SKILL.md(코딩/웹 중심). 문서화/PRD 패턴만 아이디어 참고, 통째 도입 skip |
+| getdesign.md / styles.refero / find-skills / gist | ❌ skip | 온라인 웹 UI 갤러리/검색 서비스. 문서/PPT와 무관하거나 오프라인 불가 |
+
 ## 원칙 (앞으로 외부도구 도입 시)
 
 - **런타임에 인터넷 0**이면 채택 후보. 설치 시 인터넷이 필요해도 **오프라인 설치본
