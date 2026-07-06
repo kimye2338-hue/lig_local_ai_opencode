@@ -103,7 +103,7 @@ OpenCodeLIG/
 ## 5. 확정 소프트웨어 버전 (공식 API 코퍼스 대상, MASTER_PLAN §1.3 기준)
 - MS Office 2016 (Excel/Word/PowerPoint/Outlook VBA object model)
 - 한글 HWP (HwpAutomation/HAction API)
-- SolidWorks (SolidWorks API, ISldWorks)
+- SolidWorks **2022** (SolidWorks API, VBA 7/64-bit — 2023+ API 금지. 공식 2022 Help 기준)
 - AutoCAD (ActiveX Automation / accoreconsole script)
 - MATLAB (-batch / script API)
 - ANSYS Fluent (journal/TUI 명령)

@@ -1,124 +1,133 @@
-# SolidWorks API — 공식 API 참조
+# SolidWorks 2022 VBA — 공식 API 참조
 
-- 공식 출처: https://help.solidworks.com (ISldWorks, IModelDoc2 interfaces), https://help.solidworks.com/2019/english/api/sldworksapi/
-- 검증상태: partial
+- 공식 출처(SOLIDWORKS 2022 API Help, help.solidworks.com/2022):
+  - 시작점: https://help.solidworks.com/2022/English/api/sldworksapiprogguide/Welcome.htm
+  - 매크로 기본: https://help.solidworks.com/2022/english/api/sldworksapiprogguide/GettingStarted/SOLIDWORKS_Macros.htm
+  - 매크로 편집/디버그: https://help.solidworks.com/2022/english/api/sldworksapiprogguide/gettingstarted/edit_or_debug_solidworks_macro.htm
+  - 64비트 VBA 주의: https://help.solidworks.com/2022/English/api/sldworksapiprogguide/Overview/VBA_and_SolidWorks_x64.htm
+- 검증상태: verified-from-official (2022 전용, 사용자 제공 공식 URL)
 - 확인일: 2026-07-06
+- 대상 버전: **SolidWorks 2022, VBA 7 / 64-bit**
+
+## ⚠️ 버전 제약 (이 소프트웨어 코드 생성 시 절대 규칙)
+
+- **반드시 SOLIDWORKS 2022 공식 API Help 문서만 기준**으로 작성한다.
+  2023/2024/2025 이후 버전 API나 C# 전용 문법을 쓰지 마라.
+- **VBA 7 / 64-bit SOLIDWORKS 기준**: 외부 DLL 선언 시 `PtrSafe`, `LongPtr` 주의.
+- 모든 코드에 `Option Explicit`, 에러 처리, `Nothing` 체크,
+  `swFileLoadError_e` / `swFileSaveError_e` 등 에러값 확인 포함.
+- 선택 기반 API 사용 전 `ClearSelection2` 고려. 문서 열 때 `OpenDoc6`의 반환
+  `IModelDoc2`와 Errors/Warnings를 반드시 확인.
+- 확실하지 않으면 지어내지 말고 스캐폴드로 남기고 사용자에게 확인 요청.
 
 ## 핵심 객체/명령
 
-### ISldWorks 인터페이스 (최상위)
-| 메서드/속성 | 용도 |
-|------------|------|
-| **CreateDocument(template, options, x, y)** | 새 문서 생성 |
-| **OpenDocument(path, docType, options)** | 기존 문서 열기 |
-| **ActiveDoc** | 현재 활성 문서 반환 (IModelDoc2) |
-| **ActivateDoc3(docName, options)** | 특정 문서 활성화 |
+| 인터페이스 | 용도 | 공식 문서 |
+|---|---|---|
+| **ISldWorks** | 최상위 앱 객체(문서 열기/닫기/생성) | .../ISldWorks_methods.html |
+| **IModelDoc2** | 파트/어셈블리/도면 공통 문서 객체(거의 모든 매크로의 중심) | .../IModelDoc2_members.html |
+| **IModelDocExtension** | 확장 문서 기능(SelectByID2 등) | .../IModelDocExtension~SelectByID2.html |
+| **IAssemblyDoc** | 어셈블리 전용 API | .../IAssemblyDoc_members.html |
+| **IComponent2** | 어셈블리 컴포넌트(변환/억제/경로) | .../IComponent2_methods.html |
+| **IFeatureManager** | 피처 생성/관리 | .../IFeatureManager_methods.html |
+| **ISelectionMgr** | 선택 객체 관리 | .../ISelectionMgr_members.html |
+| **MathTransform** | 좌표/변환(어셈블리 기준 좌표, 컴포넌트 변환) | sldworksapi MathTransform |
 
-### IModelDoc2 인터페이스 (문서 객체)
-| 메서드/속성 | 용도 |
-|------------|------|
-| **GetTitle()** | 문서 제목 (파일명 제외) 반환 |
-| **SaveAs3(filename, saveType, options)** | 다른 이름으로 저장 |
-| **Save()** | 현재 파일명으로 저장 |
-| **Close()** | 문서 닫기 |
-| **GetPathName()** | 전체 파일 경로 반환 |
+핵심 메서드: `OpenDoc6`(열기), `Save3`(저장), `CloseDoc`(닫기),
+`SelectByID2`(선택), `ClearSelection2`(선택 해제), `ActivateDoc3`(활성화),
+`ExportToDWG2`(IPartDoc: DXF/DWG 내보내기).
 
 ## 최소 동작 예제
 
-### VBA 최소 예제 (Early Binding)
-```vb
-' SolidWorks 2019+ VBA 최소 예제
-' 참조: SolidWorks 2019 Type Library 추가 필요
+```vba
+' SOLIDWORKS 2022 VBA (VBA 7 / 64-bit). 공식: OpenDoc6 / Save3 / CloseDoc.
+Option Explicit
 
-Sub BasicSolidWorksOps()
+Sub Main()
     Dim swApp As SldWorks.SldWorks
     Dim swModel As SldWorks.ModelDoc2
-    
-    ' SolidWorks 애플리케이션 객체 얻기
+    Dim fileErr As Long, fileWarn As Long
+    Const swDocPART As Long = 1          ' swDocumentTypes_e.swDocPART
+    Const swOpenSilent As Long = 1       ' swOpenDocOptions_e.swOpenDocOptions_Silent
+
     Set swApp = Application.SldWorks
-    
-    ' 또는 CreateObject로 새 인스턴스 시작
-    ' Set swApp = CreateObject("SldWorks.Application")
-    ' swApp.Visible = True
-    
-    ' 현재 활성 문서 열기
-    Set swModel = swApp.ActiveDoc
-    
-    ' 문서 열기 (전체 경로 필요)
-    Set swModel = swApp.OpenDocument("C:\path\to\drawing.sldprt", 1, 0)
-    
-    ' 문서 정보 출력
-    If Not swModel Is Nothing Then
-        MsgBox "Document: " & swModel.GetTitle()
-        MsgBox "Path: " & swModel.GetPathName()
-        
-        ' 다른 이름으로 저장
-        swModel.SaveAs3 "C:\output\new_name.sldprt", 0, 0
-        
-        ' 문서 닫기
-        swModel.Close
+    If swApp Is Nothing Then Exit Sub
+
+    ' OpenDoc6: 문서 타입/옵션/설정명/에러/경고 인자. 반환 ModelDoc2와 에러 확인 필수.
+    Set swModel = swApp.OpenDoc6("C:\parts\bracket.SLDPRT", swDocPART, _
+                                 swOpenSilent, "", fileErr, fileWarn)
+    If swModel Is Nothing Then
+        Debug.Print "열기 실패 swFileLoadError_e=" & fileErr
+        Exit Sub
     End If
+
+    ' 열어도 항상 활성은 아님 — 필요 시 ActivateDoc3 로 명시 활성화.
+    ' 작업 로직 ...
+
+    ' Save3: 저장 옵션/에러/경고. swFileSaveError_e 확인.
+    Dim saveErr As Long, saveWarn As Long
+    Const swSaveAsOptions_Silent As Long = 1
+    swModel.Save3 swSaveAsOptions_Silent, saveErr, saveWarn
+    If saveErr <> 0 Then Debug.Print "저장 경고/에러 swFileSaveError_e=" & saveErr
+
+    swApp.CloseDoc swModel.GetTitle
 End Sub
 ```
 
-출처: SolidWorks API Help (Open Document, Get Document Information examples)
-
 ## 자주 쓰는 작업
 
-### 1. 문서 열기 및 활성화
-```vb
-Dim swApp As Object
-Dim swModel As Object
+작업 전 항상: `Option Explicit` + `Nothing` 체크 + 에러값 확인. 공식 예제 페이지의
+Preconditions/Postconditions까지 참고해 에러처리를 넣는다.
 
-Set swApp = CreateObject("SolidWorks.Application")
-Set swModel = swApp.OpenDocument("C:\part.sldprt", 1, 0)
-' docType: 1=part, 2=assembly, 3=drawing
+### 1. 선택 (SelectByID2, 사전 ClearSelection2)
+```vba
+swModel.ClearSelection2 True
+' SelectByID2(name, type, x,y,z, append, mark, callout, selectOption)
+Dim ok As Boolean
+ok = swModel.Extension.SelectByID2("면1@bracket", "FACE", 0, 0, 0, False, 0, Nothing, 0)
 ```
+공식: IModelDocExtension~SelectByID2. 여러 선택은 "Selection Lists Example(VB)" 참고.
 
-### 2. 현재 활성 문서 정보 조회
-```vb
-If Not swApp.ActiveDoc Is Nothing Then
-    Set swModel = swApp.ActiveDoc
-    Debug.Print swModel.GetTitle()
-    Debug.Print swModel.GetPathName()
+### 2. 어셈블리 컴포넌트 순회 + 변환 (IAssemblyDoc / IComponent2 / MathTransform)
+```vba
+Dim swAssy As SldWorks.AssemblyDoc
+Dim vComps As Variant, i As Long
+Set swAssy = swModel                       ' 어셈블리 문서일 때
+vComps = swAssy.GetComponents(False)        ' 최상위만 아닌 전체 = False
+For i = 0 To UBound(vComps)
+    Dim swComp As SldWorks.Component2
+    Set swComp = vComps(i)
+    If Not swComp Is Nothing Then
+        Dim xform As SldWorks.MathTransform
+        Set xform = swComp.Transform2         ' 어셈블리 기준 좌표 변환
+        Debug.Print swComp.Name2
+    End If
+Next i
+```
+공식: IAssemblyDoc/IComponent2 멤버 문서. 어셈블리 기준 좌표는 Transform2 + MathTransform.
+
+### 3. 하위 파트 각각 저장 (BOM/중복중량 작업 계열)
+```vba
+' 컴포넌트의 ModelDoc2 를 얻어 개별 저장. Nothing/에러 확인 필수.
+Dim swCompModel As SldWorks.ModelDoc2
+Set swCompModel = swComp.GetModelDoc2
+If Not swCompModel Is Nothing Then
+    Dim e As Long, w As Long
+    swCompModel.Save3 1, e, w
 End If
 ```
 
-### 3. 문서 저장
-```vb
-' 현재 파일명으로 저장
-swModel.Save
+### 4. 열린 문서 경로 목록 / 문서 복사
+공식 예제: "Get Paths of Open Documents Example (VB)", "Copy Document Example (VB)".
 
-' 다른 이름으로 저장 (SLDPRT 형식, 옵션 0)
-swModel.SaveAs3 "C:\new_location\part.sldprt", 0, 0
-```
-
-### 4. 모든 열린 문서 목록 조회
-```vb
-' GetNames returns array of document names
-Dim docNames As Variant
-docNames = swApp.GetDocumentNames
-
-For i = 0 To UBound(docNames)
-    Debug.Print docNames(i)
-Next i
-```
-
-### 5. 문서 닫기
-```vb
-' 저장 안 함
-swModel.Close False
-
-' 저장 후 닫기
-swModel.Close True
-```
+### 5. 파트 DXF/DWG 내보내기 (IPartDoc.ExportToDWG2)
+공식: IPartDoc~IExportToDWG2. 판금/멀티바디는 "Get Features of Multibody Sheet Metal Part Example (VB)".
 
 ## 주의/버전 유의점
 
-- **참조 라이브러리**: Early binding 사용 시 "SolidWorks [버전] Type Library" 추가 필수
-- **Late Binding**: `CreateObject("SolidWorks.Application")`은 형식 검사 없지만 Intellisense 불가
-- **파일 경로**: 항상 전체 경로(절대경로) 필요, 상대경로 미지원
-- **Document Type**: OpenDocument 두 번째 인자 - 1=part, 2=assembly, 3=drawing
-- **ActiveDoc**: 사용자가 다른 문서로 전환하면 ActiveDoc 반환값 변경
-- **버전 호환성**: 구 SolidWorks 버전은 ISldWorks 인터페이스만 지원, IModelDoc2 사용 시 최신 버전 필요
-- **COM 접근**: SolidWorks는 COM 객체이므로 VBA, VB.NET, C# 등에서 활용 가능
+- **2022 전용**: 2023+ 신규 API/오버로드 금지. 메서드 시그니처는 위 공식 2022 URL로 확인.
+- OpenDoc6는 열어도 활성 문서가 아닐 수 있음 → 필요 시 ActivateDoc2/ActivateDoc3.
+- 64-bit VBA 7: 외부 API 선언에 `PtrSafe`/`LongPtr`. 32-bit 전용 선언 금지.
+- 예찬님 작업(어셈블리 기준 좌표·컴포넌트 변환·BOM/중복중량·하위 파트 저장)은
+  IAssemblyDoc, IComponent2, IModelDoc2, IModelDocExtension, MathTransform 문서를 함께 참고.
+- 매크로는 UI 동작을 기록(Record Macros Example) → VBA/VSTA에서 수정하는 방식이 가장 쉬움.

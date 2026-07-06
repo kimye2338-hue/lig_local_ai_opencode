@@ -19,7 +19,7 @@ APIS_DIR = Path(__file__).resolve().parent / "knowledge" / "apis"
 
 # 소프트웨어 → (참조 파일명, 프롬프트에서 이 소프트웨어를 가리키는 키워드들)
 _SOFTWARE: Dict[str, Dict[str, object]] = {
-    "excel":      {"file": "excel_vba.md",   "kw": ["excel", "엑셀", "xlsx", "xls", "vba", "워크시트", "셀 ", "매크로"]},
+    "excel":      {"file": "excel_vba.md",   "kw": ["excel", "엑셀", "xlsx", "xls", "워크시트", "워크북", "피벗"]},
     "outlook":    {"file": "outlook_vba.md", "kw": ["outlook", "아웃룩", "메일", "mailitem", "이메일"]},
     "autocad":    {"file": "autocad.md",     "kw": ["autocad", "오토캐드", "dwg", "accoreconsole", "autolisp", ".scr", "도면"]},
     "matlab":     {"file": "matlab.md",      "kw": ["matlab", "매트랩", "-batch", ".m 스크립트", "simulink"]},
@@ -58,8 +58,9 @@ def _excerpt(text: str, max_chars: int) -> str:
     """참조가 길면 핵심 섹션(핵심 객체/명령 + 최소 동작 예제) 위주로 자른다."""
     if len(text) <= max_chars:
         return text
-    # 헤더 단위로 우선순위 섹션만 남긴다.
-    keep_heads = ("# ", "## 핵심", "## 최소 동작", "## 자주")
+    # 헤더 단위로 우선순위 섹션만 남긴다. 버전 제약(⚠️)은 반드시 유지 —
+    # "2022 전용" 같은 규칙이 잘리면 모델이 상위버전 API를 지어낼 수 있다.
+    keep_heads = ("# ", "## ⚠️", "## 버전", "## 핵심", "## 최소 동작", "## 자주")
     blocks = re.split(r"(?m)^(?=## )", text)
     out = blocks[0] if blocks else ""
     for b in blocks[1:]:

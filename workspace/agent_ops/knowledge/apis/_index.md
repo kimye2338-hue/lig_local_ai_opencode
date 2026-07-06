@@ -39,10 +39,12 @@
 
 ---
 
-### 5. [SolidWorks API](solidworks.md)
-- **검증상태**: ⚠️ partial (공식 페이지 직접 접근 불가, 검색 결과 기반)
-- **공식 출처**: https://help.solidworks.com/ (ISldWorks, IModelDoc2)
-- **핵심 내용**: ISldWorks 최상위 인터페이스; IModelDoc2 문서 객체; OpenDocument, SaveAs3
+### 5. [SolidWorks 2022 API](solidworks.md)
+- **검증상태**: ✅ verified-from-official (2022 전용, 사용자 제공 공식 URL)
+- **대상 버전**: SolidWorks 2022, VBA 7 / 64-bit — 2023/2024/2025 API 금지
+- **공식 출처**: https://help.solidworks.com/2022/English/api/sldworksapiprogguide/Welcome.htm
+- **핵심 내용**: ISldWorks; IModelDoc2; IAssemblyDoc/IComponent2/MathTransform(어셈블리 좌표·변환);
+  OpenDoc6/Save3/CloseDoc; SelectByID2/ClearSelection2; ExportToDWG2. Option Explicit·에러값 확인 규칙 포함.
 - **예제**: CreateObject로 앱 연결, ActiveDoc 접근, 문서 열기/저장/닫기
 - **주의**: 공식 API Help 페이지 직접 방문 권장 (버전별 상세 참조)
 
@@ -64,7 +66,7 @@
 | Outlook 2016 VBA | ✅ verified | Microsoft Learn 문서 확인 |
 | AutoCAD 2019 | ✅ verified | Autodesk 공식 Knowledge Network |
 | MATLAB R2024a | ✅ verified | MathWorks 공식 문서 |
-| SolidWorks API | ⚠️ partial | 검색 결과 기반 (인증 필요) |
+| SolidWorks 2022 | ✅ verified | help.solidworks.com/2022 공식 URL (사용자 제공) |
 | ANSYS Fluent 2024R1 | ✅ verified | ANSYS 공식 Help 문서 |
 
 ---
