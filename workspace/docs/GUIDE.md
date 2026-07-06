@@ -108,6 +108,10 @@ pip install --no-index --find-links wheelhouse markitdown[pdf,docx,pptx,xlsx] py
 ```
 미반입이어도 그 기능만 안내가 뜰 뿐, 나머지는 정상 동작한다. (각 항목 상세는 `docs\` 참고)
 
+**지금 뭐가 준비됐고 뭘 더 넣어야 하나**: `python agent_ops\agentops.py deps` — 준비됨/미반입을
+한눈에 보여준다. 반입 목록 한 장: `tools\README.md`. (설치 파일·바이너리는 패키지에 기본
+포함돼 있지 않으니, 필요한 기능만 인터넷 PC에서 받아 반입한다.)
+
 ## 7. 문제가 생기면
 
 | 증상 | 조치 |

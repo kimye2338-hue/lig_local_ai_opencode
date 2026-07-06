@@ -443,6 +443,56 @@ def cmd_ocr(args):
     return 0
 
 
+def cmd_deps(args):
+    """선택 기능 반입 상태 — 무엇이 준비됐고 뭘 더 넣어야 하는지 한눈에."""
+    from pathlib import Path as _P
+    rows = []
+
+    def add(name, ready, hint):
+        rows.append((name, ready, hint))
+
+    try:
+        from agent_ops.doc_convert import available as _dc
+        add("문서 읽기(PDF/워드/PPT→읽기, markitdown)", _dc(),
+            "pip install markitdown[pdf,docx,pptx,xlsx] (wheel 반입)")
+    except Exception:
+        add("문서 읽기(markitdown)", False, "wheel 반입 필요")
+    try:
+        from agent_ops.office_writer import status as _ow
+        st = _ow()
+        add("Office 파일 생성(xlsx/docx/pptx)", all(st.values()),
+            "pip install openpyxl python-docx python-pptx (wheel 반입)")
+    except Exception:
+        add("Office 파일 생성", False, "wheel 반입 필요")
+    try:
+        from agent_ops.adapters.ocr_screen import detect_backends
+        b = detect_backends()
+        add("화면 OCR(한/영)", bool(b),
+            "tools\\ocr 에 RapidOCR 또는 Tesseract(kor+eng) 반입")
+    except Exception:
+        add("화면 OCR", False, "OCR 엔진 반입 필요")
+    try:
+        from agent_ops.adapters.desktop_ui import available as _du
+        add("임의 Windows 앱 조작(Windows-Use)", _du(),
+            "pip install windows-use (wheel 반입)")
+    except Exception:
+        add("임의 Windows 앱 조작", False, "wheel 반입 필요")
+    # 반입 바이너리(설치 파일)
+    home = _P.home() / "OpenCodeLIG"
+    obs = (home / "tools" / "Obsidian" / "Obsidian.exe").exists() or \
+          (_P(os.environ.get("LOCALAPPDATA", "")) / "Obsidian" / "Obsidian.exe").exists()
+    add("Obsidian(위키 열람, 선택)", obs, "설치본을 tools\\Obsidian\\Obsidian.exe 로 반입(무설치 포터블 가능)")
+
+    print("선택 기능 반입 상태 (핵심 대화/업무는 이것들 없이도 동작):\n")
+    for name, ready, hint in rows:
+        mark = "[준비됨]" if ready else "[미반입]"
+        print(f"  {mark} {name}")
+        if not ready:
+            print(f"           → {hint}")
+    print("\n반입 방법 요약: docs\\GUIDE.md 6번, docs\\OBSIDIAN_WIKI.md, tools\\README.md")
+    return 0
+
+
 def cmd_timeline(args):
     """audit.jsonl → 활동 타임라인 HTML(멈춤 의심 구간 강조). 무한대기 감시 시각화."""
     from pathlib import Path as _P
@@ -1039,6 +1089,7 @@ def main(argv=None):
     p = sub.add_parser("watch"); p.add_argument("--max-age", dest="max_age", type=int, default=600); p.set_defaults(func=cmd_watch)
     p = sub.add_parser("report-html"); p.add_argument("--input", required=True); p.add_argument("--title", default=""); p.set_defaults(func=cmd_report_html)
     p = sub.add_parser("timeline"); p.add_argument("--gap", type=int, default=600); p.set_defaults(func=cmd_timeline)
+    sub.add_parser("deps").set_defaults(func=cmd_deps)
     p = sub.add_parser("report-xlsx"); p.add_argument("--input", required=True); p.add_argument("--out", default=""); p.set_defaults(func=cmd_report_xlsx)
     p = sub.add_parser("office-doc"); p.add_argument("--kind", required=True, choices=["docx", "pptx"]); p.add_argument("--spec", required=True); p.add_argument("--out", default=""); p.set_defaults(func=cmd_office_doc)
     p = sub.add_parser("routine"); p.add_argument("op", choices=["save", "list", "run", "import"]); p.add_argument("name", nargs="?", default=""); p.add_argument("--desc", default=""); p.set_defaults(func=cmd_routine)
