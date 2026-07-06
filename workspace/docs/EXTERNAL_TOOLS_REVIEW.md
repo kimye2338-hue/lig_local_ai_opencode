@@ -3,15 +3,21 @@
 사용자 제시 5개 저장소를 "오프라인 내부망에 완전 이식 가능 + 우리 기능에 유용" 기준으로
 조사·판정했다. 조사 근거: 각 저장소 README/예제(1차 소스).
 
+> **채택 방침 (2026-07-06 사용자 확정):** 유용한데 **인터넷(런타임/설치 시 다운로드)
+> 때문에만** 보류한 도구는, **오프라인 설치본(wheel/installer/바이너리)을 반입해 깔 수
+> 있으면 채택 가능**하다. 단 "인터넷 문제"와 "플랫폼/설계 문제"를 구분한다 —
+> Windows 네이티브 빌드 자체가 없는 것(curl-impersonate)은 여전히 블로커. 아래 판정은
+> 이 방침을 반영해 갱신됨.
+
 ## 판정 요약
 
 | 저장소 | 라이선스 | 판정 | 이유 |
 |---|---|---|---|
 | microsoft/markitdown | MIT | ✅ **채택(완료)** | PDF/DOCX/PPTX/HTML→Markdown. 순수 Python 코어+wheel extras, 완전 오프라인. 우리 갭 정확히 메움 |
-| browser-use | MIT | ⭕ **선택 반입** | 기존 Chrome CDP 연결+로컬 LLM으로 오프라인 가능하나 browser_cdp와 중복·Playwright 무거움 |
-| unclecode/crawl4ai | Apache-2.0 | ❌ 미채택 | Playwright+Chromium 다운로드(수백MB, 인터넷) 필수. browser_cdp로 대체됨 |
-| apify/crawlee | Apache-2.0 | ❌ 미채택 | Node.js 본체(스택 이원화) 또는 beta Python. 기능 중복 |
-| lwthiker/curl-impersonate | MIT | ❌ 미채택 | Windows 사전빌드 없음(Linux/WSL/Docker 필요). 내부 포털엔 불필요(CDP는 실제 Chrome→실제 TLS) |
+| browser-use | MIT | ✅ **채택 승인(선택 설치)** | 블로커가 인터넷(Playwright)뿐 → 오프라인 반입 가능. 기존 Chrome CDP+로컬 LLM으로 동작. 자율 다단계 브라우저 작업에 유용 |
+| unclecode/crawl4ai | Apache-2.0 | ⭕ **채택 가능(우선순위 낮음)** | Chromium은 오프라인 반입 가능(방침상 블로커 해소). 단 browser_cdp+markitdown과 기능 겹쳐 실익 낮음 |
+| apify/crawlee | Apache-2.0 | ⭕ **채택 가능(비권장)** | Node 런타임 오프라인 설치는 가능하나 스택 이원화+기능 중복. 굳이면 crawlee-python |
+| lwthiker/curl-impersonate | MIT | ❌ 미채택(플랫폼 블로커) | **인터넷 문제 아님** — Windows 네이티브 빌드 자체가 없음. 게다가 내부 포털엔 불필요(CDP=실제 Chrome→실제 TLS) |
 
 ## ✅ markitdown — 채택 완료
 
@@ -51,6 +57,9 @@
 
 ## 원칙 (앞으로 외부도구 도입 시)
 
-- 런타임 네트워크 0 + Windows에서 wheel/바이너리 반입만으로 동작해야 채택.
-- 순수 Python·MIT/Apache 우선. Chromium/Node/C빌드체인 신규 반입은 이점이 명확할 때만.
-- 우리 기존 기능(browser_cdp/input_ingest/ocr_screen)과 겹치면 "대체"가 아니라 "갭 메우기"만.
+- **런타임에 인터넷 0**이면 채택 후보. 설치 시 인터넷이 필요해도 **오프라인 설치본
+  (wheel/installer/브라우저 바이너리)을 반입해 깔 수 있으면 채택 가능**(사용자 방침 2026-07-06).
+- "인터넷 문제"(반입으로 우회 가능)와 "플랫폼/설계 문제"(Windows 빌드 부재 등, 우회 불가)를 구분.
+- 런타임에 클라우드 API 강제는 배제 — 로컬 게이트웨이/모델로 대체 가능할 때만.
+- 채택 시 항상: 반입 절차 문서화 + 미반입 시 우아한 실패(조용한 실패 금지).
+- 우리 기존 기능(browser_cdp/input_ingest/ocr_screen)과 겹치면 "대체"가 아니라 "갭 메우기" 우선.
