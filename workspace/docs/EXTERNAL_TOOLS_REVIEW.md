@@ -109,6 +109,13 @@ PyAutoGUI로 실행(비전 모델 불필요, 선택적).
 | microsoft/Webwright | MIT | ⭕ **패턴만 참고/skip** | 브라우저 code-as-action 에이전트. 로컬 게이트웨이 연동 미확인+Playwright+웹도메인(browser_cdp/browser-use로 커버). 루프 설계만 참고 |
 | x.com 트윗 | — | ⚠️ 접근불가 | 로그인/결제 벽(HTTP 402). 내용 붙여주면 검토 |
 
+## 5차 검토 (2026-07-06, Obsidian 마켓 / 아이콘)
+
+| 항목 | 판정 | 반영 |
+|---|---|---|
+| community.obsidian.md 플러그인 | ✅ 추천 확대 | 오프라인 로컬 플러그인(Dataview/Templater/Excalidraw/Advanced Tables) 위키 문서에 추가. 수동 zip 설치 |
+| xandemon/developer-icons | ❌ skip | React/npm 브랜드 로고셋(정적 SVG 불명확), 우리 도메인과 무관, **상표권 리스크**(브랜드 로고). 대신 HTML 리포트에 직접 그린 범용 상태 아이콘(합격/경고) 자체 추가 |
+
 ## 원칙 (앞으로 외부도구 도입 시)
 
 - **런타임에 인터넷 0**이면 채택 후보. 설치 시 인터넷이 필요해도 **오프라인 설치본

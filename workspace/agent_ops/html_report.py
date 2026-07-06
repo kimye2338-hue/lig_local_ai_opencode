@@ -93,6 +93,17 @@ def _svg_bar_chart(labels: Sequence[str], values: Sequence[float],
             f'style="max-width:{w}px" role="img">{axis}{"".join(bars)}</svg></div>')
 
 
+# 직접 그린 범용 상태 아이콘(인라인 SVG, 상표/외부의존 없음).
+_ICON_WARN = ("<svg viewBox='0 0 16 16' width='13' height='13' aria-hidden='true' "
+              "style='vertical-align:-1px'><path d='M8 1 L15 14 H1 Z' fill='none' "
+              "stroke='#dc2626' stroke-width='1.5' stroke-linejoin='round'/>"
+              "<rect x='7.2' y='6' width='1.6' height='4' fill='#dc2626'/>"
+              "<rect x='7.2' y='11' width='1.6' height='1.6' fill='#dc2626'/></svg>")
+_ICON_OK = ("<svg viewBox='0 0 16 16' width='13' height='13' aria-hidden='true' "
+            "style='vertical-align:-1px'><path d='M3 8.5 L6.5 12 L13 4' fill='none' "
+            "stroke='#2f9e44' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>")
+
+
 def _fmt_num(v: float) -> str:
     return str(int(v)) if float(v).is_integer() else f"{v:g}"
 
@@ -140,8 +151,8 @@ def render_report(title: str, subtitle: str = "", facts: Optional[Sequence[str]]
         parts.append("<h2>요약</h2><ul>"
                      + "".join(f"<li>{html.escape(str(f))}</li>" for f in facts) + "</ul>")
     if notable:
-        parts.append("<h2><span class='flag-badge'>주의/이상 항목</span></h2><ul>"
-                     + "".join(f"<li class='flag-badge'>{html.escape(str(n))}</li>" for n in notable)
+        parts.append(f"<h2>{_ICON_WARN} <span class='flag-badge'>주의/이상 항목</span></h2><ul>"
+                     + "".join(f"<li class='flag-badge'>{_ICON_WARN} {html.escape(str(n))}</li>" for n in notable)
                      + "</ul>")
     if chart_html:
         parts.append("<h2>차트</h2>" + chart_html)
