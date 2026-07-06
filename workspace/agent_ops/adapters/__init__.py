@@ -114,7 +114,7 @@ ADAPTERS: Dict[str, Dict[str, Any]] = {
     "ocr_screen": {
         "description": "화면 스크린샷 OCR (한/영) — 막힐 때 화면을 눈으로 읽어 판단",
         "consumes": [],
-        "available": True,
+        "available": False,
         "requires": ["OCR 엔진 반입(tools/ocr: RapidOCR onnx 또는 Tesseract kor+eng)",
                      "스크린샷은 mss/Pillow 없으면 PowerShell 폴백(무설치)"],
         "pending": "app validation pending: 회사 PC에서 OCR 엔진 반입 후 read_screen 검증",

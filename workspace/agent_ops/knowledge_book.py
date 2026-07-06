@@ -300,6 +300,29 @@ def _wiki_pages_html() -> str:
     return "\n".join(parts)
 
 
+def _contradiction_banner() -> str:
+    """모순 후보가 있으면 책 상단에 눈에 띄게 — 사람 확인 유도(자동 해결 없음)."""
+    try:
+        from .wiki_manager import lint
+        report = lint()
+    except Exception:  # noqa: BLE001
+        return ""
+    pairs = report.get("contradictions") or []
+    if not pairs:
+        return ""
+    items = "".join(
+        f"<li>[{p['topic']}] \"{html.escape(p['a_title'][:40])}\" ↔ "
+        f"\"{html.escape(p['b_title'][:40])}\"</li>"
+        for p in pairs[:8]
+    )
+    more = f"<p>… 외 {len(pairs) - 8}건</p>" if len(pairs) > 8 else ""
+    return (f"<div class='card' style='border-color:#dc2626'>"
+           f"<div class='title'>⚠️ 확인 필요 — 모순 후보 {len(pairs)}건</div>"
+           f"<div class='body'>같은 주제에서 서로 반대로 말하는 기록이 있습니다 "
+           f"(자동으로 어느 쪽이 맞는지 지우거나 고치지 않았습니다):</div>"
+           f"<ul>{items}</ul>{more}</div>")
+
+
 def build_book(now: datetime | None = None) -> Path:
     """지식책 HTML 생성 — 언제든 호출 가능, 항상 전체를 다시 그린다."""
     current = _now(now)
@@ -337,6 +360,10 @@ def build_book(now: datetime | None = None) -> Path:
                  "<span class='chip' data-kind='lesson'>배운 것</span>"
                  "<span class='chip' data-kind='error_pattern'>실수 노트</span>"
                  "<span class='chip' id='chip-arc'>보관 포함</span></div>")
+
+    banner = _contradiction_banner()
+    if banner:
+        parts.append(banner)
 
     if picks:
         parts.append("<h2 id='review'>🔁 이번 주의 복습 — 잊기 전에 다시 보기</h2>")
