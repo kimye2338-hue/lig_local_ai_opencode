@@ -38,8 +38,12 @@ def _home() -> Path:
 
 
 def find_launcher(home: Path) -> Path | None:
-    """설치된 OpenCode 런처를 찾는다. oc.bat(환경/secret 로드 포함)이 1순위."""
-    for cand in (home / "OpenCodeLIG" / "bin" / "oc.bat",
+    """설치된 OpenCode 런처를 찾는다. RUN_OPENCODE_LIG.bat 이 1순위 —
+    이게 lig-api.env 로드 + OPENCODE_CONFIG(opencode.json) + provider baseURL 조합까지
+    해줘야 TUI 가 사내 EXAONE/Qwen 으로 열린다. opencode.exe 를 raw 로 띄우면 그 설정이
+    빠져 기본모델('빅 피클')로 열리므로 최후수단."""
+    for cand in (home / "OpenCodeLIG" / "workspace" / "RUN_OPENCODE_LIG.bat",
+                 home / "OpenCodeLIG" / "bin" / "oc.bat",
                  home / "OpenCodeLIG" / "bin" / "opencode.exe"):
         if cand.is_file():
             return cand
