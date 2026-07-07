@@ -65,6 +65,13 @@ def clean_stale(opencode_dir: Path | None = None) -> Dict[str, List[str]]:
 
 
 def main(argv: List[str] | None = None) -> int:
+    # 콘솔 코드페이지가 cp949여도(런처 밖 직접 실행 등) 한글/em-dash 출력이
+    # UnicodeEncodeError로 죽지 않게 stdout을 UTF-8로 재설정한다.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     argv = argv if argv is not None else sys.argv[1:]
     result = clean_stale(_opencode_dir(argv[0] if argv else None))
     if result["removed"]:
