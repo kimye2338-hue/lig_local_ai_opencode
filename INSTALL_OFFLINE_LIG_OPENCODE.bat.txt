@@ -69,7 +69,7 @@ rem /PURGE mirrors the workspace to exactly match this package so stale files
 rem from a previous install (runtime output folders, results, snapshots)
 rem never linger. /XD tools keeps user-imported offline binaries
 rem (Obsidian/OCR/wheels) intact across reinstalls.
-robocopy "%~dp0workspace" "%WS%" /E /PURGE /XD "%WS%\tools" /NFL /NDL /NJH /NJS /NP >nul
+robocopy "%~dp0workspace" "%WS%" /E /PURGE /XD "%WS%\tools" "%WS%\tests" "%WS%\docs\archive" /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 (
   echo [ERROR] Workspace copy failed
   pause
