@@ -1,150 +1,86 @@
-# ANSYS Fluent 2024R1 — 공식 API 참조
+---
+title: ANSYS Fluent 2024R1 배치 저널/TUI 레퍼런스
+domain: fluent
+aliases: fluent, 플루언트, ansys, journal, jou, cfd, 유동해석, 열유체, tui, 배치, 저널
+sources: [ansyshelp.ansys.com v242 (2024R2, R1→R2 변경부록 대조), Fluent Text Command List]
+verified: true
+confidence: medium
+version: "2024R1"
+reviewed: 2026-07-07
+---
 
-- 공식 출처: https://ansyshelp.ansys.com/public/Views/Secured/corp/v242/en/flu_ug/flu_ug_BatchExecution.html, https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/pdf/Ansys_Fluent_Text_Command_List.pdf
-- 검증상태: verified-from-official
-- 확인일: 2026-07-06
+# ANSYS Fluent 2024R1 배치 저널/TUI 자동화
 
-## 핵심 객체/명령
+> 대상: **2024R1**, `fluent 3ddp -g -i journal.jou` 헤드리스. TUI 트리·문법은 버전 안정적이나
+> 세부 프롬프트 시퀀스는 대화형 캡처로 검증 권장.
 
-### 배치 실행 명령줄 옵션
-| 옵션 | 용도 |
-|------|------|
-| **fluent 3ddp** | 3D double precision 모드 |
-| **-g** | GUI/그래픽스 비활성화 (배치 모드) |
-| **-t4** | 4개 프로세서 병렬 실행 |
-| **-i journal_file** | 저널 파일 입력 |
-| **-hidden** | Windows 배치: 숨겨진 창 실행 |
-| **-wait** | 완료까지 대기 (배치 스크립트용) |
+## ⚠️ 절대 규칙 (저널 생성 전 항상)
 
-### 저널 파일 명령
-| 명령 | 용도 |
-|------|------|
-| **/file/read-case** | 케이스 파일 읽기 |
-| **/file/read-data** | 데이터 파일 읽기 |
-| **/solve/iterate** | 반복 계산 실행 |
-| **/file/write-data** | 데이터 파일 저장 |
-| **exit yes** | Fluent 종료 (저장 후) |
+1. **저널 맨 앞에 배치 옵션** — 예기치 못한 확인창이 배치를 무한 정지시키는 걸 막음:
+   ```
+   /file/set-batch-options yes yes yes
+   ```
+   순서: Confirm-Overwrite / Hide-Questions(yes 권장) / Exit-on-Error(yes 권장). **케이스에 저장 안 됨 → 매번 명시.**
+   Exit-on-Error 종료코드: 0=정상, 1=명령/입력 오류, 2=라이선스.
+2. **Windows `-g` ≠ 완전 비대화형** — 작업표시줄 최소화일 뿐. 완전 무인은 `-hidden`.
+3. **콘솔 출력 파일 저장** — Windows는 셸 리다이렉트 안 됨 → 저널 안에 `/file/start-transcript "log.trn"`.
+4. **프롬프트 시퀀스 검증** — velocity-inlet/materials 등은 모델 조합(에너지·다상 여부)에 따라 질문
+   수·순서가 달라짐. 초안 생성 후 대화형 1회 + `/file/start-journal "capture.jou"`로 실제 순서 캡처·대조.
+5. 저널엔 **TUI 명령만**(GUI 명령 불가). `;`로 시작하는 줄은 주석.
 
-## 최소 동작 예제
-
-### 배치 실행 명령줄 (Linux C-shell)
-```bash
-fluent 2d -g < inputfile > & outputfile &
+## 배치 실행 (명령행)
 ```
-
-### 배치 실행 명령줄 (Windows)
-```batch
-REM 저널 파일로 배치 모드 실행
-fluent 3ddp -g -wait -i journal.jou
-
-REM 또는 숨겨진 창으로 실행
-fluent 3ddp -hidden -i journal.jou
+fluent 3ddp -g -i journal.jou          REM 3D 배정밀도, GUI최소화, 저널 실행
+fluent 3ddp -t4 -g -i journal.jou       REM 4프로세스 병렬
+fluent 3ddp -hidden -i journal.jou      REM 완전 숨김 비대화형
+fluent 3ddp -g -wait -i journal.jou     REM DOS 배치가 종료까지 대기
 ```
+`2ddp/3ddp`=2D/3D 배정밀도, `2d/3d`=단정밀도. `-t<N>`=병렬수.
 
-### 저널 파일 (journal.jou)
+## TUI 문법 기본
+- 메뉴는 디렉터리처럼 계층. 전체경로로 바로 진입(`/file/read-case`). 벗어나기 `q`.
+- 프롬프트 `[기본값]`은 Enter로 기본값 사용. y/n = yes/no. Scheme 불리언 `#t`/`#f`.
+- **문자열**(제목 등)은 큰따옴표 필수. **심볼**(zone/surface/material 이름)은 따옴표 없이, 와일드카드
+  `* > ^` 로 일괄 선택 가능. 변수 치환 없음(리터럴).
+- 저널은 축약형 대신 **전체 명령이름** 사용(버전간 충돌 방지). `(`로 시작하면 Scheme 평가.
+
+## 작업별 저널 코드
+
 ```
-; ANSYS Fluent 2024R1 저널 파일 최소 예제
-; 주석은 세미콜론(;)으로 시작
-
-; 케이스 파일 읽기
-/file/read-case case.cas
-
-; 데이터 파일 읽기 (선택)
-/file/read-data data.dat
-
-; 초기 설정
-/define/boundary-conditions/inlet inlet-1 () velo-m normal-velocity 10
-
-; 반복 계산 (100회)
-/solve/iterate 100
-
-; 데이터 저장
-/file/write-data result.dat
-
-; 로그 파일 저장
-/file/start-transcript output.trn
-
-; Fluent 종료
-exit yes
-```
-
-출처: ANSYS Fluent User Guide - Batch Execution
-
-## 자주 쓰는 작업
-
-### 1. 기본 배치 실행 스크립트
-```bash
-# Linux/Mac
-fluent 3ddp -g -i job1.jou > log1.txt 2>&1 &
-fluent 3ddp -g -i job2.jou > log2.txt 2>&1 &
-
-# Windows
-fluent 3ddp -g -wait -i job1.jou
-```
-
-### 2. 병렬 처리 (멀티 프로세서)
-```bash
-# 4개 프로세서로 실행
-fluent 3ddp -t4 -g -i mycase.jou
-
-# 병렬 클러스터 실행
-fluent 3ddp -nt 8 -g -i mycase.jou
-```
-
-### 3. 저널 파일에서 자동 로그 기록
-```
-; 출력 로그 시작
-/file/start-transcript output.trn
-
-; ... 계산 명령어들 ...
-
-/solve/iterate 200
-
-; 로그 저장 (자동)
-```
-
-### 4. 경계 조건 설정 예제
-```
-/file/read-case airfoil.cas
-
-; 입구 경계: 유속 10 m/s
-/define/boundary-conditions/inlet inlet 5 () velo-m normal-velocity 10
-
-; 출구 경계: 압력 0
-/define/boundary-conditions/outlet outlet 5 () pressure 0
-
-; 벽: 무슬립
-/define/boundary-conditions/wall wall 4 () wall-interaction no-slip
-
+; 케이스/데이터 읽기
+/file/read-case-data "model.cas.h5"
+; 점성 모델 (예: k-epsilon Realizable / k-omega SST)
+/define/models/viscous/ke-realizable yes
+; /define/models/viscous/kw-sst yes
+; 재료 (인자 순서는 대화형 캡처 검증 권장)
+/define/materials/change-create air air yes constant 1.225 no no yes constant 1.7894e-05 no no no
+; 경계조건 (⚠️ 프롬프트 순서 모델 의존 — 캡처 검증)
+/define/boundary-conditions/velocity-inlet inlet yes no yes yes no 10 no 300 no yes 5 10
+/define/boundary-conditions/pressure-outlet outlet yes no 0 no 300 no yes no no yes 5 10
+; 초기화(hybrid) + 반복 + 수렴기준
+/solve/initialize/hyb-initialization
+/solve/monitors/residual/convergence-criteria 1e-4 1e-4 1e-4 1e-4 1e-4 1e-4
 /solve/iterate 500
-/file/write-data result.dat
-exit yes
+; 저장 + 내보내기 + 보고
+/file/write-case-data "result.cas.h5" yes
+/file/export/ensight-gold "result" () yes velocity-magnitude pressure () yes
+/report/surface-integrals/area-weighted-avg outlet () pressure yes "pressure_avg.txt"
+/report/forces/wall-forces yes wall-1 () 1 0 0 yes "forces.txt"
+/report/fluxes/mass-flow yes inlet outlet () yes "massflow.txt"
 ```
 
-### 5. 케이스/데이터 파일 읽기-쓰기
+## 여러 케이스 배치 (Scheme 루프)
+```scheme
+(for-each
+  (lambda (c)
+    (ti-menu-load-string (string-append "/file/read-case-data \"" c "\""))
+    (ti-menu-load-string "/solve/iterate 500")
+    (ti-menu-load-string (string-append "/file/write-case-data \"" c "-done\" yes")))
+  (list "run1.cas.h5" "run2.cas.h5"))
 ```
-; 사전 계산된 데이터로 시작
-/file/read-case base.cas
-/file/read-data previous_solution.dat
+(Scheme 표준 기능 — 공식 예제 아님, 소규모 테스트 권장.)
 
-; 경계 조건 조정
-/define/boundary-conditions/inlet inlet-1 () velo-m normal-velocity 15
-
-; 추가 반복
-/solve/iterate 100
-
-; 결과 저장
-/file/write-data updated_solution.dat
-exit yes
-```
-
-## 주의/버전 유의점
-
-- **GUI 필수 비활성화**: 배치 모드(-g)에서는 GUI 명령(메뉴 클릭 등) 불가, TUI/스키마 명령만 사용
-- **저널 파일 구조**: 텍스트 인터페이스(TUI) 명령만 포함, 명령 순서 엄격
-- **공백 민감도**: 저널 파일의 명령 구문이 엄격하므로 오타 주의
-- **화면 출력 vs 로그**: -g 모드에서도 출력은 리다이렉션으로 캡처 가능 (> file.txt)
-- **Exit Code**: 성공=0, 실패=0 아님 (배치 스크립트에서 확인 가능)
-- **Windows -wait**: 배치 파일에서 Fluent 완료까지 대기 필수
-- **주석**: 세미콜론(;)으로 시작하는 라인은 무시됨
-- **도메인 설정**: /solver/set/... 명령으로 솔버 옵션 설정 가능 (병렬 프로세서, 모델 등)
+## 신뢰도 메모
+v241(2024R1) 공개 페이지가 로그인 벽으로 막혀 v242 + R1→R2 변경 부록 대조로 구성. TUI 트리/문법은
+신뢰도 높음. **velocity-inlet/pressure-outlet/materials 인자 순서와 Scheme 루프는 추정** → 대화형
+캡처로 반드시 검증. 사내 ANSYS 포털 계정 있으면 R1 원문 1회 대조 권장.

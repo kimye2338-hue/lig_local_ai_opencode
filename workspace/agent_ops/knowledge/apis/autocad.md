@@ -1,126 +1,100 @@
-# AutoCAD 2019 — 공식 API 참조
+---
+title: AutoCAD 2019 배치/스크립트 자동화 레퍼런스
+domain: autocad
+aliases: autocad, 오토캐드, dwg, accoreconsole, autolisp, .scr, 도면, 스크립트, 배치, entmake
+sources: [help.autodesk.com/cloudhelp/2019/ENU/, Autodesk University BES227196, Autodesk 공식 블로그]
+verified: true
+confidence: medium
+version: "2019"
+reviewed: 2026-07-07
+---
 
-- 공식 출처: https://help.autodesk.com/cloudhelp/2019/ENU/AutoCAD-Customization/, https://knowledge.autodesk.com/support/autocad/learn-explore/caas/CloudHelp/cloudhelp/2019/ENU/AutoCAD-AutoLISP/
-- 검증상태: verified-from-official
-- 확인일: 2026-07-06
+# AutoCAD 2019 배치/스크립트 자동화
 
-## 핵심 객체/명령
+> 대상: AutoCAD **2019**, accoreconsole.exe 헤드리스 + .scr 스크립트 + AutoLISP.
 
-### Script (.scr) 명령
-| 명령 | 용도 |
-|------|------|
-| **OPEN** | 도면 파일 열기 |
-| **SAVEAS** | 파일 다른 이름으로 저장 |
-| **EXIT** | AutoCAD 종료 |
-| **QUIT** | AutoCAD 종료 |
-| **ZOOM** | 화면 확대/축소 |
-| **LAYER** | 레이어 관리 |
+## ⚠️ 절대 규칙 (스크립트 생성 전 항상)
 
-### AutoLISP 함수
-| 함수 | 용도 |
-|------|------|
-| **(defun name (args) ...)** | 함수 정의 |
-| **(command "CMD" arg1 ...)** | AutoCAD 명령 실행 |
-| **(autoload "file" '("cmd1" "cmd2"))** | 필요시 파일 로드 |
-| **(S::STARTUP)** | 도면 초기화 후 실행 함수 |
+1. **accoreconsole.exe는 미문서화 도구** — Autodesk 정식 커맨드 레퍼런스에 없음(공식 블로그/AU
+   클래스에서만). `/i`,`/s` 스위치는 널리 검증됐지만 하위호환 공식 보증 없음. 새 스위치는 실제
+   실행으로 확인.
+2. **헤드리스 = 대화상자 명령 금지** — 반드시 하이픈 버전(`-INSERT`, `-LAYER`, `-PLOT`, `-PURGE`).
+   대화상자 버전은 응답 대기하다 무한 hang.
+3. **스크립트의 모든 공백(space)=Enter** — 공백 개수가 명령 프롬프트 단계와 정확히 일치해야 함.
+   불일치 시 다음 입력 무한 대기(hang)가 최대 원인.
+4. **마지막 줄은 반드시 빈 줄** — 없으면 마지막 명령 유실(공식 명시).
+5. **명시적 저장 필수** — 스크립트 끝에 `QSAVE`/`SAVEAS`. 없으면 변경 소실.
+6. 주석은 `;`로 시작. 파일명에 공백이면 큰따옴표. 로케일 소수점(콤마) 주의(좌표 콤마와 충돌).
 
-## 최소 동작 예제
-
-### .scr 스크립트 파일 (Notepad)
+## accoreconsole 배치 실행
 ```
-; AutoCAD 2019 최소 스크립트
-; 각 줄은 명령어, 공백=Enter, 빈 줄도 유의
-OPEN
-C:\drawings\test.dwg
-
-ZOOM
-A
-
-SAVEAS
-test_new.dwg
-
-EXIT
-yes
+accoreconsole.exe /i <input.dwg> /s <script.scr>
 ```
-출처: Autodesk Knowledge Network - About Scripts
+- 경로: `C:\Program Files\Autodesk\AutoCAD 2019\accoreconsole.exe`
+- 정식 AutoCAD 라이선스 필요. PNGOUT/JPGOUT 등 이미지 출력은 헤드리스서 실패 사례 있음 → 벡터/문서
+  출력(EXPORTPDF/DXFOUT)을 우선.
+- 성능: 대량 작업 전 `UNDO Control None`, 끝나면 `UNDO Control All`(공식 권장).
 
-### AutoLISP 기본 예제
+## .scr 문법 예시 (공백=Enter 규칙 적용)
+```
+; 절대좌표 사각형(LINE)
+LINE 0,0 100,0 100,50 0,50 c
+; 폭 지정 폴리라인
+PLINE 0,0 W 2 2 100,0 100,50
+CIRCLE 50,50 25
+TEXT 10,10 5 0 Hello World
+
+```
+(각 줄 뒤 공백 1개 = Enter. 옵션 많은 명령은 GUI 커맨드 히스토리를 복사해 시퀀스 확인 후 SCR화 — 공식 권장 워크플로우.)
+
+레이어/정리:
+```
+-LAYER M NEWLAYER C 8 NEWLAYER LT Continuous NEWLAYER 
+-PURGE A * N
+```
+(`-LAYER`: M=Make&현재화, C=Color, LT=Linetype, 마지막 빈입력 종료. `-PURGE A * N`: 모든 미사용 확인없이 정리.)
+
+내보내기: `DXFOUT`(파일명→버전), `EXPORTPDF`, `EXPORT`(형식 프롬프트). 대화상자 `PLOT` 금지 → `-PLOT`.
+
+## AutoLISP 핵심 (헤드리스 로직에 최적)
+
+**entmake — 대화상자 없이 엔티티 직접 생성** (헤드리스 최선):
 ```lisp
-; AutoCAD 2019 AutoLISP 최소 예제
-(defun c:HELLO ()
-  (command "circle" PAUSE 100)
-  (princ "\nCircle created.")
-  (princ)
-)
-
-; 시작 시 실행 (도면 초기화 후)
-(defun S::STARTUP ()
-  (command "undefine" "hatch")
-)
-
-; 필요시에만 로드
-(autoload "mycommands" '("MYCMD1" "MYCMD2"))
+(entmake '((0 . "CIRCLE") (62 . 3) (10 4.0 4.0 0.0) (40 . 1.0)))   ; 녹색 원(공식 예제)
+(entmake (list '(0 . "LINE") '(8 . "0") (cons 10 '(0.0 0.0 0.0)) (cons 11 '(100.0 0.0 0.0))))
 ```
+- DXF 그룹코드 dotted-pair 리스트. 존재 않는 레이어명 주면 자동 생성. VIEWPORT는 생성 불가.
 
-## 자주 쓰는 작업
-
-### 1. 배치 스크립트 생성 및 실행
-```
-; batch.scr - 여러 도면 처리
-OPEN
-drawing1.dwg
-PURGE
-A
-SAVEAS
-drawing1_cleaned.dwg
-
-OPEN
-drawing2.dwg
-PURGE
-A
-SAVEAS
-drawing2_cleaned.dwg
-
-EXIT
-yes
-```
-명령줄: `acad.exe /b batch.scr`
-
-### 2. 파일 경로 처리
-```
-; 공백이 있는 경로는 따옴표로 감싼다
-OPEN
-"C:\My Documents\drawing file.dwg"
-
-SAVEAS
-"C:\output\result file.dwg"
-```
-
-### 3. AutoLISP 함수 정의
+**ssget — 헤드리스 선택(대화식 금지, 필터/전체선택)**:
 ```lisp
-(defun c:DRAWSQUARE (/ pt size)
-  (setq pt (getpoint "\nPick first corner: "))
-  (setq size (getdist pt "\nEnter size: "))
-  (command "rectangle" pt (list (+ (car pt) size) (+ (cadr pt) size)))
-  (princ)
-)
+(setq ss (ssget "X" '((0 . "CIRCLE") (8 . "0"))))   ; "X"=도면 전체
 ```
 
-### 4. 시작 파일 자동 로드
+**ActiveX(vla-)**:
 ```lisp
-; acaddoc.lsp (각 도면 열기시마다 자동 실행)
-(defun-q S::STARTUP ()
-  (princ "\nLoading custom startup functions...")
-  ; 커스텀 명령 정의
-)
+(vl-load-com)
+(setq acadDoc (vla-get-ActiveDocument (vlax-get-acad-object)))
+(vlax-for obj (vla-get-ModelSpace acadDoc) ... )   ; 모델스페이스 순회
 ```
 
-## 주의/버전 유의점
+**표준 에러 핸들링**:
+```lisp
+(defun c:MYCMD (/ *error* old)
+  (defun *error* (msg) (if (/= msg "Function cancelled") (princ (strcat "\n오류: " msg)))
+    (setvar "CMDECHO" old) (princ))
+  (setq old (getvar "CMDECHO")) (setvar "CMDECHO" 0)
+  ;; 작업
+  (setvar "CMDECHO" old) (princ))
+```
 
-- **공백 처리**: 스크립트에서 "각 공백이 유의미"하므로 ENTER 대신 공백 사용
-- **마지막 줄**: 스크립트 파일은 반드시 빈 줄로 끝나야 한다
-- **댓글**: 세미콜론(;)으로 시작하는 줄은 무시됨
-- **PAUSE**: 스크립트 일시정지, 사용자 입력 대기
-- **파일명 인용**: 경로/파일명에 공백이 있으면 "따옴표"로 반드시 감싼다
-- **GUI 대화상자**: 스크립트는 대화상자 명령 실행 불가, 하이픈 접두사 사용 (예: `-INSERT` 대신 `INSERT`)
-- **AutoLISP 버전**: 2014+ 보안 모드에서는 신뢰할 수 있는 파일 위치에서만 실행
+## 자주 필요한 작업 패턴
+1. **좌표리스트→폴리라인**: LISP `entmake`로 LWPOLYLINE(90=정점수, 10=정점)이 SCR PLINE보다 안전(공백오류 없음).
+2. **블록 삽입**: `-INSERT 블록명 삽입점 X축척 Y축척 회전각`.
+3. **속성 추출**: `-EATTEXT`는 템플릿(.dxe) 필요 → 대신 LISP `vlax-for`+`vla-GetAttributes`+`write-line`으로 CSV 직접.
+4. **배치 플롯/PDF**: `-PLOT` 또는 `EXPORTPDF`/`DXFOUT`.
+5. **레이어 정리**: `-LAYER` + `-PURGE A * N`.
+
+## 신뢰도 메모
+공식 2019 문서(About Command Scripts, LAYER, EXPORT, entmake/ssget/vlax) 기반. accoreconsole 자체는
+미문서화가 최대 리스크. HATCH/MTEXT/치수 SCR 상세는 미확인. AI 생성 스크립트는 "사전에 GUI 또는
+accoreconsole 소규모 테스트로 검증" 문구를 항상 포함할 것.
