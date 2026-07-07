@@ -62,27 +62,56 @@ def _iter_notes():
             yield p, meta, body
 
 
-def _note_keywords(path: Path, meta: Dict[str, str]) -> set:
-    """노트를 가리키는 키워드 = 파일명 + title + domain + aliases."""
-    kw = _tokens(path.stem)
-    kw |= _tokens(meta.get("title", ""))
-    kw |= _tokens(meta.get("domain", ""))
-    kw |= _tokens(meta.get("aliases", ""))
-    return kw
+def _note_terms(path: Path, meta: Dict[str, str]) -> set:
+    """노트를 가리키는 '용어'(문자열) 집합 = 파일명 + title + domain + aliases의 각 항목.
+
+    토큰 교집합이 아니라 '용어가 프롬프트에 포함되는가'(부분매칭)를 쓰기 위해 원형 용어를
+    보존한다. 한국어 교착어에서 '진동시험을'이 '진동시험'을 포함하므로 리콜이 안정된다."""
+    terms = {path.stem.strip().lower(),
+             str(meta.get("title", "")).strip().lower(),
+             str(meta.get("domain", "")).strip().lower()}
+    for a in str(meta.get("aliases", "")).split(","):
+        a = a.strip().lower()
+        if a:
+            terms.add(a)
+    return {t for t in terms if len(t) >= 2}
 
 
-def detect_domains(prompt: str, top: int = 2) -> List[Path]:
-    """프롬프트와 키워드가 겹치는 노트를 관련도 순으로 반환(상위 top)."""
-    ptok = _tokens(prompt)
-    if not ptok:
+def detect_domains(prompt: str, top: int = 2, min_score: int = 2) -> List[Path]:
+    """작업 관련 노트를 반환. 부분매칭(용어가 프롬프트에 포함) + 최소 임계값.
+
+    약한 33B는 주입 컨텍스트를 과신하므로 **오주입 방지**가 미스보다 중요하다. 약한
+    신호(짧은 용어 1개)로는 주입하지 않고, 구체적 용어(길이≥3)나 다중 매칭이 있을 때만.
+    """
+    low = (prompt or "").lower()
+    if not low.strip():
         return []
-    scored: List[Tuple[int, Path]] = []
+    scored: List[Tuple[int, int, Path]] = []
     for path, meta, _body in _iter_notes():
-        overlap = len(ptok & _note_keywords(path, meta))
-        if overlap:
-            scored.append((overlap, path))
-    scored.sort(key=lambda x: -x[0])
-    return [p for _n, p in scored[:top]]
+        hits = [t for t in _note_terms(path, meta) if t in low]
+        if not hits:
+            continue
+        # 점수: 히트 수 + 긴 용어(구체적) 가중. 최장 히트 길이는 동점 해소용.
+        score = sum(1 + (1 if len(t) >= 4 else 0) for t in hits)
+        longest = max(len(t) for t in hits)
+        scored.append((score, longest, path))
+    # 임계: 점수 min_score 이상 또는 구체적 용어(길이≥3) 단독 매치만 통과(오주입 방지).
+    qualified = [(s, ln, p) for s, ln, p in scored if s >= min_score or ln >= 3]
+    qualified.sort(key=lambda x: (-x[0], -x[1]))
+    return [p for _s, _l, p in qualified[:top]]
+
+
+def routing_debug(prompt: str) -> Dict[str, Any]:
+    """진단용: 어떤 노트가 왜 뽑혔는지(히트 용어·점수). 라우팅 실패 관측·테스트에 사용."""
+    low = (prompt or "").lower()
+    rows = []
+    for path, meta, _b in _iter_notes():
+        hits = [t for t in _note_terms(path, meta) if t in low]
+        if hits:
+            rows.append({"note": path.name, "hits": hits,
+                         "score": sum(1 + (1 if len(t) >= 4 else 0) for t in hits)})
+    rows.sort(key=lambda r: -r["score"])
+    return {"prompt": prompt, "selected": [p.name for p in detect_domains(prompt)], "candidates": rows}
 
 
 def _excerpt(body: str, max_chars: int, prompt: str) -> str:
