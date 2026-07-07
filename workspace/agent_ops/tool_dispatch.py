@@ -502,11 +502,12 @@ def run_agent_loop(
     # 주입 순서(제품 문서 §6.3): 전역 기억 → 폴더 프로필(기억/페르소나/규칙) → 작업.
     inserts: List[Dict[str, Any]] = []
     try:
-        from .memory_manager import extract_keywords, format_recall_for_prompt, pinned_recall, recall
+        from .memory_manager import core_memory, extract_keywords, format_recall_for_prompt, recall
         keywords = extract_keywords(prompt)
-        # 회상 보장: 사용자 규칙 + 최근 실수는 키워드가 안 맞아도 항상 주입,
-        # 키워드 매칭분은 그 위에 추가 (id 로 중복 제거).
-        pinned = pinned_recall(limit=5)
+        # 회상 보장: core memory(사용자 규칙 + 최근 실수, 중요도순)는 키워드가
+        # 안 맞아도 항상 주입(약한 모델 검색 실패 안전망), 키워드 매칭분은 그 위에
+        # 추가 (id 로 중복 제거). recall은 recency×importance×relevance 랭킹.
+        pinned = core_memory(limit=5)
         matched = recall(keywords=keywords, limit=5)
         seen_ids = {r.get("id") for r in pinned}
         mem = pinned + [r for r in matched if r.get("id") not in seen_ids]

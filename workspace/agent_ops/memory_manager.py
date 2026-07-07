@@ -20,6 +20,24 @@ def ensure_memory() -> None:
         # 이후 갱신은 쓰기 경로(add_memory_event/memorycheck)가 담당한다.
         render_memory_views()
 
+def _importance(kind: str, priority: str, source: str, body: str) -> float:
+    """저장 시점 결정적 중요도(0~1). 오프라인/약한모델 안전 — LLM 불필요.
+
+    Generative Agents의 importance 축을 게이트웨이 없이 구현: 종류·출처·우선순위·
+    구체성(본문 길이)으로 근사한다. recall 랭킹의 recency×importance×relevance 중
+    importance 축으로 쓰인다(검색 정확도↑)."""
+    score = 0.4
+    score += {"preference": 0.35, "error_pattern": 0.3, "lesson": 0.2,
+              "activity": -0.1, "log": -0.15, "note": 0.0}.get(kind, 0.0)
+    if source == "user":
+        score += 0.25
+    if priority == "high":
+        score += 0.2
+    if len((body or "").strip()) >= 40:  # 구체적 서술은 재사용 가치↑
+        score += 0.1
+    return max(0.0, min(1.0, round(score, 3)))
+
+
 def add_memory_event(kind: str, title: str, body: str, status: str = "active", priority: str = "normal", source: str = "manual", supersedes: List[str] | None = None, tags: List[str] | None = None) -> Dict[str, Any]:
     ensure_memory()
     with file_lock("memory"):
@@ -35,6 +53,7 @@ def add_memory_event(kind: str, title: str, body: str, status: str = "active", p
             "title": title,
             "body": body,
             "tags": tags or [],
+            "importance": _importance(kind, priority, source, body),
             "supersedes": supersedes or [],
             "superseded_by": None,
             "review_after_days": 14,
@@ -163,9 +182,49 @@ def recall(task_kind: str = "", keywords: List[str] | None = None, limit: int = 
             score += 3
         if row.get("priority") == "high":
             score += 2
-        scored.append((score, row))
+        # Generative Agents식 랭킹: relevance(위 score) + importance + recency.
+        # importance(0~1)와 최신성(30일 내면 가점)을 relevance에 얹어 동점 해소·
+        # 중요/최근 기억을 상위로. relevance가 0이면 위에서 이미 제외됨.
+        rel = float(score)
+        rel += float(row.get("importance", 0.4)) * 2.0
+        if str(row.get("created_at", ""))[:10] >= _days_ago(30):
+            rel += 0.5
+        scored.append((rel, row))
     scored.sort(key=lambda x: (-x[0], str(x[1].get("created_at", ""))))
     return [r for _, r in scored[:limit]]
+
+
+def _days_ago(n: int) -> str:
+    try:
+        from datetime import datetime, timedelta
+        return (datetime.fromisoformat(now()[:10]) - timedelta(days=n)).strftime("%Y-%m-%d")
+    except Exception:
+        return "0000-00-00"
+
+
+def core_memory(limit: int = 6) -> List[Dict[str, Any]]:
+    """항상 주입되는 소규모 고정 컨텍스트(MemGPT식 core memory).
+
+    약한 모델의 키워드 검색 실패에 대비한 안전망: 사용자 규칙(source=user)과
+    최근 자가관찰 실수를 중요도·최신순으로 소수만 항상 얹는다. pinned_recall의
+    정식화 — 검색(recall)과 별개 층으로, '무엇을 물어도 반드시 보이는' 기억."""
+    ensure_memory()
+    rows = load_memory(status="active")
+    core = [r for r in rows if r.get("source") == "user"
+            or (r.get("kind") == "error_pattern"
+                and str(r.get("created_at", ""))[:10] >= _days_ago(14))]
+    core.sort(key=lambda r: str(r.get("created_at", "")), reverse=True)
+    core.sort(key=lambda r: (-float(r.get("importance", 0.4)),
+                             0 if r.get("priority") == "high" else 1))
+    seen: set = set()
+    out: List[Dict[str, Any]] = []
+    for r in core:
+        if r.get("id") not in seen:
+            seen.add(r.get("id"))
+            out.append(r)
+        if len(out) >= limit:
+            break
+    return out
 
 def pinned_recall(limit: int = 5, error_days: int = 14) -> List[Dict[str, Any]]:
     """키워드와 무관하게 '항상' 주입할 기억 — 회상 보장의 핵심.
