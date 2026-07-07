@@ -3,7 +3,7 @@ chcp 65001 >nul
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 set "HERE=%~dp0"
-cd /d "%HERE%"
-call "%HERE%launch\_py.bat" || exit /b 9
-%PY% agent_ops\agentops.py status
+cd /d "%HERE%.."
+call "%HERE%_py.bat" || exit /b 9
+%PY% agent_ops\agentops.py doctor
 pause

@@ -32,7 +32,7 @@ python agent_ops\agentops.py verify
 - 산출: `report-xlsx --input x.csv` / `office-doc --kind pptx --spec s.json` / `report-html --input x.csv`
 - 기억: `remember "..."` / `recall <키워드>` / `book --open` / `wiki`
 - 감시·자동화: `watch` / `timeline` / `routine save|list|run`
-- 무인 오케스트레이터: `RUN_AGENTOPS_ORCHESTRATOR.bat.txt`를 `.bat`으로 바꿔 실행(병렬판도 동일)
+- 무인 오케스트레이터: `launch\RUN_AGENTOPS_ORCHESTRATOR.bat.txt`를 `.bat`으로 바꿔 실행(병렬판도 동일)
 
 ## 불변 규칙
 

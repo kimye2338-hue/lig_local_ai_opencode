@@ -15,7 +15,7 @@
 - `docs/` — 문서. **사용법은 `docs/사용법/GUIDE.md` 하나면 된다.**
 - `tests/` — 테스트
 - `tools/` — 오프라인 반입 바이너리(Obsidian·OCR 엔진 등)
-- `RUN_AGENTOPS_*.bat.txt` — 보조 런처(쓰려면 `.bat`으로 이름 변경)
+- `launch\RUN_AGENTOPS_*.bat.txt` — 고급 무인 오케스트레이터/진단 런처(쓰려면 `.bat`으로 이름 변경). 루트는 `RUN_OPENCODE_LIG.bat` 하나만 두어 깔끔하게 정리
 
 ## 처음이라면
 
