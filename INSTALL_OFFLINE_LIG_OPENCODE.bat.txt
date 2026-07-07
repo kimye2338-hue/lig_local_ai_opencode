@@ -3,6 +3,8 @@ setlocal EnableExtensions EnableDelayedExpansion
 set "ROOT=%USERPROFILE%\OpenCodeLIG"
 set "BIN=%ROOT%\bin"
 set "WS=%ROOT%\workspace"
+set "USERDATA=%USERPROFILE%\OpenCodeLIG_USERDATA"
+set "SEED=%~dp0userdata_seed"
 set "SUMS=%~dp0SHA256SUMS.txt"
 set "PAYLOAD_EXE=%~dp0payload\opencode.exe"
 echo.
@@ -66,6 +68,24 @@ if errorlevel 8 (
   pause
   exit /b 1
 )
+rem Seed OpenCodeLIG_USERDATA with the pre-filled gateway secret so the
+rem assistant connects with zero configuration. Non-destructive: only seeds
+rem the secret when it does not already exist (USERDATA is inviolable — an
+rem existing key/memory/wiki is never overwritten here).
+if not exist "%USERDATA%\secrets" mkdir "%USERDATA%\secrets"
+if exist "%SEED%" (
+  if not exist "%USERDATA%\secrets\lig-api.env" (
+    robocopy "%SEED%" "%USERDATA%" /E /NFL /NDL /NJH /NJS /NP >nul
+    if errorlevel 8 (
+      echo [WARN] USERDATA seed copy reported errors; check %USERDATA%
+    ) else (
+      echo [OK] Gateway secret seeded: %USERDATA%\secrets\lig-api.env
+    )
+  ) else (
+    echo [SKIP] Existing USERDATA secret kept: %USERDATA%\secrets\lig-api.env
+  )
+)
+
 rem Project-local opencode config: disable autoupdate so an offline
 rem PC never waits on update checks at startup.
 (
