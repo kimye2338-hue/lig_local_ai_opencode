@@ -32,6 +32,9 @@ except Exception:  # 폴백
 
 ROUTINES_DIR = MEMORY / "routines"
 MAX_STEPS = 50
+# 학습된 절차(루틴) 총 개수 상한 — 모델/사용자가 무한정 쌓아 관리 불능/노이즈가 되지
+# 않도록. 초과 시 가장 오래된 것부터 자동 정리(LRU). 사용자가 명시로 늘릴 수 있음.
+MAX_ROUTINES = 100
 # 재생하면 안 되는(부작용/일회성) 도구는 저장에서 제외.
 _SKIP_TOOLS = {"run_diagnostic", "remember", "project_info", "screenshot"}
 
@@ -68,6 +71,26 @@ def routine_from_history(diag_dir: Path, max_steps: int = MAX_STEPS) -> List[Dic
     return steps
 
 
+def _prune_routines(keep: Optional[int] = None) -> int:
+    """루틴 개수가 상한을 넘으면 가장 오래된(mtime) 것부터 정리(LRU). 정리 개수 반환.
+    무한증식 방지: 모델이 배운 절차를 계속 저장해도 총량이 관리 가능하게 유지된다.
+    (keep 미지정 시 호출 시점의 MAX_ROUTINES를 읽는다 — 기본인자 고정 회피)"""
+    if keep is None:
+        keep = MAX_ROUTINES
+    if not ROUTINES_DIR.is_dir():
+        return 0
+    files = sorted(ROUTINES_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime)
+    removed = 0
+    while len(files) > keep:
+        old = files.pop(0)
+        try:
+            old.unlink()
+            removed += 1
+        except Exception:
+            break
+    return removed
+
+
 def save_routine(name: str, steps: List[Dict[str, Any]], description: str = "") -> Dict[str, Any]:
     if not steps:
         return {"ok": False, "error": "저장할 성공 단계가 없습니다 (먼저 작업을 성공시키세요)"}
@@ -77,7 +100,11 @@ def save_routine(name: str, steps: List[Dict[str, Any]], description: str = "") 
             "description": description, "steps": steps}
     path = ROUTINES_DIR / f"{slug}.json"
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"ok": True, "path": str(path), "slug": slug, "step_count": len(steps)}
+    pruned = _prune_routines()  # 상한 초과 시 오래된 것 자동 정리(무한증식 방지)
+    out = {"ok": True, "path": str(path), "slug": slug, "step_count": len(steps)}
+    if pruned:
+        out["pruned_old"] = pruned
+    return out
 
 
 def list_routines() -> List[Dict[str, Any]]:
