@@ -29,6 +29,16 @@ def find_matlab() -> str:
     return ""
 
 
+def _decode_console(raw: bytes) -> str:
+    """MATLAB 콘솔 출력 디코드. 한국어 Windows 는 CP949 인 경우가 있어 utf-8 실패 시 폴백."""
+    if not raw:
+        return ""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("cp949", errors="replace")
+
+
 def _audit(script_path: Path, result: Dict[str, Any]) -> None:
     audit_record({
         "kind": "adapter",
@@ -53,11 +63,13 @@ def execute(script_path: str, options: Dict[str, Any] | None = None) -> Dict[str
         _audit(path, result)
         return result
     timeout_s = int(opts.get("timeout_s") or 300)
-    cmd = [exe, "-batch", f"run('{path.name}')"]
+    # 파일명에 홑따옴표가 있으면 MATLAB run('...') 문장이 깨진다 — '' 로 이스케이프.
+    safe_name = path.name.replace("'", "''")
+    cmd = [exe, "-batch", f"run('{safe_name}')"]
     try:
         r = subprocess.run(cmd, cwd=str(path.parent), capture_output=True, timeout=timeout_s)
-        out = (r.stdout or b"").decode("utf-8", errors="replace")
-        err = (r.stderr or b"").decode("utf-8", errors="replace")
+        out = _decode_console(r.stdout)
+        err = _decode_console(r.stderr)
         result = {
             "ok": r.returncode == 0,
             "returncode": r.returncode,

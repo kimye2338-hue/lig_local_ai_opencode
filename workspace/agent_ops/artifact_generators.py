@@ -521,6 +521,15 @@ def classify_mail(item: Dict[str, str]) -> str:
 _ACTIONABLE = ["결재/승인", "보고/제출", "검토 요청", "회의/일정"]
 
 
+def _md_cell(value: Any, limit: int = 0) -> str:
+    """외부 데이터(메일 제목/본문 등)를 Markdown 표 셀에 안전하게 넣는다.
+
+    '|'는 열 구분자로, 줄바꿈은 표 종료로 해석되므로 그대로 넣으면 표가 깨진다.
+    """
+    text = re.sub(r"\s+", " ", str(value or "")).strip().replace("|", "\\|")
+    return text[:limit] if limit else text
+
+
 def gen_mail_report(task: str, out_dir: Path,
                     ctx: Optional[Dict[str, Any]] = None,
                     inbox: Optional[List[Dict[str, str]]] = None) -> List[Path]:
@@ -538,7 +547,7 @@ def gen_mail_report(task: str, out_dir: Path,
         cat = classify_mail(item)
         counts[cat] = counts.get(cat, 0) + 1
         by_cat.setdefault(cat, []).append(item)
-        rows.append(f"| {cat} | {item.get('from','')} | {item.get('subject','')} | {item.get('body','')[:40]} |")
+        rows.append(f"| {cat} | {_md_cell(item.get('from'))} | {_md_cell(item.get('subject'))} | {_md_cell(item.get('body'), 40)} |")
     summary = ", ".join(f"{k} {v}건" for k, v in counts.items())
     body = f"""# 메일 분류/요약 보고서
 
@@ -565,7 +574,7 @@ def gen_mail_report(task: str, out_dir: Path,
         for item in by_cat.get(cat, []):
             n += 1
             action_lines.append(
-                f"| {n} | {cat} | {item.get('subject','')} | {item.get('from','')} | 대기 |")
+                f"| {n} | {cat} | {_md_cell(item.get('subject'))} | {_md_cell(item.get('from'))} | 대기 |")
     actions = f"""# 오늘 처리할 액션 아이템
 
 - 요청: {task}
@@ -928,6 +937,12 @@ def _maybe_enrich(task: str, files_by_kind: Dict[str, List[str]], enrich: bool,
     for kind, paths in files_by_kind.items():
         names = [Path(p).name for p in paths]
         originals = {p: Path(p).read_text(encoding="utf-8") for p in paths}
+        # 후보 검증은 '현재 적용된 최신 세트' 기준이어야 한다. originals 스냅샷
+        # 기준이면 멀티파일 kind에서 두 후보가 각자 필수 마커를 지워도 서로의
+        # 원본 덕에 모두 통과해, 최종 세트가 한 번도 검증되지 않은 채 마커를
+        # 전부 잃을 수 있다. current 기준이면 승인된 모든 상태(최종 포함)가
+        # 세트 전체 검증을 통과한 상태다.
+        current = dict(originals)
         for p in paths:
             path = Path(p)
             if path.suffix not in _ENRICHABLE_SUFFIXES:
@@ -938,11 +953,12 @@ def _maybe_enrich(task: str, files_by_kind: Dict[str, List[str]], enrich: bool,
                 result["fallback"].append(
                     {"file": path.name, "reason": f"llm error: {exc!r}"[:200]})
                 continue
-            texts = [candidate if q == p else originals[q] for q in paths]
+            texts = [candidate if q == p else current[q] for q in paths]
             verdict = validate_artifact_set(kind, [t or "" for t in texts], task, names,
                                             required_terms=required_terms or [])
             if verdict["ok"]:
                 atomic_write_text(path, candidate)
+                current[p] = candidate
                 result["applied"].append(path.name)
             else:
                 failed = ", ".join(v["rule"] for v in verdict["violations"][:5])
@@ -990,10 +1006,30 @@ def generate_artifacts(task: str, kinds: List[str],
     ArtifactContext; every generated set is quality-validated ("quality"),
     and enrich=True routes files through the LLM fill path ("enrichment").
     """
-    target = Path(out_dir) if out_dir else ARTIFACTS_DIR / time.strftime("%Y%m%d_%H%M%S")
+    # task를 한 줄로 정규화한다. 줄바꿈이 남으면 VBA(')/.scr(;)/.jou(;)/.m(%)
+    # 한 줄 주석과 .py docstring이 둘째 줄부터 깨져 실행 불가 산출물이 되고,
+    # atomic_write_text의 \r\n→\n 정규화 때문에 validator의 task_embedded
+    # 규칙(`task in t`)도 항상 실패한다.
+    task = re.sub(r"\s+", " ", task or "").strip()
+    run_id = time.strftime("%Y%m%d_%H%M%S")
+    target = Path(out_dir) if out_dir else ARTIFACTS_DIR / run_id
+    if out_dir is None and target.exists():
+        # 같은 초에 시작한 두 run이 폴더를 공유해 고정 파일명 산출물이
+        # 서로 덮어써지는 것을 방지 — 접미사로 uniquify.
+        n = 2
+        while (ARTIFACTS_DIR / f"{run_id}_{n}").exists():
+            n += 1
+        run_id = f"{run_id}_{n}"
+        target = ARTIFACTS_DIR / run_id
     target.mkdir(parents=True, exist_ok=True)
-    ctx = dict(context) if context else build_artifact_context(task)
-    ctx.setdefault("run_id", time.strftime("%Y%m%d_%H%M%S"))
+    if context:
+        ctx = dict(context)
+        ctx.setdefault("run_id", run_id)
+    else:
+        # 폴더명과 ctx의 run_id가 각각 strftime을 호출해 초 경계에서 어긋나지
+        # 않도록, 여기서 만든 run_id 하나를 공유한다.
+        ctx = build_artifact_context(task)
+        ctx["run_id"] = run_id
     files: List[str] = []
     errors: List[str] = []
     files_by_kind: Dict[str, List[str]] = {}
@@ -1021,6 +1057,12 @@ def generate_artifacts(task: str, kinds: List[str],
                                required_terms=required_terms)
     if enrichment["requested"]:
         _record_enrich_diag(task, enrichment)
+    if enrichment.get("applied"):
+        # enrichment가 파일을 교체했으면 quality는 디스크의 최종 상태로 재계산 —
+        # 아니면 반환되는 quality/quality_ok가 scaffold 기준이라 최종 파일과 어긋난다.
+        quality = {kind: validate_files(kind, paths, task, required_terms=required_terms)
+                   for kind, paths in files_by_kind.items()}
+        quality_ok = all(v["ok"] for v in quality.values()) if quality else True
     return {"ok": not errors, "out_dir": str(target), "files": files,
             "errors": errors, "quality": quality, "quality_ok": quality_ok,
             "input_grounded": bool(required_terms) and quality_ok,

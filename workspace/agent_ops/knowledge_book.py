@@ -167,7 +167,10 @@ def _entry_card(r: Dict[str, Any], faded: bool = False) -> str:
         badge = '<span class="badge archived">보관됨</span>'
         faded = True
     cls = "card faded" if faded else "card"
-    search = html.escape((title + " " + body + " " + label).lower(), quote=True)
+    # 검색 인덱스는 escape 전 원문 기준으로 만든다 — 이미 escape된 title/body를
+    # 다시 escape하면 "R&D"가 "r&amp;amp;d"로 이중 인코딩되어 검색에서 못 찾는다.
+    search_raw = (str(r.get("title", ""))[:120] + " " + str(r.get("body", ""))[:600] + " " + label).lower()
+    search = html.escape(search_raw, quote=True)
     status = "archived" if r.get("status") != "active" else "active"
     return (f'<div class="{cls}" data-search="{search}" data-kind="{html.escape(kind)}" data-status="{status}">'
             f'<div class="meta"><span class="badge" style="background:{color}">{label}</span>'
@@ -250,11 +253,12 @@ apply();
 """
 
 
-def _wiki_pages_html() -> str:
+def _wiki_pages_html(refresh: bool = True) -> str:
     """주제 위키 챕터 — 페이지가 곧 블로그 글. 기록이 쌓일수록 글이 두꺼워진다."""
     try:
         from .wiki_manager import AUTO_MARK, MANUAL_DIR, WIKI_DIR, consolidate_quietly
-        consolidate_quietly()  # 책은 항상 최신 위키 위에서
+        if refresh:
+            consolidate_quietly()  # 책은 항상 최신 위키 위에서
     except Exception:  # noqa: BLE001
         return ""
     if not WIKI_DIR.is_dir():
@@ -311,7 +315,7 @@ def _contradiction_banner() -> str:
     if not pairs:
         return ""
     items = "".join(
-        f"<li>[{p['topic']}] \"{html.escape(p['a_title'][:40])}\" ↔ "
+        f"<li>[{html.escape(str(p['topic']))}] \"{html.escape(p['a_title'][:40])}\" ↔ "
         f"\"{html.escape(p['b_title'][:40])}\"</li>"
         for p in pairs[:8]
     )
@@ -323,8 +327,13 @@ def _contradiction_banner() -> str:
            f"<ul>{items}</ul>{more}</div>")
 
 
-def build_book(now: datetime | None = None) -> Path:
-    """지식책 HTML 생성 — 언제든 호출 가능, 항상 전체를 다시 그린다."""
+def build_book(now: datetime | None = None, refresh_wiki: bool = True) -> Path:
+    """지식책 HTML 생성 — 언제든 호출 가능, 항상 전체를 다시 그린다.
+
+    refresh_wiki=False 면 위키 consolidate를 건너뛴다 — 직전에 이미
+    consolidate_quietly()를 돌린 경로(add_memory_event → rebuild_quietly)에서
+    원장 전체 재파싱이 중복 수행되는 것을 막는다.
+    """
     current = _now(now)
     entries = _load_entries()
     active = [r for r in entries if r.get("status") == "active"]
@@ -370,7 +379,7 @@ def build_book(now: datetime | None = None) -> Path:
         for r in picks:
             parts.append(_entry_card(r).replace("class=\"card\"", "class=\"card review\""))
 
-    wiki_pages = _wiki_pages_html()
+    wiki_pages = _wiki_pages_html(refresh=refresh_wiki)
     if wiki_pages:
         parts.append(wiki_pages)
 
@@ -429,6 +438,8 @@ def build_book(now: datetime | None = None) -> Path:
 def rebuild_quietly() -> None:
     """부수효과 훅(remember/브리핑/설치)용 — 실패해도 본 작업을 막지 않는다."""
     try:
-        build_book()
+        # 이 훅은 add_memory_event가 consolidate_quietly() 직후에 부른다 —
+        # 위키 재통합을 또 돌리지 않는다.
+        build_book(refresh_wiki=False)
     except Exception:  # noqa: BLE001 - 책 생성 실패가 기억 저장을 막으면 안 된다
         pass

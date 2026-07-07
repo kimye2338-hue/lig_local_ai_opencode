@@ -257,7 +257,14 @@ def run_doctor() -> dict:
     except Exception as exc:
         checks["artifact_pipeline"] = {"error": repr(exc)}
     atomic_write_json(RESULTS / "environment_check.json", checks)
-    lines = ["# AgentOps Doctor Report", "", f"- Generated: {checks['timestamp']}", f"- ChromeDriver found: `{found or 'NOT FOUND'}`", f"- Chrome 9222 OK: `{checks['chrome_9222'].get('ok')}`", f"- UTF-8 roundtrip OK: `{checks['encoding']['roundtrip_ok']}`", f"- LLM profile: `{checks.get('llm_endpoints', {}).get('profile', 'unknown')}`", f"- Local LLM reachable: `{checks.get('llm_endpoints', {}).get('local_reachable', {}).get('ok')}`", f"- Global memory dir: `{checks.get('project_profile', {}).get('global_memory_dir', 'unknown')}`", f"- Folder profile active: `{checks.get('project_profile', {}).get('project_profile_active')}`", "", "## Raw", "```json", json.dumps(checks, ensure_ascii=False, indent=2), "```"]
+    # company_gateway 프로필에선 로컬 LLM 점검을 건너뛰므로(skipped) ok=False가
+    # 장애로 오독되지 않도록 'n/a'로 표기한다.
+    _local_reachable = checks.get('llm_endpoints', {}).get('local_reachable', {})
+    if isinstance(_local_reachable, dict) and "skipped" in _local_reachable:
+        local_reachable_label = "n/a (company_gateway)"
+    else:
+        local_reachable_label = _local_reachable.get("ok") if isinstance(_local_reachable, dict) else None
+    lines = ["# AgentOps Doctor Report", "", f"- Generated: {checks['timestamp']}", f"- ChromeDriver found: `{found or 'NOT FOUND'}`", f"- Chrome 9222 OK: `{checks['chrome_9222'].get('ok')}`", f"- UTF-8 roundtrip OK: `{checks['encoding']['roundtrip_ok']}`", f"- LLM profile: `{checks.get('llm_endpoints', {}).get('profile', 'unknown')}`", f"- Local LLM reachable: `{local_reachable_label}`", f"- Global memory dir: `{checks.get('project_profile', {}).get('global_memory_dir', 'unknown')}`", f"- Folder profile active: `{checks.get('project_profile', {}).get('project_profile_active')}`", "", "## Raw", "```json", json.dumps(checks, ensure_ascii=False, indent=2), "```"]
     atomic_write_text(REPORTS / "DOCTOR_REPORT.md", "\n".join(lines))
     update_checkpoint("doctor completed")
     return checks

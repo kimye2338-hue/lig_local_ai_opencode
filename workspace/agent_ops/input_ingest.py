@@ -240,7 +240,7 @@ def ingest_inputs(paths: Sequence[Any], max_files: int = MAX_FILES) -> Dict[str,
             size = path.stat().st_size
             with path.open("rb") as fh:
                 raw = fh.read(MAX_BYTES_FULL)
-            text = decode_file_bytes(raw)
+            text = decode_file_bytes(raw, truncated=size > MAX_BYTES_FULL)
         except Exception as exc:
             errors.append(f"{path.name}: 읽기 실패 {exc!r}"[:200])
             continue

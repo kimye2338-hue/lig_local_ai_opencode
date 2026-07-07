@@ -574,6 +574,9 @@ def _spa_map(cdp: _CdpClient, options: dict) -> dict:
         except Exception as exc:  # noqa: BLE001
             entry.update({"ok": False, "error": str(exc)})
         pages.append(entry)
+        if isinstance(cdp.ws, WsClient) and cdp.ws.closed:
+            # 수신 타임아웃 등으로 연결이 죽으면 이후 항목도 전부 실패한다 — 중단.
+            break
 
     result = {
         "created_at": now(),
@@ -629,7 +632,12 @@ def _wait_for_selector(cdp: _CdpClient, options: dict) -> dict:
 def _wait_ready(cdp: _CdpClient, timeout: float) -> None:
     deadline = time.monotonic() + timeout
     while True:
-        state = _eval(cdp, "document.readyState")
+        try:
+            state = _eval(cdp, "document.readyState")
+        except Exception:
+            # 내비게이션 직후 Runtime.evaluate 는 'Execution context was destroyed'
+            # 오류를 흔히 낸다 — 정상 로딩 중이므로 deadline 까지 재시도(_wait_rendered 와 동일).
+            state = None
         if state in ("interactive", "complete"):
             return
         if time.monotonic() >= deadline:
@@ -638,8 +646,10 @@ def _wait_ready(cdp: _CdpClient, timeout: float) -> None:
 
 
 def _ensure_dir(path: Path) -> None:
+    # 동명 파일을 삭제하면 사용자가 output_dir 를 오지정했을 때 데이터가 파괴된다.
+    # 삭제 대신 명확한 오류를 던진다(execute 의 상위 가드가 ok=False 로 변환).
     if path.exists() and not path.is_dir():
-        path.unlink()
+        raise NotADirectoryError(f"디렉터리를 만들 수 없음 — 같은 경로에 파일이 있음: {path}")
     path.mkdir(parents=True, exist_ok=True)
 
 

@@ -15,7 +15,8 @@ TEXT_EXTENSIONS = {
     ".py", ".txt", ".yaml", ".yml",
 }
 BASE_PATTERNS = [
-    ("lig_api_key", re.compile(r"LIG_API_KEY\s*=\s*[^P\s]", re.IGNORECASE)),
+    # 플레이스홀더(PUT_/REPLACE_WITH_)만 통과 — 그 외 값은 첫 글자와 무관하게 전부 탐지
+    ("lig_api_key", re.compile(r"LIG_API_KEY\s*=\s*(?!PUT_|REPLACE_WITH_)\S", re.IGNORECASE)),
     ("bearer", re.compile(r"Bearer\s+[A-Za-z0-9]", re.IGNORECASE)),
     ("key_token_password", re.compile(r"(api[_-]?key|token|password)\s*[:=]\s*['\"]?[A-Za-z0-9]{8,}", re.IGNORECASE)),
     ("internal_hostname", re.compile(r"\b[a-z0-9-]+\.(?:local|internal|corp)\b", re.IGNORECASE)),

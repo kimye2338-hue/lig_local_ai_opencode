@@ -61,7 +61,15 @@ def _load() -> Dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
-        print(f"[schedule] WARNING: could not parse {path}, starting empty (backup kept)", file=sys.stderr)
+        # 손상본을 즉시 별도 파일로 보존한다. 이렇게 하지 않으면 다음 _save()가
+        # 손상된 현재 파일을 .bak에 복사해 마지막 정상 백업까지 덮어써,
+        # 일정 전체가 복구 불능으로 소실된다 (USERDATA 보존 원칙).
+        corrupt = path.with_name(f"{path.name}.corrupt-{datetime.now().strftime('%Y%m%d%H%M%S')}")
+        try:
+            shutil.copy2(path, corrupt)
+        except Exception:
+            corrupt = "(copy failed)"
+        print(f"[schedule] WARNING: could not parse {path}, starting empty (corrupt copy: {corrupt})", file=sys.stderr)
         return {"items": []}
     if isinstance(data, list):
         return {"items": data}
@@ -74,7 +82,14 @@ def _save(data: Dict[str, Any]) -> None:
     path = schedule_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
-        shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
+        # 현재 파일이 유효 JSON일 때만 .bak을 갱신 — 손상본으로 마지막 정상
+        # 백업을 덮어쓰는 것을 막는다.
+        try:
+            json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        else:
+            shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
     atomic_write_json(path, data)
 
 

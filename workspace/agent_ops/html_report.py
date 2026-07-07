@@ -17,6 +17,9 @@ from __future__ import annotations
 import csv
 import html
 import io
+import math
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -71,7 +74,11 @@ def _svg_bar_chart(labels: Sequence[str], values: Sequence[float],
     if not values:
         return ""
     flags = list(flags or [])[:MAX_CHART_BARS]
-    vmax = max(values) or 1.0
+    # 음수는 0으로 클램프(음수 height는 SVG 렌더링 오류), 전부 0 이하면 차트 생략.
+    values = [v if math.isfinite(v) and v > 0 else 0.0 for v in values]
+    vmax = max(values)
+    if vmax <= 0:
+        return ""
     n = len(values)
     bw, gap, top, bottom, left = 34, 10, 16, 46, 8
     h, w = 180, left * 2 + n * (bw + gap)
@@ -110,8 +117,9 @@ def _fmt_num(v: float) -> str:
 
 def _is_number(s: str) -> bool:
     try:
-        float(str(s).replace(",", "").strip())
-        return True
+        # 'nan'/'inf'는 숫자열로 취급하지 않는다 — vmax가 NaN이 되면 차트
+        # 좌표 전체가 NaN으로 출력된다.
+        return math.isfinite(float(str(s).replace(",", "").strip()))
     except Exception:
         return False
 
@@ -197,29 +205,52 @@ def write_report(out_dir: Path, title: str, html_text: str, filename: str = "리
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / filename
-    path.write_text(html_text, encoding="utf-8")
+    # 원자적 쓰기 — 중단 시 반쯤 쓰인 리포트가 남지 않게 한다.
+    fd, tmp = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(out_dir))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(html_text)
+        os.replace(tmp, str(path))
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.unlink(tmp)
+            except Exception:
+                pass
     return path
 
 
-def report_from_csv(path: Path, out_dir: Path, title: Optional[str] = None) -> Path:
+def report_from_csv(path: Path, out_dir: Path, title: Optional[str] = None,
+                    filename: Optional[str] = None) -> Path:
     p = Path(path)
     headers, rows, chart = build_from_csv(p)
     facts = [f"{p.name}: {len(rows)}행 × {len(headers)}열"]
     table = render_table(headers, rows)
     html_text = render_report(title or f"{p.stem} 데이터 리포트",
                               subtitle=str(p), facts=facts, table_html=table, chart_html=chart)
-    return write_report(out_dir, title or p.stem, html_text)
+    # 기본 파일명을 소스 기반으로 — 고정 '리포트.html'이면 같은 폴더의 두 번째
+    # CSV 처리에서 앞의 리포트를 조용히 덮어쓴다.
+    return write_report(out_dir, title or p.stem, html_text,
+                        filename=filename or f"{p.stem}_리포트.html")
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     import sys
     argv = argv if argv is not None else sys.argv[1:]
     if not argv:
-        print("사용: python -m agent_ops.html_report <data.csv> [out_dir]")
+        print("사용: python -m agent_ops.html_report <data.csv> [out.html | out_dir]")
         return 2
     src = Path(argv[0])
-    out_dir = Path(argv[1]) if len(argv) > 1 else src.parent
-    path = report_from_csv(src, out_dir)
+    filename = None
+    if len(argv) > 1:
+        dest = Path(argv[1])
+        if dest.suffix.lower() in {".html", ".htm"}:
+            out_dir, filename = dest.parent if str(dest.parent) != "" else Path("."), dest.name
+        else:
+            out_dir = dest
+    else:
+        out_dir = src.parent
+    path = report_from_csv(src, out_dir, filename=filename)
     print(f"HTML 리포트 생성: {path}")
     return 0
 

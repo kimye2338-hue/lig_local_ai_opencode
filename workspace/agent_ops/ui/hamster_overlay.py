@@ -55,6 +55,9 @@ STATUS_LABELS = {
 ATTENTION_STATES = {"done", "needs_user", "error", "stalled"}
 FRAME_STATES = ("idle", "working", "done", "needs_user", "error", "stalled")
 
+# Single-instance mutex handle, kept alive for the whole process (see run_app).
+_APP_MUTEX = None
+
 
 def pet_asset_dir() -> Path:
     """단일 스티커 펫 이미지 폴더(assets/pet). 애니메이션 프레임(assets/hamster_pet)과 별개.
@@ -252,26 +255,14 @@ def read_recent_events(state_dir: Path = DEFAULT_STATE_DIR, diag_dir: Path = DEF
 def _opencode_running() -> bool:
     try:
         import subprocess
-        cp = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {WATCH_PROCESS}"], capture_output=True, text=True, timeout=4)
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        cp = subprocess.run(
+            ["tasklist", "/FI", f"IMAGENAME eq {WATCH_PROCESS}"],
+            capture_output=True, text=True, timeout=4, creationflags=creationflags,
+        )
         return WATCH_PROCESS.lower() in (cp.stdout or "").lower()
     except Exception:
         return True
-
-
-def _default_geometry(width: int = 245, height: int = 245) -> str:
-    try:
-        import tkinter as tk
-        root = tk.Tk()
-        root.withdraw()
-        sw = root.winfo_screenwidth()
-        sh = root.winfo_screenheight()
-        root.destroy()
-        x = max(8, sw - width - 28)
-        y = max(8, sh - height - 68)
-        return f"{width}x{height}+{x}+{y}"
-    except Exception:
-        return f"{width}x{height}+60+60"
-
 
 
 class SpriteSet:
@@ -365,7 +356,10 @@ class WindowsTrayIcon:
             CMD_DETAILS = 1003
             CMD_EXIT = 1004
 
-            WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_long, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+            LRESULT = ctypes.c_ssize_t
+            WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+            user32.DefWindowProcW.restype = LRESULT
+            user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
 
             class WNDCLASS(ctypes.Structure):
                 _fields_ = [
@@ -447,14 +441,16 @@ class WindowsTrayIcon:
             nid.uCallbackMessage = WM_TRAY
             nid.hIcon = hicon
             nid.szTip = APP_NAME
-            nid.uTimeoutOrVersion = NOTIFYICON_VERSION_4
+            # Legacy (v0) callback behavior: lParam arrives as the raw mouse
+            # message (WM_RBUTTONUP / WM_LBUTTONDBLCLK), which wnd_proc compares
+            # directly. NIM_SETVERSION(v4) would pack the event into LOWORD and
+            # deliver WM_CONTEXTMENU instead, breaking those comparisons.
             if shell32.Shell_NotifyIconW(NIM_ADD, ctypes.byref(nid)):
-                shell32.Shell_NotifyIconW(NIM_SETVERSION, ctypes.byref(nid))
                 self._nid = nid
                 self.available = True
 
             msg = wintypes.MSG()
-            while self._run and user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
+            while self._run and user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
                 user32.TranslateMessage(ctypes.byref(msg))
                 user32.DispatchMessageW(ctypes.byref(msg))
 
@@ -535,6 +531,12 @@ class HamsterPetOverlay:
         self._visible = True
         self._process_absence = 0
         self._started_at = time.time()
+        self._poll_after_id: Optional[str] = None
+        # tasklist polling runs on a daemon worker so a slow/hung tasklist call
+        # never freezes the Tk main loop; the main thread only reads this flag.
+        self._process_present = True
+        self._watch_stop = threading.Event()
+        self._watch_thread: Optional[threading.Thread] = None
 
         self.canvas.bind("<ButtonPress-1>", self._start_drag)
         self.canvas.bind("<B1-Motion>", self._drag)
@@ -551,9 +553,10 @@ class HamsterPetOverlay:
         self._menu.add_separator()
         self._menu.add_command(label="종료", command=self.exit_app)
 
-        self.refresh_once()
+        self._poll()
         self._animate()
         self._process_queue()
+        self._start_watch_thread()
         self._watch_process()
 
     def _start_drag(self, event: Any) -> None:
@@ -575,21 +578,25 @@ class HamsterPetOverlay:
             self._menu.grab_release()
 
     def _process_queue(self) -> None:
-        while True:
-            try:
-                cmd = self.queue.get_nowait()
-            except Empty:
-                break
-            if cmd == "show":
-                self.show()
-            elif cmd == "hide":
-                self.hide()
-            elif cmd == "toggle":
-                self.toggle_visibility()
-            elif cmd == "details":
-                self._show_details()
-            elif cmd == "exit":
-                self.exit_app()
+        try:
+            while True:
+                try:
+                    cmd = self.queue.get_nowait()
+                except Empty:
+                    break
+                if cmd == "show":
+                    self.show()
+                elif cmd == "hide":
+                    self.hide()
+                elif cmd == "toggle":
+                    self.toggle_visibility()
+                elif cmd == "details":
+                    self._show_details()
+                elif cmd == "exit":
+                    self.exit_app()
+                    return
+        except Exception:
+            pass
         self.root.after(250, self._process_queue)
 
     def toggle_visibility(self) -> None:
@@ -612,17 +619,19 @@ class HamsterPetOverlay:
 
     def exit_app(self) -> None:
         self._save_position()
+        self._watch_stop.set()
         try:
             self.tray.stop()
         finally:
             self.root.destroy()
 
     def refresh_once(self) -> None:
+        """One-shot state refresh + redraw. Safe to call from the menu without
+        spawning another polling chain (the periodic loop lives in _poll)."""
         old_status = self.snapshot.status
         self.snapshot = load_snapshot()
         if self.snapshot.status != old_status:
             self.frame_index = 0
-            self.frame_step = 1
             self.frame_step = 1
         attention_key = f"{self.snapshot.status}:{self.snapshot.last_update}:{self.snapshot.message}"
         if self.snapshot.status in ATTENTION_STATES and attention_key != self._last_attention_key:
@@ -630,20 +639,46 @@ class HamsterPetOverlay:
             if not self._visible:
                 self.show()
         self._draw()
-        self.root.after(POLL_MS, self.refresh_once)
+
+    def _poll(self) -> None:
+        try:
+            self.refresh_once()
+        except Exception:
+            pass
+        finally:
+            self._poll_after_id = self.root.after(POLL_MS, self._poll)
+
+    def _start_watch_thread(self) -> None:
+        if not WATCH_PROCESS:
+            return
+        def _loop() -> None:
+            while not self._watch_stop.is_set():
+                present = _opencode_running()
+                self._process_present = present
+                # Poll roughly every 1.5s but wake early on stop.
+                if self._watch_stop.wait(1.5):
+                    break
+        self._watch_thread = threading.Thread(target=_loop, daemon=True)
+        self._watch_thread.start()
 
     def _watch_process(self) -> None:
-        if WATCH_PROCESS:
-            if _opencode_running():
-                self._process_absence = 0
-            else:
-                self._process_absence += 1
-                # Run launcher starts the pet just before OpenCode.
-                # Give OpenCode enough time to appear before auto-exiting the pet.
-                if time.time() - self._started_at > 20 and self._process_absence >= 4:
-                    self.exit_app()
-                    return
-        self.root.after(1500, self._watch_process)
+        exited = False
+        try:
+            if WATCH_PROCESS:
+                if self._process_present:
+                    self._process_absence = 0
+                else:
+                    self._process_absence += 1
+                    # Run launcher starts the pet just before OpenCode.
+                    # Give OpenCode enough time to appear before auto-exiting the pet.
+                    if time.time() - self._started_at > 20 and self._process_absence >= 4:
+                        self.exit_app()
+                        exited = True
+        except Exception:
+            pass
+        finally:
+            if not exited:
+                self.root.after(1500, self._watch_process)
 
     def _show_details(self, event: Any = None) -> None:
         tk = self.tk
@@ -670,19 +705,23 @@ class HamsterPetOverlay:
         text.configure(state="disabled")
 
     def _animate(self) -> None:
-        count = max(1, self.sprites.count(self.snapshot.status))
-        if count <= 1:
-            self.frame_index = 0
-        elif count == 2:
-            self.frame_index = 1 - self.frame_index
-        else:
-            nxt = self.frame_index + self.frame_step
-            if nxt >= count or nxt < 0:
-                self.frame_step *= -1
+        try:
+            count = max(1, self.sprites.count(self.snapshot.status))
+            if count <= 1:
+                self.frame_index = 0
+            elif count == 2:
+                self.frame_index = 1 - self.frame_index
+            else:
                 nxt = self.frame_index + self.frame_step
-            self.frame_index = nxt
-        self._draw()
-        self.root.after(ANIM_MS, self._animate)
+                if nxt >= count or nxt < 0:
+                    self.frame_step *= -1
+                    nxt = self.frame_index + self.frame_step
+                self.frame_index = nxt
+            self._draw()
+        except Exception:
+            pass
+        finally:
+            self.root.after(ANIM_MS, self._animate)
 
     def _draw(self) -> None:
         c = self.canvas
@@ -748,9 +787,15 @@ class HamsterPetOverlay:
 
 def run_app() -> None:
     import tkinter as tk
+    global _APP_MUTEX
     if platform.system().lower() == "windows":
-        mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "OpenCodeLIG_Hamster_Pet_Mutex")
-        if ctypes.windll.kernel32.GetLastError() == 183:
+        ERROR_ALREADY_EXISTS = 183
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        # Keep the handle alive for the process lifetime; releasing it would drop
+        # the single-instance guard. get_last_error() must be read right after the
+        # CreateMutexW call, before any other Win32 traffic clobbers it.
+        _APP_MUTEX = k32.CreateMutexW(None, False, "OpenCodeLIG_Hamster_Pet_Mutex")
+        if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
             return
     root = tk.Tk()
     HamsterPetOverlay(root)

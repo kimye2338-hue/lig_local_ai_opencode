@@ -15,7 +15,10 @@ def ensure_memory() -> None:
     MEMORY.mkdir(parents=True, exist_ok=True)
     if not MEMORY_JSONL.exists():
         write_jsonl(MEMORY_JSONL, [])
-    render_memory_views()
+        # 뷰 렌더는 원장을 처음 만들 때 1회만. 매 읽기(recall/load_memory)마다
+        # 렌더하면 조회 한 번에 USERDATA 파일 5~6개를 다시 쓰는 churn이 생긴다.
+        # 이후 갱신은 쓰기 경로(add_memory_event/memorycheck)가 담당한다.
+        render_memory_views()
 
 def add_memory_event(kind: str, title: str, body: str, status: str = "active", priority: str = "normal", source: str = "manual", supersedes: List[str] | None = None, tags: List[str] | None = None) -> Dict[str, Any]:
     ensure_memory()
@@ -137,18 +140,23 @@ def recall(task_kind: str = "", keywords: List[str] | None = None, limit: int = 
     scored: List[tuple[int, Dict[str, Any]]] = []
     for row in rows:
         text = " ".join(str(row.get(k, "")) for k in ["title", "body", "kind", "priority", "source"]).lower()
+        text += " " + " ".join(str(t) for t in (row.get("tags") or [])).lower()
         score = 0
         if task_kind and task_kind.lower() in text:
             score += 2
         score += sum(1 for k in keys if k and k in text)
+        # 질의와 최소 1개 이상 일치한 행에만 kind/source/priority 보너스를 얹는다.
+        # 무조건 가점이면 사용자 규칙(user/high, 기본 6점)이 어떤 질의에서도
+        # limit(6)를 점유해 진짜 관련 기억을 밀어낸다 — 상시 노출은 pinned_recall 담당.
+        if score <= 0:
+            continue
         if row.get("kind") in {"lesson", "error_pattern", "preference"}:
             score += 1
         if row.get("source") == "user":
             score += 3
         if row.get("priority") == "high":
             score += 2
-        if score > 0:
-            scored.append((score, row))
+        scored.append((score, row))
     scored.sort(key=lambda x: (-x[0], str(x[1].get("created_at", ""))))
     return [r for _, r in scored[:limit]]
 

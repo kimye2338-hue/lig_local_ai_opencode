@@ -301,7 +301,7 @@ def cmd_report_html(args):
     if not src.exists():
         print(f"[report-html] 입력 파일 없음: {src}")
         return 1
-    out_dir = _P("agent_ops/results/reports")
+    out_dir = RESULTS / "reports"
     path = report_from_csv(src, out_dir, title=(args.title or None))
     print(f"HTML 리포트 생성: {path}")
     print("브라우저로 열면 표/차트가 보입니다 (오프라인, 외부 리소스 없음).")
@@ -318,7 +318,7 @@ def cmd_report_xlsx(args):
         print(f"[report-xlsx] 입력 파일 없음: {src}")
         return 1
     headers, rows, _ = build_from_csv(src)
-    out = _P(args.out) if args.out else (_P("agent_ops/results/reports") / f"{src.stem}.xlsx")
+    out = _P(args.out) if args.out else (RESULTS / "reports" / f"{src.stem}.xlsx")
     r = write_xlsx(out, headers, rows)
     if not r.get("ok"):
         print(f"[report-xlsx] 실패: {r.get('error')}\n  {r.get('hint','')}")
@@ -344,7 +344,7 @@ def cmd_office_doc(args):
         print(f"[office-doc] 스펙 JSON 파싱 실패: {exc!r}")
         return 1
     title = str(spec.get("title") or "문서")
-    out = _P(args.out) if args.out else (_P("agent_ops/results/reports") / f"{title}.{args.kind}")
+    out = _P(args.out) if args.out else (RESULTS / "reports" / f"{title}.{args.kind}")
     if args.kind == "docx":
         from agent_ops.office_writer import write_docx
         r = write_docx(out, title, spec.get("sections", []) or [])
@@ -399,7 +399,10 @@ def cmd_routine(args):
             print("사용: routine run <이름>")
             return 2
         from agent_ops.tool_dispatch import ToolDispatcher
-        disp = ToolDispatcher(_P.cwd())
+        from agent_ops.core import ROOT as _WS_ROOT
+        # cwd가 아니라 workspace root 기준 — routine 저장 당시와 같은 root에서
+        # 재생해야 다른 폴더에서 실행해도 잘못된 파일을 건드리지 않는다.
+        disp = ToolDispatcher(_WS_ROOT)
         res = R.run_routine(args.name, disp)
         if res.get("ok"):
             print(f"루틴 재생 완료: {res['total']}단계 모두 성공")
@@ -416,7 +419,7 @@ def cmd_doc_template(args):
     if args.kind not in TEMPLATES:
         print(f"[doc-template] 종류: {' | '.join(TEMPLATES)}")
         return 2
-    out_dir = _P(args.out) if args.out else _P("agent_ops/results/reports")
+    out_dir = _P(args.out) if args.out else (RESULTS / "reports")
     res = generate(args.kind, out_dir, input_csv=(args.input or None),
                    title=(args.title or None), as_html=args.html, note=args.note)
     if not res.get("ok"):
@@ -495,9 +498,8 @@ def cmd_deps(args):
 
 def cmd_timeline(args):
     """audit.jsonl → 활동 타임라인 HTML(멈춤 의심 구간 강조). 무한대기 감시 시각화."""
-    from pathlib import Path as _P
     from agent_ops.activity_timeline import build_timeline
-    out_dir = _P("agent_ops/results/reports")
+    out_dir = RESULTS / "reports"
     path = build_timeline(out_dir, stall_gap=int(getattr(args, "gap", 600) or 600))
     print(f"활동 타임라인 생성: {path}")
     print("브라우저로 열면 활동·멈춤 의심 구간이 보입니다 (오프라인).")
@@ -644,7 +646,13 @@ def cmd_safety_check(args):
 def cmd_safe_write(args):
     target = (ROOT / args.target).resolve()
     content_file = (ROOT / args.content_file).resolve()
-    if not str(target).startswith(str(ROOT.resolve())):
+    # startswith 문자열 비교는 형제 폴더(workspace2 등)를 통과시킨다 —
+    # 경로 단위 포함 검사를 쓴다.
+    try:
+        inside = target.is_relative_to(ROOT.resolve())
+    except AttributeError:  # py<3.9 폴백
+        inside = str(target).startswith(str(ROOT.resolve()) + os.sep)
+    if not inside:
         print("Refusing to write outside project root.", file=sys.stderr)
         return 1
     if not content_file.exists():
@@ -656,7 +664,8 @@ def cmd_safe_write(args):
     validation = validate_written_file(target)
     if not validation.get("ok"):
         if backup and backup.exists():
-            target.write_text(backup.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+            # 복구도 원자적으로 — 이 시점에 중단되면 반쯤 쓰인 파일이 남는다.
+            atomic_write_text(target, backup.read_text(encoding="utf-8", errors="replace"))
         else:
             # 백업이 없던 신규 파일: 깨진 결과물을 디스크에 남기지 않는다.
             try:
@@ -708,9 +717,11 @@ def cmd_agent(args):
     out = RESULTS / "llm_responses" / "agent_cli_last.md"
     atomic_write_text(out, result.get("final_content", ""))
     print(f"결과: {result['outcome']}  (턴 {result['turns']}, 도구 실행 {len(result['tool_results'])}회)")
-    if result.get("outcome") == "local_fallback":
-        print("[게이트웨이 오류] 모든 제공자 폴백이 실패했습니다 — 네트워크/게이트웨이 상태를"
-              " 확인한 뒤 다시 시도하세요.", file=sys.stderr)
+    if result.get("outcome") == "llm_failed":
+        detail = result.get("llm_outcome") or "failed"
+        trigger = result.get("fallback_trigger") or "-"
+        print(f"[게이트웨이 오류] LLM 호출이 실패했습니다(outcome={detail}, trigger={trigger})"
+              " — 네트워크/게이트웨이 상태를 확인한 뒤 다시 시도하세요.", file=sys.stderr)
     failed = [r for r in result["tool_results"] if not r.get("ok")]
     if failed:
         print(f"실패한 도구 호출 {len(failed)}건: " + ", ".join(
@@ -813,9 +824,12 @@ def cmd_work(args):
             print(f"  설정 파일 위치: {SECRET_ENV_PATH}", file=sys.stderr)
             print("  lig-api.env 를 채운 뒤 다시 실행하세요.", file=sys.stderr)
             return 2
-        if agent_result.get("outcome") == "local_fallback":
-            print("[게이트웨이 오류] 모든 제공자 폴백이 실패했습니다 — 네트워크/게이트웨이 상태를"
-                  " 확인한 뒤 다시 시도하세요. (진단: OpenCodeLIG_USERDATA\\diagnostics)", file=sys.stderr)
+        if agent_result.get("outcome") == "llm_failed":
+            detail = agent_result.get("llm_outcome") or "failed"
+            trigger = agent_result.get("fallback_trigger") or "-"
+            print(f"[게이트웨이 오류] LLM 호출이 실패했습니다(outcome={detail}, trigger={trigger})"
+                  " — 네트워크/게이트웨이 상태를 확인한 뒤 다시 시도하세요."
+                  " (진단: OpenCodeLIG_USERDATA\\diagnostics)", file=sys.stderr)
         out = RESULTS / "llm_responses" / f"work_{run_id}.md"
         atomic_write_text(out, agent_result.get("final_content", ""))
         artifact_result = {
@@ -1002,9 +1016,13 @@ def cmd_schedule(args):
         item_id = _schedule_parse_id(args.id)
         risk = classify_risk("schedule.remove", str(item_id), ROOT)
         if risk == "dangerous" and not args.yes:
-            answer = (input("삭제할까요? [y/N] ") or "").strip().lower()
+            try:
+                answer = (input("삭제할까요? [y/N] ") or "").strip().lower()
+            except EOFError:
+                # 비대화식(stdin 없음) 실행 — 트레이스백 대신 '취소'로 처리.
+                answer = ""
             if answer != "y":
-                print("삭제를 취소했습니다.")
+                print("삭제를 취소했습니다. (비대화식 실행이면 --yes 를 사용하세요.)")
                 return 3
         result = schedule_store.remove(item_id)
         if not result.get("ok"):

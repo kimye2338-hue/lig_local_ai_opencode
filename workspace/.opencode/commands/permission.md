@@ -8,8 +8,8 @@ Requested action (if any): $ARGUMENTS
 
 The real permission approval policy cycle (Claude-Code-style Shift+Tab: **ASK**
 → **AUTO** → **FULL**, same agent/model, only approval behavior changes) is
-implemented in the **patched OpenCode build** — see `opencode_core_patch/README.md`
-and `PERMISSION_MODE_IMPLEMENTATION_REPORT.md`. In that build:
+implemented in the **patched OpenCode build** — see `docs/OPENCODE_INTEGRATION.md`
+for how this package integrates that build. In that build:
 
 ```text
 Shift+Tab            cycle ASK -> AUTO -> FULL -> ASK
@@ -29,14 +29,14 @@ active agent or model.
 
 If `$ARGUMENTS` asked to set a policy (`ask`, `auto`, `full`, `cycle`) in an
 unpatched build, say plainly: "this command cannot change the live approval
-policy — build the patched OpenCode (`opencode_core_patch/`) and use Shift+Tab
-or /permission there." If `$ARGUMENTS` was `status` or empty, report:
+policy — use the patched OpenCode build (see `docs/OPENCODE_INTEGRATION.md`) and
+Shift+Tab or /permission there." If `$ARGUMENTS` was `status` or empty, report:
 
 1. The ASK/AUTO/FULL policy meaning above.
 2. That `.opencode/plugins/command-guard.ts` blocks corrupted/dangerous bash in
    `tool.execute.before` regardless of the approval policy — this protection is
    independent of ASK/AUTO/FULL and independent of which agent is active.
-3. A pointer to `opencode_core_patch/README.md` for the true toggle.
+3. A pointer to `docs/OPENCODE_INTEGRATION.md` for the true toggle.
 
 Approval policy and the command guard are separate layers: the policy decides
 whether to prompt or auto-approve an `ask`; the guard hard-blocks dangerous

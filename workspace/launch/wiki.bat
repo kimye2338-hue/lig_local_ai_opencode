@@ -6,9 +6,15 @@ set PYTHONIOENCODING=utf-8
 set "HERE=%~dp0"
 for %%I in ("%HERE%..") do set "APP=%%~fI"
 for %%I in ("%APP%\..") do set "ROOT=%%~fI"
-rem 위키 vault = USERDATA\memory\wiki (불가침)
-if not defined LIG_MEMORY_DIR set "LIG_MEMORY_DIR=%ROOT%\userdata\memory"
-set "VAULT=%LIG_MEMORY_DIR%\wiki"
+rem 위키 vault = 파이썬 런타임의 실제 기억 폴더\wiki (불가침)
+rem 우선순위: AGENTOPS_MEMORY_DIR(core.py override) > %USERPROFILE%\OpenCodeLIG_USERDATA\memory
+rem (wiki_manager.py 의 WIKI_DIR = MEMORY/"wiki" 와 반드시 일치시켜 빈 vault를 열지 않게 한다)
+if defined AGENTOPS_MEMORY_DIR (
+  set "MEM_DIR=%AGENTOPS_MEMORY_DIR%"
+) else (
+  set "MEM_DIR=%USERPROFILE%\OpenCodeLIG_USERDATA\memory"
+)
+set "VAULT=%MEM_DIR%\wiki"
 if not exist "%VAULT%" mkdir "%VAULT%" >nul 2>&1
 
 rem 1) Obsidian vault 설정 시드(없을 때만)

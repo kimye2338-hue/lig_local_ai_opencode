@@ -18,8 +18,19 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-SECRET_ENV_PATH = Path(os.environ.get("LIG_API_ENV_FILE") or (Path.home() / "OpenCodeLIG_USERDATA" / "secrets" / "lig-api.env"))
-DIAG_DIR = Path(os.environ.get("LIG_DIAG_DIR") or (Path.home() / "OpenCodeLIG_USERDATA" / "diagnostics"))
+def _env_path(var: str, default: Path) -> Path:
+    """Read a path from the shell env, tolerating Windows quoting habits.
+
+    `set LIG_API_ENV_FILE="C:\\한글 경로\\lig-api.env"` keeps the quotes in the
+    value; without stripping them Path would point at a nonexistent file and the
+    override would be silently ignored.
+    """
+    raw = (os.environ.get(var) or "").strip().strip('"').strip("'")
+    return Path(raw) if raw else default
+
+
+SECRET_ENV_PATH = _env_path("LIG_API_ENV_FILE", Path.home() / "OpenCodeLIG_USERDATA" / "secrets" / "lig-api.env")
+DIAG_DIR = _env_path("LIG_DIAG_DIR", Path.home() / "OpenCodeLIG_USERDATA" / "diagnostics")
 
 # 실측(2026-07-03): 라우트에는 "/gateway/" 접두가 필요하다 — 없으면 리버스 프록시가
 # 백엔드로 넘기지 않고 80포트 웹서버가 404를 반환한다 (probe/results/ 2차 실측 +
@@ -64,8 +75,27 @@ def load_lig_env(path: Optional[Path] = None) -> Dict[str, str]:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, val = line.partition("=")
-        values[key.strip()] = val.strip().strip('"').strip("'")
+        val = val.strip()
+        # 따옴표 밖의 인라인 주석(" #" 이후)을 제거한다. 값이 따옴표로 시작하면
+        # 그대로 두고, 공백 없는 '#'(예: API 키에 포함)은 건드리지 않는다.
+        if val[:1] not in ('"', "'"):
+            hash_idx = val.find(" #")
+            if hash_idx != -1:
+                val = val[:hash_idx].rstrip()
+        values[key.strip()] = val.strip('"').strip("'")
     return values
+
+
+def parse_timeout(value: Any, default: int = 120) -> int:
+    """Lenient timeout parser: never raises on garbage config values.
+
+    LIG_API_TIMEOUT_SEC may carry stray text (inline comments, units); a bad
+    value must degrade to the default, not crash the call/probe path outside the
+    fallback policy."""
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
 
 
 def _is_real(value: str) -> bool:
@@ -90,8 +120,10 @@ def get_profile(env: Optional[Dict[str, str]] = None) -> str:
 
 def route_reason(capability_ids: list) -> str:
     caps = [str(c) for c in (capability_ids or [])]
-    for route, known in _ROUTE_CAPABILITY_MAP.items():
-        for cap_id in caps:
+    # caps는 classify_task가 매긴 점수순(최고 매치 우선)이다 — caps를 바깥 루프로
+    # 돌려 dict 등록 순서가 아니라 최고 매치 capability가 라우트를 결정하게 한다.
+    for cap_id in caps:
+        for route, known in _ROUTE_CAPABILITY_MAP.items():
             if cap_id in known:
                 return cap_id
     return "default"
@@ -115,24 +147,27 @@ def build_providers(env: Optional[Dict[str, str]] = None) -> Dict[str, Dict[str,
     env = _with_shell_overrides(env)
     profile = get_profile(env)
     providers: Dict[str, Dict[str, str]] = {}
+    # 빈 값(KEY=)은 미설정으로 취급해 기본값을 되살린다 — 빈 route가 게이트웨이
+    # 루트로 새어 모든 호출이 404가 되거나 빈 model이 전송되는 것을 막는다.
+    timeout = env.get("LIG_API_TIMEOUT_SEC") or "120"
     if profile == "local_openai":
-        base_url = env.get("LIG_LOCAL_BASE_URL", "http://127.0.0.1:11434/v1").rstrip("/")
-        model = env.get("LIG_LOCAL_MODEL", "qwen2.5:7b-instruct")
+        base_url = (env.get("LIG_LOCAL_BASE_URL") or "http://127.0.0.1:11434/v1").rstrip("/")
+        model = env.get("LIG_LOCAL_MODEL") or "qwen2.5:7b-instruct"
         for name in _ROUTE_DEFAULTS:
             providers[name] = {
                 "base_url": base_url,
                 "model": model,
-                "timeout": env.get("LIG_API_TIMEOUT_SEC", "120"),
+                "timeout": timeout,
             }
         return providers
 
-    gateway = env.get("LIG_GATEWAY_BASE_URL", "").rstrip("/")
+    gateway = (env.get("LIG_GATEWAY_BASE_URL") or "").rstrip("/")
     for name, (route_key, route_default, model_key, model_default) in _ROUTE_DEFAULTS.items():
-        route = env.get(route_key, route_default)
+        route = env.get(route_key) or route_default
         providers[name] = {
             "base_url": gateway + route if gateway else "",
-            "model": env.get(model_key, model_default),
-            "timeout": env.get("LIG_API_TIMEOUT_SEC", "120"),
+            "model": env.get(model_key) or model_default,
+            "timeout": timeout,
         }
     return providers
 
@@ -185,6 +220,8 @@ def validate_config(env: Optional[Dict[str, str]] = None, path: Optional[Path] =
 FALLBACK_POLICY: Dict[str, Dict[str, Any]] = {
     "http_timeout": {"action": "retry", "max_retries": 1, "then": "switch_fallback"},
     "http_4xx": {"action": "stop", "max_retries": 0, "then": "stop"},  # auth/route error: retry won't help
+    # 429는 4xx지만 일시적 혼잡(H100 게이트웨이 붐빔)이라 재시도/폴백이 유효하다.
+    "http_429": {"action": "retry", "max_retries": 1, "then": "switch_fallback"},
     "http_5xx": {"action": "retry", "max_retries": 1, "then": "switch_fallback"},
     "provider_unreachable": {"action": "switch_fallback", "max_retries": 0, "then": "stop"},
     "empty_response": {"action": "retry", "max_retries": 1, "then": "switch_fallback"},
@@ -195,6 +232,9 @@ FALLBACK_POLICY: Dict[str, Dict[str, Any]] = {
     "context_length": {"action": "simplify_retry", "max_retries": 1, "then": "stop"},
     "model_refusal": {"action": "simplify_retry", "max_retries": 1, "then": "switch_fallback"},
     "text_instead_of_tool_call": {"action": "simplify_retry", "max_retries": 2, "then": "local_fallback"},
+    # HTTP 200인데 본문이 JSON이 아님(프록시/게이트웨이 점검 HTML 등) —
+    # 모델 답변으로 승격하면 사용자가 HTML 덩어리를 최종 응답으로 받는다.
+    "invalid_response": {"action": "retry", "max_retries": 1, "then": "switch_fallback"},
 }
 
 

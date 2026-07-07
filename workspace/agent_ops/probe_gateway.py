@@ -28,7 +28,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from agent_ops.lig_providers import build_providers, load_lig_env, validate_config  # noqa: E402
+from agent_ops.lig_providers import build_providers, get_profile, load_lig_env, parse_timeout, validate_config  # noqa: E402
 
 _SAMPLE_LIMIT = 1500
 
@@ -135,7 +135,7 @@ def discover_paths(gateway_root: str, route_base: str, model: str,
 def probe_route(name: str, provider: dict, api_key: str, secrets: list) -> dict:
     result = {"route": name, "endpoint": _route_only(provider["base_url"]),
               "model": provider["model"]}
-    timeout = int(provider.get("timeout", "120") or "120")
+    timeout = parse_timeout(provider.get("timeout"))
     base = provider["base_url"]
     if not base:
         result["error"] = "base_url 미설정 (lig-api.env 확인)"
@@ -207,11 +207,11 @@ def probe_route(name: str, provider: dict, api_key: str, secrets: list) -> dict:
 def main() -> int:
     env = load_lig_env()
     report_cfg = validate_config(env)  # presence flags only
-    profile = os.environ.get("LIG_PROVIDER_PROFILE", "company_gateway")
+    # 프로필/로컬 설정은 lig_providers와 동일하게 env 파일 + 셸 오버라이드를 합쳐 본다
+    # (셸만 보면 파일의 LIG_PROVIDER_PROFILE/LIG_LOCAL_BASE_URL을 무시해 오진).
+    profile = get_profile(env)
     if profile == "local_openai":
-        base = os.environ.get("LIG_LOCAL_BASE_URL", "http://127.0.0.1:11434/v1")
-        model = os.environ.get("LIG_LOCAL_MODEL", "qwen2.5:7b-instruct")
-        providers = {"local": {"base_url": base, "model": model, "timeout": "120"}}
+        providers = build_providers(env)
         api_key = ""
     else:
         if not report_cfg.get("ready"):

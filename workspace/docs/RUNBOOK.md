@@ -13,13 +13,12 @@
 | gateway 설정 오류 | `agentops.py doctor` 출력의 gateway/providers 섹션 | `py -3.11 agent_ops\agentops.py doctor` | env 파일 키 이름·라우트 접두 확인, presence flag만 보고 실값은 노출 금지 |
 | 디스크 부족 | `results/` 폴더 크기 | `powershell -NoProfile -Command "Get-ChildItem agent_ops\results -Recurse | Measure-Object Length -Sum"` | 오래된 `results/artifacts/<run_id>/` 정리. audit는 자동 회전(`audit_*.jsonl.bak`)되므로 삭제 불필요 |
 
-## 폴더 전용 비서 (ocd)
+## 진입점 (이 오프라인 패키지)
 
-- 실행: 그 폴더에서 새 CMD 열고 `ocd` (설치기가 `%USERPROFILE%\OpenCodeLIG\bin` 을 PATH에 등록).
-- 첫 실행: `.opencodelig\` 에 `profile.json` / `PERSONA.md` / `PROJECT_MEMORY.md` / `RULES.md` / `TASKS.md` 시드 — 이후 실행은 편집본을 절대 덮어쓰지 않는다.
-- 전역 기억(`%USERPROFILE%\OpenCodeLIG_USERDATA\memory`)은 모든 폴더가 공유. 폴더 파일은 그 폴더에서만 주입.
-- 진단: `ocd --no-launch --status` (프로필/기억 경로 JSON) 또는 `agentops.py doctor` 의 `project_profile` 섹션.
-- `ocd` 인식 안 됨 → 새 CMD 창인지 확인(PATH는 새 창부터), 그래도 안 되면 `%USERPROFILE%\OpenCodeLIG\bin\ocd.bat` 전체 경로 실행.
+- 오픈코드 채팅: `%USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat`
+- AI비서 번호 메뉴: `%USERPROFILE%\OpenCodeLIG\workspace\launch\menu.bat` (7=상태 진단, 8=지식책)
+- 전역 기억(`%USERPROFILE%\OpenCodeLIG_USERDATA\memory`)은 모든 작업이 공유한다.
+- 참고: `oc`/`ocd`/`ai` 명령, `%USERPROFILE%\OpenCodeLIG\bin` PATH 등록, 폴더 전용 비서(`.opencodelig\` 프로필)는 이 오프라인 TUI 패키지에는 포함되지 않는다(소스 저장소의 full agent_ops 번들 설치기에서만 제공). 이 패키지에서는 위 두 진입점을 쓴다.
 
 ## 운영 위치
 

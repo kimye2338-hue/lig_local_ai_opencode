@@ -8,6 +8,8 @@ Office automation dependencies.
 """
 from __future__ import annotations
 
+import atexit
+import gc
 import re
 import shutil
 from pathlib import Path
@@ -98,12 +100,24 @@ def _close_session(save_changes: bool = False) -> None:
             xl.Quit()
         except Exception:
             pass
+    # COM 포인터를 먼저 놓아준다 — 아파트를 uninitialize 하기 전에 Release 가 끝나야
+    # pywin32 종료 시 크래시/RPC 오류를 피한다(참조 해제 → gc → CoUninitialize 순).
+    wb = None
+    xl = None
+    _SESSION.clear()
+    try:
+        gc.collect()
+    except Exception:
+        pass
     try:
         if pythoncom is not None:
             pythoncom.CoUninitialize()
     except Exception:
         pass
-    _SESSION.clear()
+
+
+# 에이전트가 close 없이 종료/크래시해도 열린 세션을 닫아 고아 EXCEL.EXE 를 막는다.
+atexit.register(_close_session)
 
 
 def _open_copy(options: Dict[str, Any]) -> Dict[str, Any]:
@@ -128,6 +142,11 @@ def _open_copy(options: Dict[str, Any]) -> Dict[str, Any]:
         wb = xl.Workbooks.Open(str(copy_path))
     except Exception as exc:
         _close_session()
+        # 방금 만든 사본만 정리 — 재시도마다 사본_x_2, _3... 이 쌓이는 것을 막는다.
+        try:
+            copy_path.unlink()
+        except OSError:
+            pass
         return {"ok": False, "error": f"Excel open failed: {exc.__class__.__name__}"}
     _SESSION.update({"xl": xl, "wb": wb, "copy_path": str(copy_path)})
     return {"ok": True, "copy_path": str(copy_path)}
@@ -171,7 +190,12 @@ def _run_macro_file(options: Dict[str, Any]) -> Dict[str, Any]:
     bas_path = Path(str(options.get("bas_path") or "")).expanduser().resolve()
     if not bas_path.exists():
         return {"ok": False, "error": "bas 파일 없음"}
-    source = bas_path.read_text(encoding="utf-8", errors="replace")
+    # 사내 VBA 편집기가 내보낸 .bas 는 CP949 인 경우가 많다. UTF-8 로만 읽으면
+    # 한글 리터럴이 U+FFFD 로 치환된 채 주입되므로 strict → cp949 순으로 재시도한다.
+    try:
+        source = bas_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        source = bas_path.read_text(encoding="cp949", errors="replace")
     macro_name = str(options.get("macro_name") or _extract_macro_name(source))
     if not macro_name:
         return {"ok": False, "error": "macro_name 인식 실패"}

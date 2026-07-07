@@ -3,15 +3,20 @@
 ## 1. 설치 — 1분
 
 1. zip을 푼다.
-2. **`설치.bat` 더블클릭.**
-3. 게이트웨이 주소/API 키 붙여넣기 (모르면 Enter 두 번 — 나중에 3번 항목으로 설정).
+2. `INSTALL_OFFLINE_LIG_OPENCODE.bat.txt` 의 이름을 `INSTALL_OFFLINE_LIG_OPENCODE.bat`
+   으로 바꾼 뒤(`.txt` 를 지운다) 더블클릭한다.
+3. 설치가 끝나면 프로그램이 `%USERPROFILE%\OpenCodeLIG\workspace` 에 놓인다.
 
-끝. 바탕화면에 **[오픈코드]** 와 **[AI비서]** 가 생긴다.
+**게이트웨이 주소/키 입력은 첫 실행 때** 한다:
+`%USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat` 을 실행하면 설정 파일이
+자동으로 만들어지고 **메모장이 열린다** — 게이트웨이 주소(`LIG_GATEWAY_BASE_URL`)와
+키(`LIG_API_KEY`) 두 줄만 채우고 저장하면 된다. (라우트/모델명은 이미 채워져 있다.
+나중에 바꾸려면 3번 항목의 파일을 편집한다.)
 
 ## 2. 사용 — 두 가지 방법
 
 **방법 A — 오픈코드 채팅 (주 사용법)**
-바탕화면 [오픈코드] 실행 → 한국어로 그냥 시킨다:
+`%USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat` 실행 → 한국어로 그냥 시킨다:
 
 - "이 폴더의 회의메모.txt로 회의록 만들어줘"
 - "지난주 기록으로 주간보고 초안 써줘"
@@ -24,10 +29,10 @@
 - 웹 분석: `launch\chrome-debug.bat`로 크롬을 연 뒤 → "열린 탭에서 사내 포털 공지 요약해줘"
 
 한국어로 시키면 **적절한 도구를 알아서 골라** 실행한다(따로 도구를 지정할 필요 없음).
-자세한 능력은 아래 7번 참고.
+자세한 능력은 아래 6번 참고.
 
-아무 폴더에서나 쓰려면: 그 폴더에서 cmd 열고 `oc` 입력 (설치 후 새 명령창부터).
-폴더가 달라도 **같은 비서**가 뜨고 **기억을 공유**한다.
+어느 폴더의 파일을 다루든 **같은 비서**가 뜨고 **기억을 공유**한다 — 작업할 파일 경로를
+채팅에서 알려주거나, "이 폴더의 …" 처럼 시키면 된다.
 
 **터미널 권장(한글 입력 매끄럽게)**: Windows Terminal 을 쓰면 한글 입력 지연이 없다.
 `WindowsTerminal_오프라인설치.zip` 로 설치 후, **기본 터미널로 지정**해두면 모든 실행이
@@ -40,15 +45,9 @@
 → FULL(완전 오토 — 같은 종류는 세션 내내 기억, 끊김 최소) 순환.
 위험 명령 차단은 어느 정책에서도 유지된다. 채팅에 `/perm full` 로도 전환 가능.
 
-**폴더 전용 비서 — `ocd`** (프로젝트 폴더마다 다른 페르소나/규칙)
-그 폴더에서 cmd 열고 `ocd` 입력. 첫 실행이면 `.opencodelig\` 폴더에
-`PERSONA.md`(폴더 페르소나) / `RULES.md`(폴더 규칙) / `PROJECT_MEMORY.md`
-(폴더 기억) / `TASKS.md`(할 일)를 만들어 준다 — 원하는 대로 편집하면
-다음 실행부터 그 폴더 전용 비서가 된다. 전역 기억은 그대로 공유되고,
-이미 편집한 파일은 절대 덮어쓰지 않는다. (메뉴만 열려면 `ai` 입력)
-
 **방법 B — AI비서 메뉴 (오픈코드 없이)**
-바탕화면 [AI비서] 실행 → 번호 선택 (업무/브리핑/주간보고/일정/진단).
+`%USERPROFILE%\OpenCodeLIG\workspace\launch\menu.bat` 실행 → 번호 선택
+(1 업무 시키기 / 2 아침 브리핑 / 3 주간보고 / 4·5·6 일정 / 7 상태 진단 / 8 지식책).
 
 ## 3. 설정 — 파일 하나
 
@@ -65,12 +64,12 @@ LIG_API_KEY=발급받은키
 
 ```
 %USERPROFILE%\OpenCodeLIG\
-  bin\opencode.exe, oc.bat     실행기 (oc = 아무 폴더에서 오픈코드)
-  bin\ocd.bat, ai.bat          ocd = 그 폴더 전용 비서 / ai = 일일 메뉴
+  bin\opencode.exe             패치된 오픈코드 본체
   workspace\                   프로그램 본체
+    RUN_OPENCODE_LIG.bat           오픈코드 채팅 실행기 (방법 A)
+    launch\menu.bat                AI비서 번호 메뉴 (방법 B)
     agent_ops\results\artifacts\   ← 만들어진 산출물 (run별 폴더)
     agent_ops\results\reports\     ← 브리핑/주간보고
-    launch\menu.bat                AI비서 메뉴
 %USERPROFILE%\OpenCodeLIG_USERDATA\
   secrets\lig-api.env          게이트웨이 설정 (위 3번)
   memory\WIKI.md               전역 기억 위키 (직접 편집 가능)
@@ -81,7 +80,8 @@ LIG_API_KEY=발급받은키
 
 - 채팅에서 **"기억해: ..."** → 전역 저장, 모든 폴더·페르소나에서 공유.
 - 실수를 지적하면 교훈으로 기록되어 다음엔 반복하지 않는다.
-- **바탕화면 [지식책]** = 내가 배운 것들의 히스토리북(HTML). 자동으로 늘 최신:
+- **지식책** = 내가 배운 것들의 히스토리북(HTML). `launch\menu.bat` 의 **8번(지식책 보기)**
+  또는 `python agent_ops\agentops.py book --open` 으로 연다. 자동으로 늘 최신:
   - 타임라인: 언제 뭘 배웠나 (보관된 옛 기록도 남는다 — 절대 휘발 없음)
   - 🔁 이번 주의 복습: 잊어갈 때쯤 오래된 지식을 다시 띄워준다 (매주 회전)
   - 분류(내 규칙/배운 것/실수 노트) + 검색 + 최근 활동
@@ -123,9 +123,9 @@ pip install --no-index --find-links wheelhouse markitdown[pdf,docx,pptx,xlsx] py
 
 | 증상 | 조치 |
 |---|---|
-| 뭔가 이상함 | [AI비서] → 7. 상태 진단 |
-| LLM 응답 없음 | 3번 설정 확인 → [AI비서] → 7. 상태 진단(lig_api_config가 ready인지) |
-| `oc` 명령 안 먹힘 | 새 명령창 열기 (PATH는 새 창부터 적용) |
+| 뭔가 이상함 | `launch\menu.bat` → 7. 상태 진단 |
+| LLM 응답 없음 | 3번 설정 확인 → `launch\menu.bat` → 7. 상태 진단(lig_api_config가 ready인지) |
+| 한글이 밀리거나 깨짐 | 반드시 `RUN_OPENCODE_LIG.bat`/`launch\*.bat` 로 실행(chcp 65001 보장) |
 | 오픈코드 안 뜸 | `workspace\VERIFY_OFFLINE_INSTALL.bat` 실행 |
 
 진단 파일 위치: `%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\`

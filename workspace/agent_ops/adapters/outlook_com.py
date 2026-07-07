@@ -57,6 +57,19 @@ def _json_safe(value: Any) -> str:
     return str(value)
 
 
+def _coerce_dt(value: Any) -> Optional[datetime]:
+    """COM 시간값(pywintypes.datetime 등)을 naive datetime 으로 변환. 실패 시 None."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):  # 최신 pywin32 는 datetime 서브클래스
+        return value.replace(tzinfo=None)
+    try:  # 구버전 pywintypes.Time — year/month/day 속성으로 구성
+        return datetime(value.year, value.month, value.day,
+                        getattr(value, "hour", 0), getattr(value, "minute", 0))
+    except Exception:
+        return None
+
+
 def _active_outlook() -> Dict[str, Any]:
     missing = _need_pywin32()
     if missing:
@@ -90,12 +103,23 @@ def _read_calendar_child(days: int = 7) -> Dict[str, Any]:
             start.strftime("%m/%d/%Y %I:%M %p"),
             end.strftime("%m/%d/%Y %I:%M %p"),
         )
+        restricted = True
         try:
             items = items.Restrict(restriction)
         except Exception:
-            pass
+            # Restrict 날짜 리터럴은 로케일 의존적이라 한국어 Outlook 에서 파싱
+            # 실패할 수 있다. 조용히 무필터 items 를 순회하면 '가장 오래된 200건'이
+            # 향후 일정으로 잘못 반환되므로, 파이썬에서 Start 범위로 직접 필터한다.
+            restricted = False
         rows: List[Dict[str, str]] = []
         for item in items:
+            if not restricted:
+                item_start = _coerce_dt(getattr(item, "Start", None))
+                if item_start is not None:
+                    if item_start < start:
+                        continue
+                    if item_start > end:
+                        break  # Sort("[Start]") 오름차순 — 이후 항목도 전부 범위 밖
             rows.append({
                 "title": _json_safe(getattr(item, "Subject", "")),
                 "start": _json_safe(getattr(item, "Start", "")),
@@ -103,7 +127,7 @@ def _read_calendar_child(days: int = 7) -> Dict[str, Any]:
             })
             if len(rows) >= 200:
                 break
-        return {"ok": True, "items": rows}
+        return {"ok": True, "items": rows, "restricted": restricted}
     except Exception as exc:
         return {"ok": False, "error": f"Outlook calendar read failed: {exc.__class__.__name__}"}
     finally:

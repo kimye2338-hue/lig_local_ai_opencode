@@ -77,7 +77,7 @@ def decode_console_bytes(data: bytes) -> str:
     return data.decode("utf-8", errors="replace")
 
 
-def decode_file_bytes(data: bytes) -> str:
+def decode_file_bytes(data: bytes, truncated: bool = False) -> str:
     """사용자 파일 바이트를 한글이 깨지지 않게 디코드한다 (BOM 처리 포함).
 
     Excel/메모장에서 내보낸 한국어 CSV/LOG/TXT는 UTF-8(BOM 유무)일 수도,
@@ -85,17 +85,21 @@ def decode_file_bytes(data: bytes) -> str:
     CP949 파일을 replacement 문자로 뭉갠다 — decode_console_bytes와 같은
     폴백 사다리를 파일 입력에도 적용한다.
     순서: UTF-8-SIG strict(BOM 제거) → CP949 strict → UTF-8 replace(최후).
+
+    truncated=True 면 바이트 절단 입력으로 간주하고, strict 디코드 실패 시
+    꼬리 1~3바이트를 잘라내며 재시도한다 — 절단점이 멀티바이트 문자 중간에
+    걸리면 꼬리 반쪽 때문에 파일 전체가 replace 폴백으로 뭉개지기 때문.
     """
     if not data:
         return ""
-    try:
-        return data.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        pass
-    try:
-        return data.decode("cp949")
-    except UnicodeDecodeError:
-        pass
+    trims = range(4) if truncated else range(1)
+    for enc in ("utf-8-sig", "cp949"):
+        for trim in trims:
+            chunk = data[: len(data) - trim] if trim else data
+            try:
+                return chunk.decode(enc)
+            except UnicodeDecodeError:
+                continue
     return data.decode("utf-8", errors="replace")
 
 

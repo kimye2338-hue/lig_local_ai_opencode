@@ -71,21 +71,25 @@ class WsClient:
             "Sec-WebSocket-Version: 13\r\n"
             "\r\n"
         )
-        sock.sendall(request.encode("ascii"))
-        header = self._read_http_header(sock)
-        status, headers = self._parse_http_header(header)
-        if not status.startswith("HTTP/1.1 101 ") and status != "HTTP/1.1 101":
-            sock.close()
-            raise WsProtocolError(f"websocket upgrade failed: {status}")
-        if headers.get("upgrade", "").lower() != "websocket":
-            sock.close()
-            raise WsProtocolError("missing Upgrade: websocket response")
-        if "upgrade" not in headers.get("connection", "").lower():
-            sock.close()
-            raise WsProtocolError("missing Connection: Upgrade response")
-        if headers.get("sec-websocket-accept", "") != _accept_for(key):
-            sock.close()
-            raise WsProtocolError("invalid Sec-WebSocket-Accept")
+        # sendall/_read_http_header 실패 경로에서도 소켓이 새지 않도록 성공 시에만 이관.
+        try:
+            sock.sendall(request.encode("ascii"))
+            header = self._read_http_header(sock)
+            status, headers = self._parse_http_header(header)
+            if not status.startswith("HTTP/1.1 101 ") and status != "HTTP/1.1 101":
+                raise WsProtocolError(f"websocket upgrade failed: {status}")
+            if headers.get("upgrade", "").lower() != "websocket":
+                raise WsProtocolError("missing Upgrade: websocket response")
+            if "upgrade" not in headers.get("connection", "").lower():
+                raise WsProtocolError("missing Connection: Upgrade response")
+            if headers.get("sec-websocket-accept", "") != _accept_for(key):
+                raise WsProtocolError("invalid Sec-WebSocket-Accept")
+        except Exception:
+            try:
+                sock.close()
+            except Exception:
+                pass
+            raise
         self.sock = sock
 
     def _read_http_header(self, sock: socket.socket) -> bytes:
@@ -144,6 +148,16 @@ class WsClient:
             raise WsProtocolError("websocket is closed")
         return self.sock
 
+    def _kill(self) -> None:
+        """프레임 중간 오류로 desync 된 연결을 즉시 죽여 재사용을 막는다."""
+        self.closed = True
+        if self.sock is not None:
+            try:
+                self.sock.close()
+            except Exception:
+                pass
+            self.sock = None
+
     def _send_frame(self, opcode: int, payload: bytes) -> None:
         sock = self._require_sock()
         if opcode not in (0x1, 0x8, 0x9, 0xA):
@@ -169,8 +183,12 @@ class WsClient:
             try:
                 chunk = sock.recv(n - len(data))
             except socket.timeout as exc:
+                # 부분 수신 바이트를 버리고 나중에 같은 소켓에서 다시 recv 하면
+                # 프레임 경계가 어긋나 이후 수신이 전부 깨진다 — 연결을 죽인다.
+                self._kill()
                 raise WsTimeout("websocket receive timed out") from exc
             if not chunk:
+                self._kill()
                 raise WsProtocolError("socket closed while reading frame")
             data += chunk
         return data
@@ -186,7 +204,7 @@ class WsClient:
                 if opcode == 0x1:
                     return payload.decode("utf-8")
                 if opcode == 0x8:
-                    self.closed = True
+                    self._kill()
                     raise WsProtocolError("websocket closed by peer")
                 if opcode == 0x9:
                     self._send_frame(0xA, payload)
@@ -194,6 +212,10 @@ class WsClient:
                 if opcode == 0xA:
                     continue
                 raise WsProtocolError(f"unsupported opcode received: {opcode}")
+        except WsError:
+            # 프레임 파싱 실패도 스트림 desync 를 뜻하므로 연결을 회복 불능으로 처리.
+            self._kill()
+            raise
         finally:
             if self.sock is sock:
                 sock.settimeout(old_timeout)

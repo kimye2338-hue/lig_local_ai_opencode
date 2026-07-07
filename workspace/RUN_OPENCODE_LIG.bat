@@ -5,7 +5,7 @@ set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 
 rem OpenCodeLIG unified launcher
-rem - loads userdata\secrets\lig-api.env
+rem - loads %USERPROFILE%\OpenCodeLIG_USERDATA\secrets\lig-api.env
 rem - starts hamster pet hidden (no extra console windows)
 rem - opens only OpenCode main window
 
@@ -13,7 +13,9 @@ for %%I in ("%~dp0.") do set "AGENTOPS_HOME=%%~fI"
 for %%I in ("%AGENTOPS_HOME%\..") do set "OC_ROOT=%%~fI"
 
 set "OCODE_EXE=%OC_ROOT%\bin\opencode.exe"
-set "OPENCODE_USERDATA=%OC_ROOT%\userdata"
+rem USERDATA는 파이썬 런타임 기본값(core.py: %USERPROFILE%\OpenCodeLIG_USERDATA)과
+rem 개별 bat(gateway-smoke/probe-gateway 등)·문서와 반드시 일치시킨다.
+set "OPENCODE_USERDATA=%USERPROFILE%\OpenCodeLIG_USERDATA"
 set "LIG_API_ENV_FILE=%OPENCODE_USERDATA%\secrets\lig-api.env"
 set "LIG_STATE_DIR=%OPENCODE_USERDATA%\state"
 set "LIG_DIAG_DIR=%OPENCODE_USERDATA%\diagnostics"

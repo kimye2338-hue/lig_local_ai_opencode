@@ -55,11 +55,13 @@ WRITE_CODE_PATTERNS = [
 ]
 
 DANGEROUS_PATTERNS = [
+    # rm with both r and f flags in any order/grouping (-rf, -fr, -r -f, ...)
+    r"\brm\b(?=.*\s-\w*r)(?=.*\s-\w*f)",
     r"\brm\s+-rf\b",
     r"\bdel\s+/[qsf]\b",
     r"\bdel\s+\S",
-    r"\brmdir\s+/s\b",
-    r"\brd\s+/s\b",
+    r"\brmdir\b.*\s/s\b",
+    r"\brd\b.*\s/s\b",
     r"\bformat\s+[A-Za-z]:",
     r"\bformat\b(?:\s+/\S+)+\s+[A-Za-z]:",
     r"\bpowershell\b.+EncodedCommand",
@@ -183,8 +185,10 @@ def analyze(text: str) -> Dict[str, Any]:
     normalized = command.strip().replace("\\", "/")
     safe_prefix = any(_matches_safe_prefix(normalized, p) for p in SAFE_PREFIXES)
     # A command that begins with a safe prefix but chains another command via a
-    # separator (&& ; | & newline) must not be auto-allowed — force it to ASK.
-    if safe_prefix and re.search(r"[;&|\r\n]", command):
+    # separator (&& ; | & newline), redirects output (> <), or uses cmd/PS
+    # escapes (^ `) must not be auto-allowed — force it to ASK. Redirection in
+    # particular would let "type nul > file.py" truncate files under ALLOW.
+    if safe_prefix and re.search(r"[;&|<>^`\r\n]", command):
         safe_prefix = False
     # P2-1: the orchestrator starts a long-running loop inside OpenCode bash.
     # Long loops must be launched by the external BAT only, so never auto-allow it.

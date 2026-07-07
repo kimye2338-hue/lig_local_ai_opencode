@@ -17,7 +17,7 @@ for %%P in (python python3.11 python3) do (
 if defined PY goto :ok
 echo [ERROR] Python 3.11을 찾지 못했습니다.
 echo         새 명령창에서 python --version 이 3.11.x 인지 확인하세요.
-echo         (설치 번들의 release\prefetch\python-3.11.9-embed-amd64.zip 을 풀어 PATH에 추가해도 됩니다)
+echo         (없으면 Python 3.11 오프라인 설치본을 반입해 설치하거나, 임베디드 zip을 풀어 PATH에 추가하세요)
 exit /b 9
 :ok
 exit /b 0

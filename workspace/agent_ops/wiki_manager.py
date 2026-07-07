@@ -141,9 +141,36 @@ def _events() -> List[Dict[str, Any]]:
     return [r for r in read_jsonl(MEMORY_JSONL) if isinstance(r, dict)]
 
 
+# Windows 예약 장치명 — 파일명으로 쓰면 os.replace가 OSError로 실패해
+# consolidate 전체가 죽는다 ("con"/"aux" 같은 3자 토큰은 태그로 흔히 등장).
+_WIN_RESERVED = ({"con", "prn", "aux", "nul"}
+                 | {f"com{i}" for i in range(1, 10)}
+                 | {f"lpt{i}" for i in range(1, 10)})
+
+
 def _slug(topic: str) -> str:
     s = re.sub(r"[\\/:*?\"<>|#\[\]\s]+", "_", str(topic).strip()).strip("._")
-    return (s or "topic")[:60]
+    s = (s or "topic")[:60]
+    if s.lower() in _WIN_RESERVED:
+        s += "_page"
+    return s
+
+
+def _slug_map(topics) -> Dict[str, str]:
+    """topic→slug 매핑. 슬러그 충돌(예: 'a/b'와 'a:b' 모두 'a_b') 시 접미사로
+    구분해 두 주제가 같은 파일을 번갈아 덮어쓰는 것을 막는다."""
+    slugs: Dict[str, str] = {}
+    used: set = set()
+    for t in topics:
+        base = _slug(t)
+        s = base
+        n = 2
+        while s in used:
+            s = f"{base}-{n}"
+            n += 1
+        used.add(s)
+        slugs[t] = s
+    return slugs
 
 
 def _event_tags(row: Dict[str, Any]) -> List[str]:
@@ -421,7 +448,7 @@ def consolidate() -> Dict[str, Any]:
     rows = _events()
     topic_rows = _topic_map(rows)
     curated_all = _load_curated()
-    slugs: Dict[str, str] = {t: _slug(t) for t in topic_rows}
+    slugs: Dict[str, str] = _slug_map(topic_rows)
 
     # 1차: 백링크 없이 본문을 만들어 텍스트 스캔 재료로 쓴다 (백링크는
     # 다른 페이지가 이 주제를 [[언급]]했는지 알아야 하므로 전체가 먼저 필요).
@@ -433,12 +460,17 @@ def consolidate() -> Dict[str, Any]:
 
     written: List[str] = []
     for topic, trows in topic_rows.items():
-        page = _page_markdown(topic, trows, _related(topic, topic_rows),
-                              curated_all.get(topic), backlinks=backlink_map.get(topic))
-        path = WIKI_DIR / f"{slugs[topic]}.md"
-        if read_text(path) != page:
-            atomic_write_text(path, page)
-            written.append(topic)
+        # 페이지 단위 실패 격리 — 한 페이지의 쓰기 실패(경로 문제 등)가
+        # 나머지 전체 위키 갱신을 중단시키지 않게 한다.
+        try:
+            page = _page_markdown(topic, trows, _related(topic, topic_rows),
+                                  curated_all.get(topic), backlinks=backlink_map.get(topic))
+            path = WIKI_DIR / f"{slugs[topic]}.md"
+            if read_text(path) != page:
+                atomic_write_text(path, page)
+                written.append(topic)
+        except Exception as exc:  # noqa: BLE001
+            _log("error", f"페이지 쓰기 실패: {topic} — {exc!r}"[:200])
 
     # 고아 자동 페이지 제거가 아니라 '보관' 표시: 원장이 진실이므로 페이지는
     # 지우지 않고 orphan 마크만 남긴다 (lint 가 보고).
@@ -486,7 +518,7 @@ def lint() -> Dict[str, Any]:
             seen[title] = str(r.get("id", ""))
 
     topic_rows = _topic_map(rows)
-    slugs = {_slug(t) for t in topic_rows}
+    slugs = set(_slug_map(topic_rows).values())
     orphans = sorted(p.stem for p in WIKI_DIR.glob("*.md")
                      if p.name not in ("index.md", "log.md", "WIKI_SCHEMA.md")
                      and AUTO_MARK in read_text(p) and p.stem not in slugs)
@@ -516,7 +548,9 @@ def lint() -> Dict[str, Any]:
         parts.append(f"정체 주제 {len(stale)}개")
     if contradictions:
         parts.append(f"모순 후보 {len(contradictions)}건 — 사람 확인 필요")
-    _log("lint", "; ".join(parts) if parts else "이상 없음")
+    # '이상 없음'은 기록하지 않는다 — 매 빌드마다 append하면 log.md가 상한 없이 자란다.
+    if parts:
+        _log("lint", "; ".join(parts))
     return report
 
 

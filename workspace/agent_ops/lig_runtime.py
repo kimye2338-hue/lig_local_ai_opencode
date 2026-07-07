@@ -21,7 +21,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .lig_providers import DIAG_DIR, build_providers, decide_fallback, get_profile, load_lig_env, record_fallback, route_reason, select_route
+from .lig_providers import DIAG_DIR, build_providers, decide_fallback, get_profile, load_lig_env, parse_timeout, record_fallback, route_reason, select_route
 from .toolcall_parser import parse_tool_calls
 
 Transport = Callable[[str, Dict[str, Any], Dict[str, str], int], Dict[str, Any]]
@@ -57,7 +57,12 @@ def default_transport(url: str, payload: Dict[str, Any], headers: Dict[str, str]
         with urllib.request.urlopen(req, timeout=timeout) as r:
             body = r.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
-        trigger = "http_4xx" if 400 <= exc.code < 500 else "http_5xx"
+        if exc.code == 429:
+            trigger = "http_429"  # rate limit: 재시도/폴백이 유효
+        elif 400 <= exc.code < 500:
+            trigger = "http_4xx"
+        else:
+            trigger = "http_5xx"
         raise TransportError(trigger, f"HTTP {exc.code}")
     except TimeoutError:
         raise TransportError("http_timeout", "timeout")
@@ -70,7 +75,9 @@ def default_transport(url: str, payload: Dict[str, Any], headers: Dict[str, str]
     try:
         return json.loads(body)
     except Exception:
-        return {"choices": [{"message": {"content": body}}]}
+        # 200 응답이라도 JSON이 아니면(프록시 점검 HTML 페이지 등) 정상 답변으로
+        # 승격하지 않고 재시도/폴백 정책을 태운다.
+        raise TransportError("invalid_response", body[:120])
 
 
 def _redact(text: str, env: Dict[str, str]) -> str:
@@ -142,7 +149,7 @@ def call_llm(
 
         trigger = ""
         try:
-            response = transport(cfg["base_url"], payload, headers, int(cfg.get("timeout") or 120))
+            response = transport(cfg["base_url"], payload, headers, parse_timeout(cfg.get("timeout")))
             parse = parse_tool_calls(response, available_tools=available_tool_names or None)
             try:
                 msg = (response.get("choices") or [{}])[0].get("message") or {}

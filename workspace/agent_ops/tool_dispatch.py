@@ -431,6 +431,8 @@ def run_agent_loop(
     outcome = "max_turns_exceeded"
     final_content = ""
     turns = 0
+    llm_outcome = ""
+    fallback_trigger = ""
 
     for _ in range(max_turns):
         turns += 1
@@ -438,6 +440,10 @@ def run_agent_loop(
                        diag_dir=diag_dir, capability_ids=capability_ids)
         if not llm["ok"]:
             outcome = "llm_failed"
+            # call_llm 계층의 세부 outcome(local_fallback/stop)을 보존해
+            # 상위(cmd_agent/cmd_work)가 게이트웨이 장애 안내를 띄울 수 있게 한다.
+            llm_outcome = llm.get("outcome", "")
+            fallback_trigger = llm.get("fallback_trigger", "")
             final_content = llm.get("content", "")
             break
         calls = llm.get("tool_calls") or []
@@ -470,6 +476,8 @@ def run_agent_loop(
     result = {
         "ok": outcome == "completed",
         "outcome": outcome,
+        "llm_outcome": llm_outcome,
+        "fallback_trigger": fallback_trigger,
         "final_content": final_content,
         "turns": turns,
         "tool_results": tool_results,

@@ -112,21 +112,38 @@ def _capture(region: Optional[List[int]], out_path: Path) -> Dict[str, Any]:
         return {"ok": True, "path": str(out_path), "via": "pillow"}
     except Exception:
         pass
-    # 3) PowerShell 폴백 (무설치, 전체 화면)
+    # 3) PowerShell 폴백 (무설치)
     if sys.platform.startswith("win"):
-        ps = (
-            "Add-Type -AssemblyName System.Windows.Forms,System.Drawing;"
-            "$b=[System.Windows.Forms.SystemInformation]::VirtualScreen;"
-            "$bmp=New-Object System.Drawing.Bitmap $b.Width,$b.Height;"
-            "$g=[System.Drawing.Graphics]::FromImage($bmp);"
-            "$g.CopyFromScreen($b.Left,$b.Top,0,0,$bmp.Size);"
-            f"$bmp.Save('{out_path.as_posix()}');"
-        )
+        # region 이 지정되면 전체 화면 대신 그 영역만 캡처한다 — 조용히 전체를 찍어
+        # LLM 이 '요청 영역의 텍스트'로 오인하는 것을 막는다.
+        region_ok = bool(region) and len(region) == 4 and int(region[2]) > 0 and int(region[3]) > 0
+        if region_ok:
+            x, y, w, h = int(region[0]), int(region[1]), int(region[2]), int(region[3])
+            ps = (
+                "Add-Type -AssemblyName System.Windows.Forms,System.Drawing;"
+                f"$bmp=New-Object System.Drawing.Bitmap {w},{h};"
+                "$g=[System.Drawing.Graphics]::FromImage($bmp);"
+                f"$g.CopyFromScreen({x},{y},0,0,$bmp.Size);"
+                f"$bmp.Save('{out_path.as_posix()}');"
+            )
+        else:
+            ps = (
+                "Add-Type -AssemblyName System.Windows.Forms,System.Drawing;"
+                "$b=[System.Windows.Forms.SystemInformation]::VirtualScreen;"
+                "$bmp=New-Object System.Drawing.Bitmap $b.Width,$b.Height;"
+                "$g=[System.Drawing.Graphics]::FromImage($bmp);"
+                "$g.CopyFromScreen($b.Left,$b.Top,0,0,$bmp.Size);"
+                f"$bmp.Save('{out_path.as_posix()}');"
+            )
         try:
             cp = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
                                 capture_output=True, timeout=20)
             if out_path.exists():
-                return {"ok": True, "path": str(out_path), "via": "powershell"}
+                res = {"ok": True, "path": str(out_path), "via": "powershell"}
+                # region 을 줬는데 무효 좌표라 전체를 찍은 경우 명시적으로 알린다.
+                if region and not region_ok:
+                    res["region_ignored"] = True
+                return res
             return {"ok": False, "error": "powershell capture produced no file",
                     "stderr": (cp.stderr or b"")[:200].decode("utf-8", "replace")}
         except Exception as exc:  # noqa: BLE001
