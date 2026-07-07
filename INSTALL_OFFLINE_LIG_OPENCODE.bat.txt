@@ -1,5 +1,8 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
+chcp 65001 >nul
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
 set "ROOT=%USERPROFILE%\OpenCodeLIG"
 set "BIN=%ROOT%\bin"
 set "WS=%ROOT%\workspace"
@@ -120,6 +123,21 @@ if exist "%WS%\RUN_OPENCODE_LIG.bat" (
   echo echo [OK] patched opencode.exe exists and runs.
 ) > "%WS%\VERIFY_OFFLINE_INSTALL.bat"
 echo.
+rem Offline dependency install (bundled wheels) so the pilot needs no extra
+rem step: openpyxl/python-docx/python-pptx (real Office files), markitdown
+rem (read docs), rapidocr (screen OCR). Best-effort: never fails the install.
+set "WH=%~dp0workspace\tools\wheelhouse"
+if exist "%WH%" (
+  echo Installing bundled offline dependencies ^(one-time^)...
+  pushd "%WS%"
+  py -3.11 -m pip install --no-index --find-links "%WH%" openpyxl python-docx python-pptx "markitdown[pdf,docx,pptx,xlsx]" rapidocr-onnxruntime 1>nul 2>nul || python -m pip install --no-index --find-links "%WH%" openpyxl python-docx python-pptx "markitdown[pdf,docx,pptx,xlsx]" rapidocr-onnxruntime 1>nul 2>nul
+  if errorlevel 1 (
+    echo [WARN] Some offline deps did not install ^(optional features^). Retry later: launch\install-tools.bat
+  ) else (
+    echo [OK] Offline dependencies installed.
+  )
+  popd
+)
 echo [OK] Installed.
 echo Run:
 echo   %WS%\RUN_OPENCODE_LIG.bat

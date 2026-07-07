@@ -11,13 +11,15 @@
 | **반입파일_따로받는것.zip** | 선택 기능 wheel(PDF/워드 읽기·Office 생성·앱조작) 오프라인 설치본 + 링크 안내 | 선택 |
 | **WindowsTerminal_오프라인설치.zip** | Windows Terminal 최신본(한글 입력 매끄럽게) + 의존성 + 설치 스크립트 | 선택 |
 
-## 설치 순서
+## 설치 순서 (2번만 열면 끝)
 
-1. `LIG_OPENCODE_설치_최종.zip` 풀기 → `INSTALL_...bat` 실행 → 설치(게이트웨이 무설정 연결)
-2. (선택) `WindowsTerminal_오프라인설치.zip` 설치 → Terminal을 기본 터미널로 지정(GUIDE 참고)
-3. (선택) `반입파일_따로받는것.zip`의 wheel 설치 → PDF 읽기·진짜 Office 파일 생성 활성화
-4. 실행: `%USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat`
-5. 확인: `python agent_ops\agentops.py deps` (뭐가 준비됐는지)
+1. `LIG_OPENCODE_설치_최종.zip` 풀기 → `INSTALL_...bat` **한 번 실행** → 설치 자동 완료:
+   게이트웨이 무설정 연결 + **오프라인 의존성(wheel) 자동 설치**(PDF 읽기·진짜 Office 파일·화면 OCR).
+2. `%USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat` **실행** → 바로 사용.
+
+- 확인(선택): `python agent_ops\agentops.py deps` (뭐가 준비됐는지 한눈에)
+- 옵시디언·Windows Terminal은 사내 기설치 가정(없으면 GUIDE 참고). Terminal을 기본으로 지정하면 한글 입력이 매끄럽다.
+- wheel 자동설치가 일부 실패해도 설치 자체는 성공하며, `launch\install-tools.bat`로 재시도할 수 있다.
 
 ## 폴더 한눈에
 
