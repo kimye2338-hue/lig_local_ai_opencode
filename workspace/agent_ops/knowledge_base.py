@@ -202,7 +202,15 @@ def context_for_prompt(prompt: str, max_chars: int = 2600) -> Optional[str]:
         tag = "" if verified else " (미검증 draft — 확인 필요)"
         conf = meta.get("confidence", "")
         piece = _excerpt(body, max(500, budget // max(1, len(notes))), prompt)
-        header = f"[{domain}{tag}{' · 신뢰도 ' + conf if conf else ''}]"
+        # 발췌마다 출처+수치경고를 헤더로 강제 노출(약한 모델이 하위섹션만 봐도 규약을
+        # 잃지 않게). 프론트매터 numeric_claims:unverified는 본문 밖이라 발췌엔 안 실리므로
+        # 여기서 붙인다(Fable 검토).
+        src = meta.get("sources", "")
+        src_hint = f" · 출처 {src.split(',')[0][:40]}" if src else ""
+        num_warn = ""
+        if str(meta.get("numeric_claims", "")).lower() == "unverified":
+            num_warn = " · ⚠️수치·규격값은 원문/데이터시트 확인 필요"
+        header = f"[{domain}{tag}{' · 신뢰도 ' + conf if conf else ''}{src_hint}{num_warn}]"
         chunks.append(f"{header}\n{piece}")
         budget -= len(piece)
         if budget <= 0:
