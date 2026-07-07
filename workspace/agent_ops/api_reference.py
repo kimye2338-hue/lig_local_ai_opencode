@@ -73,14 +73,17 @@ def _excerpt(text: str, max_chars: int, prompt: str = "") -> str:
         return text
     blocks = re.split(r"(?m)^(?=## )", text)
     intro = blocks[0] if blocks else ""
-    ptok = _tokens(prompt)
+    low = (prompt or "").lower()
     always: List[str] = []
     scored: List[tuple] = []
     for b in blocks[1:]:
         if b.startswith(_ALWAYS_HEADS):
             always.append(b)
         else:
-            overlap = len(ptok & _tokens(b[:400]))  # 헤더+앞부분으로 관련도
+            # 교착어 대응 부분매칭: 섹션 '전체' 토큰이 프롬프트에 포함되는 수 + 헤더 가중
+            head = b.split("\n", 1)[0]
+            overlap = (sum(1 for t in _tokens(b) if len(t) >= 2 and t in low)
+                       + sum(2 for t in _tokens(head) if len(t) >= 2 and t in low))
             scored.append((overlap, b))
     scored.sort(key=lambda x: -x[0])
     out = intro

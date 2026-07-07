@@ -115,13 +115,26 @@ def routing_debug(prompt: str) -> Dict[str, Any]:
 
 
 def _excerpt(body: str, max_chars: int, prompt: str) -> str:
-    """노트 본문에서 작업 관련 섹션만(api_reference와 동일 relevance 방식)."""
+    """노트 본문에서 작업 관련 섹션만 발췌(relevance). 교착어 대응: 섹션의 토큰이
+    프롬프트에 '부분매칭'되면 가점(라우팅과 동일 방식). 토큰 교집합은 '랜덤진동으로'≠
+    '랜덤진동'처럼 조사 붙으면 깨진다."""
     if len(body) <= max_chars:
         return body
-    blocks = re.split(r"(?m)^(?=## )", body)
+    low = (prompt or "").lower()
+    # ## 뿐 아니라 ### 하위섹션도 개별 선택 가능하게 분할(교과서 깊이 노트에서 관련
+    # 하위주제만 예산 내 주입 — 큰 ## 섹션이 통째로 안 맞아 skip되는 것 방지).
+    blocks = re.split(r"(?m)^(?=#{2,} )", body)
     intro = blocks[0] if blocks else ""
-    ptok = _tokens(prompt)
-    scored = sorted(((len(ptok & _tokens(b[:400])), b) for b in blocks[1:]), key=lambda x: -x[0])
+
+    def _sc(b: str) -> int:
+        # 섹션 '전체'의 토큰이 프롬프트에 포함되는 수 = 관련도. 긴 섹션에서 관련어가
+        # 뒷부분(예: Paris 법칙이 §8 깊숙이)에 있어도 잡힌다. 헤더(첫 줄)는 가중.
+        head = b.split("\n", 1)[0]
+        score = sum(1 for t in _tokens(b) if len(t) >= 2 and t in low)
+        score += sum(2 for t in _tokens(head) if len(t) >= 2 and t in low)  # 헤더 가중
+        return score
+
+    scored = sorted(((_sc(b), b) for b in blocks[1:]), key=lambda x: -x[0])
     out = intro
     for ov, b in scored:
         if ov <= 0 or len(out) + len(b) > max_chars:
