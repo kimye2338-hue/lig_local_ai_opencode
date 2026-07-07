@@ -509,17 +509,31 @@ class HamsterPetOverlay:
         except Exception:
             pass
 
-        settings = _read_json(SETTINGS_PATH) or {}
-        geom = settings.get("geometry")
-        if not geom:
+        def _default_geom() -> str:
             try:
                 sw = self.root.winfo_screenwidth()
                 sh = self.root.winfo_screenheight()
-                x = max(8, sw - 245 - 28)
-                y = max(8, sh - 245 - 68)
-                geom = f"245x245+{x}+{y}"
+                return f"245x245+{max(8, sw-245-28)}+{max(8, sh-245-68)}"
             except Exception:
-                geom = "245x245+60+60"
+                return "245x245+60+60"
+
+        def _onscreen(g: str) -> bool:
+            # 저장된 위치가 현재 화면 안에 충분히 보이는지(모니터 변경으로 화면 밖이면 False).
+            m = re.search(r"\+(-?\d+)\+(-?\d+)$", g or "")
+            if not m:
+                return False
+            try:
+                x, y = int(m.group(1)), int(m.group(2))
+                sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+                return -40 <= x <= sw - 60 and -20 <= y <= sh - 60
+            except Exception:
+                return False
+
+        settings = _read_json(SETTINGS_PATH) or {}
+        geom = settings.get("geometry")
+        # 없거나(첫 실행) 화면 밖(모니터 변경 등)이면 우하단 기본값으로 — 펫이 안 보이는 일 방지.
+        if not geom or not _onscreen(geom):
+            geom = _default_geom()
         self.root.geometry(str(geom))
 
         self.queue: SimpleQueue = SimpleQueue()
@@ -644,8 +658,16 @@ class HamsterPetOverlay:
         attention_key = f"{self.snapshot.status}:{self.snapshot.last_update}:{self.snapshot.message}"
         if self.snapshot.status in ATTENTION_STATES and attention_key != self._last_attention_key:
             self._last_attention_key = attention_key
+            # 확인필요/완료/오류/멈춤이 되면 사용자가 알아채게 표면으로 끌어올린다(깜빡임 없이):
+            # 숨김이면 다시 표시, 보이지만 다른 창에 가렸으면 앞으로+항상위 재확정.
             if not self._visible:
                 self.show()
+            else:
+                try:
+                    self.root.lift()
+                    self.root.attributes("-topmost", True)
+                except Exception:
+                    pass
         self._draw()
 
     def _poll(self) -> None:
