@@ -80,6 +80,41 @@ def default_transport(url: str, payload: Dict[str, Any], headers: Dict[str, str]
         raise TransportError("invalid_response", body[:120])
 
 
+def _f(env: Dict[str, str], key: str, default: float) -> float:
+    try:
+        return float(str(env.get(key)).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _sampling_params(env: Dict[str, str]) -> Dict[str, Any]:
+    """사내 모델(EXAONE-4.5-33B / Qwen3.6-27B) 공식 권장 샘플링. env로 튜닝 가능.
+
+    두 모델 공식 코딩/문서 프리셋이 temperature 0.6 / top_p 0.95 / top_k 20 으로
+    수렴한다(모델카드·Qwen docs). 극저온(0.0~0.2)은 thinking 모델에서 반복/루프
+    위험이 보고돼 기본을 0.6으로 둔다 — 사내망 실측 후 env로 조정.
+    표준 파라미터(temperature/top_p/presence_penalty)만 기본 전송하고, 비표준
+    (top_k/enable_thinking)은 게이트웨이 호환 확인 후 env 설정 시에만 보낸다."""
+    p: Dict[str, Any] = {
+        "temperature": _f(env, "LIG_TEMPERATURE", 0.6),
+        "top_p": _f(env, "LIG_TOP_P", 0.95),
+    }
+    pp = env.get("LIG_PRESENCE_PENALTY")
+    if pp not in (None, ""):
+        p["presence_penalty"] = _f(env, "LIG_PRESENCE_PENALTY", 0.0)
+    # 비표준(vLLM 확장) — 게이트웨이가 받는지 확인 후 env로 opt-in.
+    tk = env.get("LIG_TOP_K")
+    if tk not in (None, ""):
+        try:
+            p["top_k"] = int(str(tk).strip())
+        except ValueError:
+            pass
+    think = env.get("LIG_ENABLE_THINKING")
+    if think not in (None, ""):
+        p["extra_body"] = {"chat_template_kwargs": {"enable_thinking": str(think).strip().lower() in ("1", "true", "on", "yes")}}
+    return p
+
+
 def _redact(text: str, env: Dict[str, str]) -> str:
     for key in ("LIG_GATEWAY_BASE_URL", "LIG_API_KEY"):
         val = env.get(key, "")
@@ -135,12 +170,13 @@ def call_llm(
     content = ""
     emergency_local = False
 
+    sampling = _sampling_params(env)
     for _ in range(max_steps):
         cfg = providers[current]
         msgs = list(messages)
         if simplified:
             msgs = msgs + [{"role": "system", "content": SIMPLIFY_INSTRUCTION}]
-        payload: Dict[str, Any] = {"model": cfg["model"], "messages": msgs, "temperature": 0.2}
+        payload: Dict[str, Any] = {"model": cfg["model"], "messages": msgs, **sampling}
         if tools:
             payload["tools"] = tools
         headers = {"Content-Type": "application/json"}
@@ -207,7 +243,7 @@ def call_llm(
                 emerg_headers["Authorization"] = "Bearer " + env["LIG_EMERGENCY_LOCAL_KEY"]
             try:
                 epayload: Dict[str, Any] = {"model": emerg_model, "messages": list(messages),
-                                            "temperature": 0.2}
+                                            **sampling}
                 if tools:
                     epayload["tools"] = tools
                 response = transport(emerg_url, epayload, emerg_headers, 180)

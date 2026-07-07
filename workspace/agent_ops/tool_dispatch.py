@@ -342,10 +342,45 @@ _PARAM_DESCRIPTIONS = {
 _INT_PARAMS = {"count", "index", "timeout", "max_length", "max_text_length", "max_html_length", "max_clicks", "limit"}
 
 
-def tool_definitions() -> List[Dict[str, Any]]:
-    """OpenAI-style function definitions for the registry, for the LLM payload."""
+# 항상 노출하는 핵심 도구(파일·검색·진단·기억). 나머지는 작업이 가리킬 때만.
+_CORE_TOOLS = {"read_file", "write_file", "append_file", "replace_in_file",
+               "list_dir", "search_files", "run_diagnostic", "project_info", "remember"}
+# 키워드 → 추가로 노출할 도구 그룹. 약한 모델(EXAONE/Qwen 27~33B)은 도구가 많을수록
+# 선택 정확도가 급락(연구 근거)하므로, 작업에 맞는 서브셋만 보여준다.
+_TOOL_GROUPS = (
+    (("web", "브라우저", "browser", "크롬", "chrome", "url", "http", "웹", "페이지", "포털", "사이트", "탭"),
+     {"browse_tabs", "read_web_page", "browser_action", "new_tab", "snapshot",
+      "find_clickables", "click", "screenshot", "wait_for_selector", "select_tab", "spa_map"}),
+    (("excel", "엑셀", "xlsx", "워크북", "워크시트", "매크로", "vba", "office", "워드", "word", "ppt", "파워포인트", "슬라이드"),
+     {"excel_app"}),
+    (("outlook", "아웃룩", "메일", "이메일", "일정", "받은편지", "캘린더"), {"outlook_app"}),
+    (("한글", "hwp", "아래아"), {"hwp_app"}),
+    (("solidworks", "솔리드웍스", "파트", "어셈블리", "sldworks"), {"solidworks_app"}),
+    (("화면", "ocr", "스크린샷 읽", "글자 읽", "screen"), {"ocr_screen"}),
+    (("데스크톱", "gui 앱", "windows-use", "uia"), {"desktop_ui"}),
+    (("matlab", "매트랩", ".m ", "simulink"), {"matlab_run"}),
+    (("fluent", "플루언트", "ansys", "cfd", "저널", "journal"), {"fluent_run"}),
+    (("autocad", "오토캐드", "dwg", ".scr", "도면", "accoreconsole"), {"autocad_run"}),
+)
+
+
+def _tools_for_prompt(prompt: str) -> List[str]:
+    """작업에 관련된 도구 이름 목록(핵심 + 키워드 매칭 그룹)."""
+    low = (prompt or "").lower()
+    names = set(_CORE_TOOLS)
+    for kws, group in _TOOL_GROUPS:
+        if any(k in low for k in kws):
+            names |= group
+    return [n for n in REGISTRY if n in names]
+
+
+def tool_definitions(prompt: Optional[str] = None) -> List[Dict[str, Any]]:
+    """OpenAI-style function definitions. prompt 주면 작업 관련 서브셋만(약한 모델
+    정확도↑). prompt 없으면 전체(하위호환)."""
+    names = _tools_for_prompt(prompt) if prompt else list(REGISTRY)
     defs = []
-    for name, spec in REGISTRY.items():
+    for name in names:
+        spec = REGISTRY[name]
         props = {
             arg: {"type": "integer" if arg in _INT_PARAMS else "string",
                   "description": _PARAM_DESCRIPTIONS.get(arg, "")}
@@ -492,9 +527,11 @@ def run_agent_loop(
     outcome: completed | tool_loop_cutoff | llm_failed | max_turns_exceeded
     """
     dispatcher = ToolDispatcher(workspace_root, diag_dir=diag_dir)
-    tools = tool_definitions()
+    # 작업별 도구 서브셋(약한 모델 정확도↑) + "사용 가능 도구 N개" 카운터(도구 누락 방지).
+    tools = tool_definitions(prompt)
+    sys_prompt = AGENT_SYSTEM_PROMPT + f"\n\n사용 가능한 도구: {len(tools)}개. 이 목록 안의 도구만 호출하라."
     messages: List[Dict[str, Any]] = [
-        {"role": "system", "content": AGENT_SYSTEM_PROMPT},
+        {"role": "system", "content": sys_prompt},
         {"role": "user", "content": prompt},
     ]
     # 복리 기억의 쐐기돌: 축적된 규칙/교훈을 '기계적으로' 주입한다.
