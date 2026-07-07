@@ -38,7 +38,10 @@ DEFAULT_STATE_DIR = Path(os.environ.get("LIG_STATE_DIR") or (DEFAULT_USERDATA / 
 DEFAULT_DIAG_DIR = Path(os.environ.get("LIG_DIAG_DIR") or (DEFAULT_USERDATA / "diagnostics"))
 STALE_SECONDS = int(os.environ.get("LIG_HAMSTER_STALE_SECONDS") or "900")
 POLL_MS = int(os.environ.get("LIG_HAMSTER_POLL_MS") or "1000")
-ANIM_MS = int(os.environ.get("LIG_HAMSTER_ANIM_MS") or "210")
+# 항상 켜두는 펫이라 차분해야 집중을 안 깬다 — 프레임을 천천히 넘기고(ANIM_MS), 한 동작
+# 사이클이 끝나면(0프레임 복귀) REST_MS 만큼 가만히 쉰다("가끔 살짝 움직이는" 느낌). 둘 다 env 조절.
+ANIM_MS = int(os.environ.get("LIG_HAMSTER_ANIM_MS") or "420")
+REST_MS = int(os.environ.get("LIG_HAMSTER_REST_MS") or "3200")
 WATCH_PROCESS = (os.environ.get("LIG_HAMSTER_WATCH_PROCESS") or "opencode.exe").strip()
 ASSET_DIR = Path(__file__).resolve().parent / "assets" / "hamster_pet"
 ICON_PATH = ASSET_DIR / "hamster_pet.ico"
@@ -726,7 +729,9 @@ class HamsterPetOverlay:
         except Exception:
             pass
         finally:
-            self.root.after(ANIM_MS, self._animate)
+            # 사이클 끝(0프레임)에서는 오래 쉬어 차분하게. 그 외엔 천천히 다음 프레임.
+            delay = REST_MS if self.frame_index == 0 else ANIM_MS
+            self.root.after(delay, self._animate)
 
     def _draw(self) -> None:
         c = self.canvas
