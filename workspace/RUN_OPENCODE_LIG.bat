@@ -74,11 +74,6 @@ for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%LIG_API_ENV_FILE%") do (
   if not "%%A"=="" set "%%A=%%B"
 )
 
-rem OpenCode TUI 가 기본모델이 아니라 사내 EXAONE/Qwen 으로 열리게 — opencode.json 의
-rem provider baseURL({env:...})을 게이트웨이 호스트+라우트로 조합해 넘긴다.
-set "LIG_OPENCODE_BASEURL_CODING=%LIG_GATEWAY_BASE_URL%%LIG_ROUTE_CODING%"
-set "LIG_OPENCODE_BASEURL_FALLBACK=%LIG_GATEWAY_BASE_URL%%LIG_ROUTE_FALLBACK%"
-
 rem First-run convenience: keep a copy of workspace config under userdata config.
 if exist "%AGENTOPS_HOME%\config" xcopy /D /E /I /Y "%AGENTOPS_HOME%\config\*" "%XDG_CONFIG_HOME%\" >nul
 

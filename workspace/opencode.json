@@ -2,29 +2,35 @@
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false,
   "share": "disabled",
-  "server": { "mdns": false },
+  "server": {
+    "mdns": false
+  },
   "model": "lig-gateway/EXAONE-4.5-33B",
   "provider": {
     "lig-gateway": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "LIG 사내 게이트웨이 (EXAONE)",
       "options": {
-        "baseURL": "{env:LIG_OPENCODE_BASEURL_CODING}",
-        "apiKey": "{env:LIG_API_KEY}"
+        "baseURL": "http://ais.ligdefenseaerospace.com/ai_infra/llm_api/gateway/EXAONE-4.5-33B-vibe_coding_think_off/v1",
+        "apiKey": "ai_infra_llm_api_2024_06"
       },
       "models": {
-        "EXAONE-4.5-33B": { "name": "EXAONE 4.5 33B (사내·코딩)" }
+        "EXAONE-4.5-33B": {
+          "name": "EXAONE 4.5 33B (사내·코딩)"
+        }
       }
     },
     "lig-gateway-qwen": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "LIG 사내 게이트웨이 (Qwen 폴백)",
       "options": {
-        "baseURL": "{env:LIG_OPENCODE_BASEURL_FALLBACK}",
-        "apiKey": "{env:LIG_API_KEY}"
+        "baseURL": "http://ais.ligdefenseaerospace.com/ai_infra/llm_api/gateway/Qwen3.6-27B-vibe_coding_think_off/v1",
+        "apiKey": "ai_infra_llm_api_2024_06"
       },
       "models": {
-        "Qwen3.6-27B": { "name": "Qwen3.6 27B (사내·폴백)" }
+        "Qwen3.6-27B": {
+          "name": "Qwen3.6 27B (사내·폴백)"
+        }
       }
     }
   }
