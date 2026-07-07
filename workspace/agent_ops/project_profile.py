@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """폴더-로컬 프로필(.opencodelig) + 전역 기억 결합.
 
-제품 방향(docs/PRODUCT_VISION_AND_PROACTIVE_IMPLEMENTATION_20260705.md §3.3):
+제품 방향(docs/archive/PRODUCT_VISION_AND_PROACTIVE_IMPLEMENTATION_20260705.md §3.3):
 전역 기억은 모든 폴더가 공유하고, 폴더마다 페르소나/규칙/프로젝트 기억을
 따로 둘 수 있다. 이 모듈이 그 단일 진실 소스다 — ocd 런처, 에이전트 루프
 컨텍스트 주입, doctor 진단, LLM tool(project_info)이 전부 여기를 쓴다.
@@ -11,7 +11,7 @@
   2) 로컬 프로젝트 규칙은 일반 기본값보다 우선한다.
   3) 충돌은 무시하지 말고 보고한다.
 
-기억 보존 불변식(workspace-template/docs/MEMORY_AND_SELF_EXTENSION.md):
+기억 보존 불변식(workspace-template/docs/기능/MEMORY_AND_SELF_EXTENSION.md):
 이 모듈은 전역 기억 폴더를 절대 삭제/초기화하지 않는다. 로컬 시드 파일은
 '없을 때만' 생성하고, 이미 있는 파일은 절대 덮어쓰지 않는다.
 """

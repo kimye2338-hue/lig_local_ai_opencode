@@ -1,7 +1,7 @@
 # OpenCodeLIG — 새 세션 진입점 (이 파일을 먼저 읽으세요)
 
 이 폴더를 지정한 새 세션(Claude/Codex 등)이 **전체 프로그램을 빠르게 파악**하도록 정리한
-안내다. 사용자용 사용법은 `workspace/docs/GUIDE.md` 하나면 되고, 이 문서는 개발/이어작업용.
+안내다. 사용자용 사용법은 `workspace/docs/사용법/GUIDE.md` 하나면 되고, 이 문서는 개발/이어작업용.
 
 ## 1. 이게 뭔가
 
@@ -32,12 +32,12 @@ LIG_OPENCODE/
 
 ## 3. 어디부터 보나 (문서)
 
-- **사용법 전체**: `workspace/docs/GUIDE.md` (설치·사용·기능·문제해결·반입)
-- **장애 대응**: `workspace/docs/RUNBOOK.md` (증상→파일→대응)
-- **전체 워크플로우/기억 효율 점검**: `workspace/docs/WORKFLOW_AUDIT_20260707.md`
-- **외부도구 도입 판정 이력**: `workspace/docs/EXTERNAL_TOOLS_REVIEW.md`
-- **제품 비전/전략**: `workspace/docs/PRODUCT_MASTER_PLAN_FABLE5.md`, `MASTER_PLAN.md`
-- **하네스 설계 원칙**: `workspace/docs/HARNESS_PRINCIPLES.md`
+- **사용법 전체**: `workspace/docs/사용법/GUIDE.md` (설치·사용·기능·문제해결·반입)
+- **장애 대응**: `workspace/docs/사용법/RUNBOOK.md` (증상→파일→대응)
+- **전체 워크플로우/기억 효율 점검**: `workspace/docs/운영/WORKFLOW_AUDIT_20260707.md`
+- **외부도구 도입 판정 이력**: `workspace/docs/운영/EXTERNAL_TOOLS_REVIEW.md`
+- **제품 비전/전략**: `workspace/docs/archive/PRODUCT_MASTER_PLAN_FABLE5.md`, `MASTER_PLAN.md`
+- **하네스 설계 원칙**: `workspace/docs/설계/HARNESS_PRINCIPLES.md`
 - **기능별 상세**: DOC_CONVERT / OFFICE_WRITER / OCR_SCREEN / OBSIDIAN_WIKI / HAMSTER_OVERLAY
 
 ## 4. 불변 규칙 (반드시 지킬 것)

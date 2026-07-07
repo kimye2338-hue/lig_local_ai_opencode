@@ -1,3 +1,5 @@
+> ⚠️ **보관용(archive)** — 최신 아님. 현행 아키텍처는 [../설계/MASTER_PLAN.md](../설계/MASTER_PLAN.md) 참조.
+
 # Product vision and proactive implementation brief — 2026-07-05
 
 This document is for Fable, Codex, Claude Code, and future implementation agents.

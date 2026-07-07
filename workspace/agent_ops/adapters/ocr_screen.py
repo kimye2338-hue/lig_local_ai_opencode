@@ -38,7 +38,7 @@ except Exception:  # 단독 실행/테스트 폴백
 
 ACTIONS = {"read_screen", "read_image", "capabilities"}
 
-# 반입 경로 규약 (docs/OCR_SCREEN.md, tools/README.md)
+# 반입 경로 규약 (docs/기능/OCR_SCREEN.md, tools/README.md)
 _ROOT = Path.home() / "OpenCodeLIG"
 _TOOLS_OCR = Path(os.environ.get("LIG_OCR_DIR") or (_ROOT / "tools" / "ocr"))
 _DIAG_DIR = Path(os.environ.get("LIG_DIAG_DIR") or (Path.home() / "OpenCodeLIG_USERDATA" / "diagnostics"))
@@ -189,7 +189,7 @@ def _run_ocr(image_path: Path, lang: str) -> Dict[str, Any]:
     backends = detect_backends()
     if not backends:
         return {"ok": False, "error": "OCR 엔진 미반입",
-                "hint": "tools/ocr 에 RapidOCR 또는 Tesseract(kor+eng) 반입 필요 — docs/OCR_SCREEN.md",
+                "hint": "tools/ocr 에 RapidOCR 또는 Tesseract(kor+eng) 반입 필요 — docs/기능/OCR_SCREEN.md",
                 "backends": []}
     if "rapidocr" in backends:  # 언어 무관, 한/영 동시
         try:

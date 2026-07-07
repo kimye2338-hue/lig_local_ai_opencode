@@ -1,7 +1,7 @@
 # OpenCodeLIG — 사내 오프라인 AI 업무비서
 
 사내 망분리 윈도우 PC용 한국어 AI 업무비서. 자세한 사용법은
-**`workspace/docs/GUIDE.md` 하나면 됩니다.** 새 세션(AI)으로 이어작업할 땐 `CLAUDE.md`.
+**`workspace/docs/사용법/GUIDE.md` 하나면 됩니다.** 새 세션(AI)으로 이어작업할 땐 `CLAUDE.md`.
 
 ## 회사에 반입할 파일 (3개)
 
@@ -23,7 +23,7 @@
 
 - `payload/opencode.exe` — 프로그램 본체
 - `workspace/` — 런타임·문서·런처 (설치되면 `%USERPROFILE%\OpenCodeLIG\workspace`)
-- `workspace/docs/GUIDE.md` — **사용자 매뉴얼(이거 하나)**
+- `workspace/docs/사용법/GUIDE.md` — **사용자 매뉴얼(이거 하나)**
 - `CLAUDE.md` — 새 AI 세션이 전체를 파악하는 진입 문서
 
 ## 라이선스 / 불변 규칙

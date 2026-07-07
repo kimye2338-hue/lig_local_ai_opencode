@@ -61,7 +61,7 @@ def decode_console_bytes(data: bytes) -> str:
 
     한국어 Windows에서 자식 프로세스 stdout은 UTF-8(chcp 65001)일 수도,
     CP949(기본 OEM)일 수도 있다. text=True 로 utf-8 고정 디코드하면 CP949
-    출력(`dir` 등)이 mojibake가 된다 (docs/RUNTIME_LESSONS_20260705.md §4).
+    출력(`dir` 등)이 mojibake가 된다 (docs/운영/RUNTIME_LESSONS_20260705.md §4).
     순서: UTF-8 strict → CP949 strict → UTF-8 replace(최후).
     """
     if not data:

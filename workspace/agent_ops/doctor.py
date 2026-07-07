@@ -116,7 +116,7 @@ def operations_summary() -> dict:
             # RUNBOOK.md ships with the code (workspace-template/docs/), not the
             # data root; resolve it code-relative so relocated installs
             # (AGENTOPS_ROOT != code dir) do not falsely report it missing.
-            "runbook": (Path(__file__).resolve().parents[1] / "docs" / "RUNBOOK.md").exists(),
+            "runbook": (Path(__file__).resolve().parents[1] / "docs" / "사용법" / "RUNBOOK.md").exists(),
             "last_work_report": str(reports[0]) if reports else "",
         }
     except Exception as exc:

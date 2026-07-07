@@ -28,7 +28,7 @@ pip install --no-index --find-links tools\wheelhouse openpyxl python-docx python
   `https://github.com/obsidianmd/obsidian-releases/releases/latest` → `Obsidian-x.x.x.exe`
 - 회사 PC에서 그 exe를 1회 실행(오프라인 설치 가능) → `launch\wiki.bat` 가
   `%LOCALAPPDATA%\Obsidian\Obsidian.exe` 로 자동 인식. 포터블로 두려면 `tools\Obsidian\Obsidian.exe`.
-- 없어도 위키(.md)는 정상 — 그래프/의미검색 UI만 없을 뿐. 상세: `docs\OBSIDIAN_WIKI.md`.
+- 없어도 위키(.md)는 정상 — 그래프/의미검색 UI만 없을 뿐. 상세: `docs\기능\OBSIDIAN_WIKI.md`.
 
 ## 3. OCR 엔진 (화면 읽기, 선택) — wheel은 포함됨
 
@@ -36,7 +36,7 @@ pip install --no-index --find-links tools\wheelhouse openpyxl python-docx python
   `launch\install-tools.bat` 로 함께 설치된다. 기본 모델은 wheel에 내장.
 - 또는 Tesseract: `tools\ocr\tesseract\tesseract.exe` + `tessdata\kor+eng.traineddata`.
 - 또는 Tesseract: `tools\ocr\tesseract\tesseract.exe` + `tessdata\kor.traineddata`,`eng.traineddata`.
-- 상세: `docs\OCR_SCREEN.md`.
+- 상세: `docs\기능\OCR_SCREEN.md`.
 
 ## 4. (선택) 비상 로컬 LLM — 게이트웨이 다운 대비
 

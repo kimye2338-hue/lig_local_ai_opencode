@@ -1,7 +1,7 @@
 # agent_ops — 비서 런타임
 
 비서의 두뇌·도구·기억·어댑터가 있는 파이썬 런타임. 진입점은 `agentops.py`.
-**사용법은 `../docs/GUIDE.md`**, 장애 대응은 `../docs/RUNBOOK.md` 참고. 여기는 개발자용 요약.
+**사용법은 `../docs/사용법/GUIDE.md`**, 장애 대응은 `../docs/사용법/RUNBOOK.md` 참고. 여기는 개발자용 요약.
 
 ## 구성 한눈에
 

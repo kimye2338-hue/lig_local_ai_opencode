@@ -108,7 +108,7 @@ def seed_obsidian_vault(vault_dir: Path | None = None) -> Dict[str, Any]:
     if not dashboard.exists():
         dashboard.write_text(
             "# 대시보드\n\n"
-            "> Dataview 플러그인을 켜면 아래가 표로 자동 집계됩니다. (설치: docs/OBSIDIAN_WIKI.md)\n\n"
+            "> Dataview 플러그인을 켜면 아래가 표로 자동 집계됩니다. (설치: docs/기능/OBSIDIAN_WIKI.md)\n\n"
             "## 미결 액션아이템\n\n"
             "```dataview\n"
             "TASK\n"

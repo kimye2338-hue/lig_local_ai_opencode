@@ -38,7 +38,7 @@ def _miss(fmt: str) -> Dict[str, Any]:
     lib = _HINT.get(fmt, fmt)
     return {"ok": False, "error": f"{lib} 미반입",
             "hint": f"오프라인 반입: pip download {lib} -d wheelhouse → "
-                    f"pip install --no-index --find-links wheelhouse {lib} (docs/OFFICE_WRITER.md)"}
+                    f"pip install --no-index --find-links wheelhouse {lib} (docs/기능/OFFICE_WRITER.md)"}
 
 
 def _is_number(s: Any) -> bool:

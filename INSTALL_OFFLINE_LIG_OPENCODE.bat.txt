@@ -126,7 +126,7 @@ echo   %WS%\RUN_OPENCODE_LIG.bat
 echo Verify:
 echo   %WS%\VERIFY_OFFLINE_INSTALL.bat
 echo Docs:
-echo   %WS%\docs\AI_HANDOFF.md
+echo   %WS%\docs\운영\AI_HANDOFF.md
 echo.
 pause
 exit /b 0
