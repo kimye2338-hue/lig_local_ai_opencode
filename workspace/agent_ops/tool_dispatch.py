@@ -579,6 +579,15 @@ def run_agent_loop(
     except Exception:  # noqa: BLE001 - API 참조 주입 실패도 작업을 막으면 안 된다
         pass
     try:
+        # 레퍼런스 지식베이스 주입: 작업이 공학 도메인·규격·소프트스킬을 가리키면
+        # 팩트체크된 이론·규격·실무 지식을 MOC(지도)+관련 발췌로 넣는다("이거 만들어줘"→근거).
+        from .knowledge_base import context_for_prompt as _kb_ctx
+        kb_ref = _kb_ctx(prompt)
+        if kb_ref:
+            inserts.append({"role": "system", "content": kb_ref})
+    except Exception:  # noqa: BLE001 - 지식베이스 주입 실패도 작업을 막으면 안 된다
+        pass
+    try:
         # 디자인 가이드 주입: 보고서/문서/PPT 생성 작업이면 디자인·구성 원칙을 넣어
         # 밋밋한 기본 결과 대신 위계·정렬·여백·1슬라이드1메시지를 지킨 결과물을 만들게 한다.
         from .design_guidance import context_for_prompt as _design_ctx
