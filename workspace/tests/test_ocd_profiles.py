@@ -4,7 +4,7 @@
 Run: py -3.11 tests\\test_ocd_profiles.py  (리눅스에서도 동작 — stdlib only)
 
 수용 기준 대응:
-  1. 첫 실행이 .opencodelig 과 시드 5종을 만든다.
+  1. 첫 실행이 .opencodelig 시드 5종 + 폴더 루트 클릭용 런처(여기서_AI비서_열기.bat)를 만든다.
   2. 두 번째 실행이 사용자가 고친 로컬 파일을 덮어쓰지 않는다.
   3. 전역 기억 경로는 override 없으면 USERPROFILE 기준 전역이다.
   4. 로컬 페르소나/규칙/프로젝트 기억이 컨텍스트 조립에 잡힌다.
@@ -51,8 +51,15 @@ def main() -> None:
     proj = TMP / "프로젝트A"
     proj.mkdir()
     seeded = pp.seed_profile(proj)
-    check("first run creates 5 seed files", sorted(seeded["created"]) == sorted(pp.SEED_FILES)
+    check("first run creates seed files + folder launcher",
+          sorted(seeded["created"]) == sorted(list(pp.SEED_FILES) + [pp.LAUNCHER_NAME])
           and seeded["first_run"], str(seeded))
+    check("folder launcher created at root (click-to-open, CRLF)",
+          (proj / pp.LAUNCHER_NAME).is_file()
+          and (proj / pp.LAUNCHER_NAME).read_bytes().count(b"\r\n")
+              == (proj / pp.LAUNCHER_NAME).read_bytes().count(b"\n") > 0
+          and b"ocd.bat" in (proj / pp.LAUNCHER_NAME).read_bytes(),
+          str(seeded.get("launcher")))
     pdir = proj / ".opencodelig"
     check("profile dir + state dirs exist", pdir.is_dir() and (pdir / "diagnostics").is_dir()
           and (pdir / "state").is_dir())

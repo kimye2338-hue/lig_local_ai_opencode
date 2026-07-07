@@ -77,6 +77,24 @@ SEED_FILES: Dict[str, str] = {
     "TASKS.md": TASKS_SEED,
 }
 
+# 폴더 루트에 두는 '클릭용' 런처. 처음 ocd 하면 초기파일로 같이 생긴다 — 다음부터는
+# 터미널 없이 이 파일만 더블클릭하면 "cd <이 폴더> + ocd" 효과(이 폴더 페르소나로 OpenCode).
+# 설치된 ocd.bat 을 풀 경로로 호출해 PATH 설정 여부와 무관하게 동작. CRLF+chcp 로 기록.
+LAUNCHER_NAME = "여기서_AI비서_열기.bat"
+LAUNCHER_BAT = (
+    "@echo off\r\n"
+    "chcp 65001 >nul\r\n"
+    "rem 이 파일이 놓인 폴더에서 OpenCodeLIG 를 연다(폴더 전용 페르소나+전역 기억).\r\n"
+    "rem 터미널에서 `cd 이폴더` 후 `ocd` 친 것과 같은 효과. 처음 ocd 시 자동 생성됨.\r\n"
+    'cd /d "%~dp0"\r\n'
+    'call "%USERPROFILE%\\OpenCodeLIG\\bin\\ocd.bat" %*\r\n'
+    "if errorlevel 9 (\r\n"
+    "  echo.\r\n"
+    "  echo [!] OpenCodeLIG 설치를 찾지 못했습니다. 먼저 설치기를 실행하세요.\r\n"
+    "  pause\r\n"
+    ")\r\n"
+)
+
 CONFLICT_RULE = (
     "충돌 규칙: 안전 규칙과 전역 사용자 선호가 로컬 페르소나보다 우선. "
     "로컬 프로젝트 규칙은 일반 기본값보다 우선. "
@@ -130,11 +148,24 @@ def seed_profile(cwd: Path) -> Dict[str, Any]:
             continue
         target.write_text(seed, encoding="utf-8")
         created.append(name)
+    # 폴더 루트에 클릭용 런처를 초기파일로 생성(없을 때만) — 다음부터 터미널 없이 더블클릭.
+    launcher = Path(cwd) / LAUNCHER_NAME
+    launcher_created = False
+    if launcher.exists():
+        reused.append(LAUNCHER_NAME)
+    else:
+        try:
+            launcher.write_bytes(LAUNCHER_BAT.encode("utf-8"))  # CRLF 유지(바이트 기록)
+            created.append(LAUNCHER_NAME)
+            launcher_created = True
+        except Exception:
+            pass  # 폴더 쓰기 불가여도 ocd 자체는 계속 동작
     return {
         "profile_dir": str(profile_dir),
         "created": created,
         "reused": reused,
         "first_run": first_run,
+        "launcher": str(launcher) if (launcher_created or launcher.exists()) else None,
     }
 
 
