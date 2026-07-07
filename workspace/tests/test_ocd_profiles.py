@@ -4,7 +4,7 @@
 Run: py -3.11 tests\\test_ocd_profiles.py  (리눅스에서도 동작 — stdlib only)
 
 수용 기준 대응:
-  1. 첫 실행이 .opencodelig 시드 5종 + 폴더 루트 클릭용 런처(여기서_AI비서_열기.bat)를 만든다.
+  1. 첫 실행이 .opencodelig 시드 5종 + 폴더 루트 클릭용 런처(OpenCode_열기.bat)를 만든다.
   2. 두 번째 실행이 사용자가 고친 로컬 파일을 덮어쓰지 않는다.
   3. 전역 기억 경로는 override 없으면 USERPROFILE 기준 전역이다.
   4. 로컬 페르소나/규칙/프로젝트 기억이 컨텍스트 조립에 잡힌다.

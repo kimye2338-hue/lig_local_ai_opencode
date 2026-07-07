@@ -74,13 +74,13 @@ def main(argv=None) -> int:
         print(f"[OpenCodeLIG] Local profile created: {PROFILE_DIRNAME}")
         for name in seeded["created"]:
             if name == LAUNCHER_NAME:  # 폴더 루트 런처(클릭용) — 별도 안내
-                print(f"[OpenCodeLIG]   + {name}  (더블클릭하면 다음부터 터미널 없이 여기서 열림)")
+                print(f"[OpenCodeLIG]   + {name}  (다음부터 이 파일 더블클릭하면 여기서 OpenCode 가 열림)")
             else:
                 print(f"[OpenCodeLIG]   + {PROFILE_DIRNAME}{sep0}{name}")
     else:
         print(f"[OpenCodeLIG] Local profile found: {PROFILE_DIRNAME}")
         if seeded.get("launcher"):
-            print(f"[OpenCodeLIG] 폴더 런처: {LAUNCHER_NAME} (더블클릭으로 열기)")
+            print(f"[OpenCodeLIG] 폴더 런처: {LAUNCHER_NAME} (더블클릭하면 여기서 OpenCode 가 열림)")
     print(f"[OpenCodeLIG] Global memory: {global_memory_dir()}")
     sep = "\\" if os.name == "nt" else "/"
     print(f"[OpenCodeLIG] Local persona: {PROFILE_DIRNAME}{sep}PERSONA.md")
