@@ -54,17 +54,48 @@ def load_reference(software: str) -> Optional[str]:
         return None
 
 
-def _excerpt(text: str, max_chars: int) -> str:
-    """참조가 길면 핵심 섹션(핵심 객체/명령 + 최소 동작 예제) 위주로 자른다."""
+# 항상 유지할 섹션 접두(연결 보일러플레이트·버전 제약·핵심 객체). 버전 제약이
+# 잘리면 모델이 상위버전 API를 지어낼 수 있어 반드시 남긴다.
+_ALWAYS_HEADS = ("## ⚠️", "## 버전", "## 핵심", "## 연결", "## 부팅", "## 최소 동작", "## boilerplate")
+
+
+def _tokens(s: str) -> set:
+    return {t for t in re.findall(r"[a-z0-9]+|[가-힣]{2,}", (s or "").lower()) if len(t) >= 2}
+
+
+def _excerpt(text: str, max_chars: int, prompt: str = "") -> str:
+    """task별로 조직된 큰 참조에서 **프롬프트 작업에 관련된 섹션만** 골라 주입한다.
+
+    항상 유지: 인트로 + 연결/버전/핵심 섹션. 그 외 task 섹션은 프롬프트와의
+    토큰 겹침으로 점수화해 예산 내 상위부터 넣는다(relevance 주입 — 큰 파일에서도
+    맞는 레시피만 들어가 약한 모델 컨텍스트 낭비를 막는다)."""
     if len(text) <= max_chars:
         return text
-    # 헤더 단위로 우선순위 섹션만 남긴다. 버전 제약(⚠️)은 반드시 유지 —
-    # "2022 전용" 같은 규칙이 잘리면 모델이 상위버전 API를 지어낼 수 있다.
-    keep_heads = ("# ", "## ⚠️", "## 버전", "## 핵심", "## 최소 동작", "## 자주")
     blocks = re.split(r"(?m)^(?=## )", text)
-    out = blocks[0] if blocks else ""
+    intro = blocks[0] if blocks else ""
+    ptok = _tokens(prompt)
+    always: List[str] = []
+    scored: List[tuple] = []
     for b in blocks[1:]:
-        if b.startswith(keep_heads):
+        if b.startswith(_ALWAYS_HEADS):
+            always.append(b)
+        else:
+            overlap = len(ptok & _tokens(b[:400]))  # 헤더+앞부분으로 관련도
+            scored.append((overlap, b))
+    scored.sort(key=lambda x: -x[0])
+    out = intro
+    for b in always:                       # 필수 섹션 먼저
+        if len(out) + len(b) <= max_chars:
+            out += b
+    for ov, b in scored:                   # 관련도 높은 task 섹션
+        if ov <= 0:
+            continue
+        if len(out) + len(b) > max_chars:
+            continue
+        out += b
+    # 관련 task가 하나도 안 걸리면(overlap 0) 앞쪽 섹션이라도 예산까지 채운다.
+    if out == intro + "".join(always):
+        for ov, b in scored:
             if len(out) + len(b) > max_chars:
                 break
             out += b
@@ -85,7 +116,7 @@ def context_for_prompt(prompt: str, max_chars: int = 2600) -> Optional[str]:
         ref = load_reference(sid)
         if not ref:
             continue
-        piece = _excerpt(ref, max(600, budget // (2 if len(softwares) > 1 else 1)))
+        piece = _excerpt(ref, max(600, budget // (2 if len(softwares) > 1 else 1)), prompt)
         chunks.append(piece)
         budget -= len(piece)
         if budget <= 0:
