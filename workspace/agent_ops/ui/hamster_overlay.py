@@ -468,11 +468,10 @@ class WindowsTrayIcon:
                    TPM_RETURNCMD, TPM_RIGHTBUTTON, MF_STRING, MF_SEPARATOR) -> None:
         from ctypes import wintypes
         menu = user32.CreatePopupMenu()
-        user32.AppendMenuW(menu, MF_STRING, CMD_SHOW, "Show")
-        user32.AppendMenuW(menu, MF_STRING, CMD_HIDE, "Hide")
-        user32.AppendMenuW(menu, MF_STRING, CMD_DETAILS, "Details")
+        user32.AppendMenuW(menu, MF_STRING, CMD_SHOW, "다시 표시")
+        user32.AppendMenuW(menu, MF_STRING, CMD_DETAILS, "상세 보기")
         user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
-        user32.AppendMenuW(menu, MF_STRING, CMD_EXIT, "Exit")
+        user32.AppendMenuW(menu, MF_STRING, CMD_EXIT, "완전종료")
         pt = wintypes.POINT()
         user32.GetCursorPos(ctypes.byref(pt))
         user32.SetForegroundWindow(hwnd)
@@ -547,7 +546,8 @@ class HamsterPetOverlay:
         self.canvas.bind("<B1-Motion>", self._drag)
         self.canvas.bind("<ButtonRelease-1>", self._save_position)
         self.canvas.bind("<Double-Button-1>", self._show_details)
-        self.canvas.bind("<Button-3>", self._show_menu)
+        # 우클릭 = 숨김(백그라운드 유지). 다시 표시/완전종료는 트레이 아이콘 우클릭.
+        self.canvas.bind("<Button-3>", lambda e: self.hide())
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
 
         self._menu = tk.Menu(root, tearoff=False)
@@ -739,13 +739,10 @@ class HamsterPetOverlay:
         self._draw_status_header(status, label)
 
         image = self.sprites.get(status, self.frame_index)
-        c.create_image(122, 142, image=image)
+        # 햄스터를 상태글자 바로 아래(상단 앵커)에 붙여 프레임 높이와 무관하게 간격을 일정하게
+        # 좁힌다. (X 닫기버튼 제거 — 닫기는 우클릭)
+        c.create_image(122, 44, image=image, anchor="n")
         c.image_ref = image
-
-        # Small hide button. Close means hide, not exit.
-        c.create_oval(216, 10, 240, 34, fill="#ffffff", outline="#d6c1a1", width=2, tags=("hide",))
-        c.create_text(228, 21, text="×", fill="#5f4525", font=("Arial", 12, "bold"), tags=("hide",))
-        c.tag_bind("hide", "<Button-1>", lambda e: self.hide())
 
     def _draw_status_header(self, status: str, label: str) -> None:
         c = self.canvas
