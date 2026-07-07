@@ -785,21 +785,45 @@ class HamsterPetOverlay:
         c.create_polygon(points, smooth=True, **kw)
 
 
+def _hamster_log(message: str, with_trace: bool = False) -> None:
+    """햄스터는 pythonw(숨김창)로 돌아 예외가 화면에도 콘솔에도 안 남는다 — 그러면
+    '안 되는데 왜인지 모름'이 된다. 시작/실패를 진단 로그로 남겨 원인이 보이게 한다.
+    best-effort: 로깅 자체는 절대 예외를 던지지 않는다."""
+    try:
+        DEFAULT_DIAG_DIR.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().astimezone().isoformat(timespec="seconds")
+        line = f"[{ts}] {message}\n"
+        if with_trace:
+            import traceback
+            line += traceback.format_exc() + "\n"
+        with (DEFAULT_DIAG_DIR / "hamster_overlay.log").open("a", encoding="utf-8") as fh:
+            fh.write(line)
+    except Exception:
+        pass
+
+
 def run_app() -> None:
     import tkinter as tk
     global _APP_MUTEX
-    if platform.system().lower() == "windows":
-        ERROR_ALREADY_EXISTS = 183
-        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        # Keep the handle alive for the process lifetime; releasing it would drop
-        # the single-instance guard. get_last_error() must be read right after the
-        # CreateMutexW call, before any other Win32 traffic clobbers it.
-        _APP_MUTEX = k32.CreateMutexW(None, False, "OpenCodeLIG_Hamster_Pet_Mutex")
-        if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
-            return
-    root = tk.Tk()
-    HamsterPetOverlay(root)
-    root.mainloop()
+    try:
+        if platform.system().lower() == "windows":
+            ERROR_ALREADY_EXISTS = 183
+            k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            # Keep the handle alive for the process lifetime; releasing it would drop
+            # the single-instance guard. get_last_error() must be read right after the
+            # CreateMutexW call, before any other Win32 traffic clobbers it.
+            _APP_MUTEX = k32.CreateMutexW(None, False, "OpenCodeLIG_Hamster_Pet_Mutex")
+            if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
+                _hamster_log("이미 실행 중(뮤텍스 점유) — 새 인스턴스 종료. 안 보이면 기존 프로세스 확인.")
+                return
+        root = tk.Tk()
+        HamsterPetOverlay(root)
+        _hamster_log(f"햄스터 오버레이 시작됨 (state={DEFAULT_STATE_DIR})")
+        root.mainloop()
+    except Exception as exc:
+        # 숨김창이라 사용자는 못 보지만 로그엔 원인이 남는다.
+        _hamster_log(f"햄스터 오버레이 시작 실패: {exc}", with_trace=True)
+        raise
 
 
 if __name__ == "__main__":
