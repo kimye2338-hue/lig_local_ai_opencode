@@ -498,6 +498,15 @@ def consolidate() -> Dict[str, Any]:
     if written:
         _log("consolidate", f"페이지 {len(written)}개 갱신: {', '.join(written[:8])}"
              + (" …" if len(written) > 8 else ""))
+    # Obsidian 자연 연동: 위키에 내용이 생기는 순간 vault 설정(.obsidian)을 1회
+    # 자동 시드한다 — 사용자가 wiki.bat 등 아무것도 안 눌러도 폴더를 Obsidian으로
+    # 열면 바로 그래프/백링크/대시보드가 준비돼 있다. 이미 있으면 건드리지 않는다.
+    try:
+        if not (WIKI_DIR / ".obsidian").exists():
+            from .wiki_vault import seed_obsidian_vault
+            seed_obsidian_vault(WIKI_DIR)
+    except Exception:  # noqa: BLE001 - vault 시드 실패가 위키 통합을 막지 않게
+        pass
     return {"pages": len(topic_rows), "updated": written, "orphans": orphans,
             "records": len(rows)}
 
