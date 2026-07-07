@@ -256,11 +256,16 @@ def _opencode_running() -> bool:
     try:
         import subprocess
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        # text=True 로 받으면 PYTHONUTF8=1 하에서 utf-8 로 디코드 → 한글 윈도우 tasklist 의
+        # cp949 헤더(0xc0 등)에서 리더스레드가 크래시하고 stdout 이 비어 '프로세스 없음'으로
+        # 오판 → 펫이 자동종료된다. bytes 로 받아 errors='replace' 로 디코드(프로세스명은
+        # ASCII 라 항상 보존된다). 이게 '펫이 잠깐 떴다 사라진다'의 근본원인이었다.
         cp = subprocess.run(
             ["tasklist", "/FI", f"IMAGENAME eq {WATCH_PROCESS}"],
-            capture_output=True, text=True, timeout=4, creationflags=creationflags,
+            capture_output=True, timeout=4, creationflags=creationflags,
         )
-        return WATCH_PROCESS.lower() in (cp.stdout or "").lower()
+        out = (cp.stdout or b"").decode("utf-8", "replace").lower()
+        return WATCH_PROCESS.lower() in out
     except Exception:
         return True
 
