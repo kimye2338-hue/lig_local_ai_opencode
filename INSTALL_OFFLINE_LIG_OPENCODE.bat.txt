@@ -77,6 +77,14 @@ if errorlevel 8 (
 )
 rem Ensure tools\ exists (its README ships in the package but /XD skipped it).
 if not exist "%WS%\tools" mkdir "%WS%\tools"
+
+rem Expose `ocd` as a global command: copy the launcher into bin and add bin
+rem to the USER PATH safely (PowerShell SetEnvironmentVariable - no setx 1024-char
+rem truncation, idempotent). New terminal picks it up: `cd project` then `ocd`.
+if exist "%WS%\launch\ocd.bat" (
+  copy /y "%WS%\launch\ocd.bat" "%BIN%\ocd.bat" >nul
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$b=[Environment]::GetEnvironmentVariable('Path','User'); if($null -eq $b){$b=''}; if($b -notlike '*OpenCodeLIG\bin*'){[Environment]::SetEnvironmentVariable('Path',($b.TrimEnd(';')+';%BIN%'),'User'); Write-Host '[OK] ocd command registered on PATH (open a NEW terminal to use it).'} else {Write-Host '[OK] ocd already on PATH.'}" 2>nul || echo [WARN] Could not auto-register ocd on PATH; add %BIN% to PATH manually.
+)
 rem Seed OpenCodeLIG_USERDATA with the pre-filled gateway secret so the
 rem assistant connects with zero configuration. Non-destructive: only seeds
 rem the secret when it does not already exist (USERDATA is inviolable - an
