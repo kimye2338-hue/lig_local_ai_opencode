@@ -63,6 +63,13 @@ def add_memory_event(kind: str, title: str, body: str, status: str = "active", p
         consolidate_quietly()
     except Exception:
         pass
+    # 자율 유지(스로틀): 사용자 호출 없이도 하루 약 2회 정리·최적화가 돈다.
+    # 락 밖에서 호출(dedup은 자체 락 획득) + 실패해도 저장을 막지 않는다.
+    try:
+        from .auto_maintain import maybe_maintain
+        maybe_maintain()
+    except Exception:
+        pass
     return item
 
 def _protect_rank(row: Dict[str, Any]) -> int:

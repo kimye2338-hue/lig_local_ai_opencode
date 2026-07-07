@@ -40,16 +40,20 @@ def main() -> None:
     names = {x["function"]["name"] for x in defs}
     browser_names = {"browse_tabs", "read_web_page", "browser_action", "new_tab", "snapshot",
                      "find_clickables", "click", "screenshot", "wait_for_selector", "select_tab", "spa_map"}
+    # 앱 어댑터 전체 노출: 대화형 에이전트가 Office/CAD/메일/OCR 앱을 직접 호출.
+    adapter_names = {"excel_app", "outlook_app", "hwp_app", "solidworks_app", "ocr_screen",
+                     "desktop_ui", "matlab_run", "fluent_run", "autocad_run"}
     check("tool_definitions covers registry",
           {"read_file", "replace_in_file", "project_info", "remember"}.issubset(names)
-          and browser_names.issubset(names) and len(names) == 20)
+          and browser_names.issubset(names) and adapter_names.issubset(names) and len(names) == 29)
     prompt_schema_bytes = len(AGENT_SYSTEM_PROMPT.encode("utf-8"))
     prompt_schema_bytes += len(json.dumps(defs, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
     # Browser action tools are explicit so weak models stop inventing unsupported tool names.
-    # Budget history: 7.5KB at 18 tools; +0.3KB for project_info/remember (folder
-    # profiles + durable memory writes — FABLE-OCD-WORKSPACE-PROFILES). Keep tight:
+    # Budget history: 7.5KB at 18 tools; +0.3KB for project_info/remember; +~3KB for the
+    # 9 app-adapter tools (Office/CAD/mail/OCR direct control — user-approved full exposure,
+    # schemas kept tight: undeclared options still pass through at runtime). Keep tight:
     # every new tool must justify its schema bytes against weak-model call accuracy.
-    check("prompt and schema stay under 7.8KB", prompt_schema_bytes <= 7800, str(prompt_schema_bytes))
+    check("prompt and schema stay under 10.8KB", prompt_schema_bytes <= 11059, str(prompt_schema_bytes))
 
     r = d.dispatch({"name": "browser_action", "arguments": {"action": "no_such_browser_action"}})
     check("browser_action rejects invented actions without Chrome",

@@ -122,6 +122,124 @@ def _browser_tool(action: str) -> ToolFn:
     return run
 
 
+def _adapter_pending_hint(adapter_id: str) -> str:
+    """앱 미검증/미설치 시 붙일 안내 — 어떤 앱/반입이 필요한지 알려준다."""
+    try:
+        from .adapters import ADAPTERS
+        spec = ADAPTERS.get(adapter_id, {})
+        note = spec.get("pending") or "; ".join(spec.get("requires", []))
+        return (" — " + note) if note else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _normalize_adapter_result(adapter_id: str, res: Dict[str, Any]) -> Dict[str, Any]:
+    if res.get("ok"):
+        return {"ok": True, "data": res.get("data", {k: v for k, v in res.items() if k != "ok"})}
+    return {"ok": False,
+            "error": str(res.get("error", "")) + _adapter_pending_hint(adapter_id),
+            "root_cause_category": "app_unavailable"}
+
+
+def _action_adapter_tool(adapter_id: str, loader: Callable) -> ToolFn:
+    """action형 어댑터(execute(action, options))를 도구로 감싼다.
+
+    loader()는 실행 시점에 (execute, actions)를 지연 반환한다 — 모듈 로드 때
+    COM/무거운 의존을 끌어오지 않는다. action은 ACTIONS로 검증(임의 호출 금지),
+    앱/COM 미설치는 어댑터가 우아하게 ok=False를 돌려주므로 크래시 없이 정규화."""
+    def run(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
+        action = str(args.get("action") or "")
+        try:
+            execute, actions = loader()
+        except Exception as exc:  # noqa: BLE001 - 어댑터 import 자체 실패도 우아하게
+            return {"ok": False, "error": "%s 어댑터 로드 실패: %r%s" % (adapter_id, exc, _adapter_pending_hint(adapter_id)),
+                    "root_cause_category": "app_unavailable"}
+        valid = tuple(actions)
+        if not action:
+            return {"ok": False, "error": "action is required; available=%s" % ", ".join(valid),
+                    "root_cause_category": "missing_argument"}
+        if action not in valid:
+            return {"ok": False,
+                    "error": "unsupported %s action: %s; available=%s" % (adapter_id, action, ", ".join(valid)),
+                    "root_cause_category": "invalid_argument"}
+        opts = {k: v for k, v in args.items() if k != "action" and v not in (None, "")}
+        try:
+            res = execute(action, opts)
+        except Exception as exc:  # noqa: BLE001 - 어댑터 예외가 에이전트 루프를 죽이지 않게
+            return {"ok": False, "error": ("%s 어댑터 오류: %r" % (adapter_id, exc))[:200],
+                    "root_cause_category": "app_unavailable"}
+        return _normalize_adapter_result(adapter_id, res)
+    return run
+
+
+def _path_adapter_tool(adapter_id: str, loader: Callable, path_key: str) -> ToolFn:
+    """경로형 어댑터(execute(script_path, options))를 도구로 감싼다."""
+    def run(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
+        sp = str(args.get(path_key) or args.get("path") or "")
+        if not sp:
+            return {"ok": False, "error": "%s is required" % path_key,
+                    "root_cause_category": "missing_argument"}
+        try:
+            execute = loader()
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": "%s 어댑터 로드 실패: %r%s" % (adapter_id, exc, _adapter_pending_hint(adapter_id)),
+                    "root_cause_category": "app_unavailable"}
+        opts = {k: v for k, v in args.items() if k not in (path_key, "path") and v not in (None, "")}
+        try:
+            res = execute(sp, opts)
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": ("%s 어댑터 오류: %r" % (adapter_id, exc))[:200],
+                    "root_cause_category": "app_unavailable"}
+        return _normalize_adapter_result(adapter_id, res)
+    return run
+
+
+def _load_excel():
+    from .adapters import _office_execute, excel_com, office_convert
+    return _office_execute, tuple(excel_com.ACTIONS) + tuple(office_convert.ACTIONS)
+
+
+def _load_outlook():
+    from .adapters import outlook_com
+    return outlook_com.execute, outlook_com.ACTIONS
+
+
+def _load_hwp():
+    from .adapters import hwp_com
+    return hwp_com.execute, hwp_com.ACTIONS
+
+
+def _load_solidworks():
+    from .adapters import solidworks_com
+    return solidworks_com.execute, solidworks_com.ACTIONS
+
+
+def _load_ocr():
+    from .adapters import ocr_screen
+    return ocr_screen.execute, tuple(ocr_screen.ACTIONS)
+
+
+def _load_desktop_ui():
+    from .adapters import desktop_ui
+    return desktop_ui.execute, tuple(desktop_ui.ACTIONS)
+
+
+def tool_autocad_run(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
+    """AutoCAD accoreconsole 배치: 도면(.dwg) 사본에 스크립트(.scr) 실행."""
+    dwg = str(args.get("dwg_path") or "")
+    scr = str(args.get("scr_path") or "")
+    if not dwg or not scr:
+        return {"ok": False, "error": "dwg_path 와 scr_path 가 모두 필요합니다",
+                "root_cause_category": "missing_argument"}
+    try:
+        from .adapters import autocad_batch
+        res = autocad_batch.execute(dwg, scr, {})
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": "autocad 어댑터 오류: %r" % exc,
+                "root_cause_category": "app_unavailable"}
+    return _normalize_adapter_result("autocad", res)
+
+
 def tool_project_info(root: Path, args: Dict[str, Any]) -> Dict[str, Any]:
     """현재 폴더 프로필/전역 기억 진단 — 모델이 자기 컨텍스트 출처를 확인."""
     from .project_profile import profile_diagnostics
@@ -162,6 +280,17 @@ REGISTRY: Dict[str, Dict[str, Any]] = {
     "spa_map":         {"fn": _browser_tool("spa_map"),          "required": [], "optional": ["tab", "output_dir", "max_clicks", "wait_seconds"], "description": "Explore current SPA menu/clickable map"},
     "project_info":    {"fn": tool_project_info,  "required": [],               "optional": [],                    "description": "Show folder profile + global memory paths"},
     "remember":        {"fn": tool_remember,      "required": ["note"],         "optional": ["title"],             "description": "Save a lesson to global memory"},
+    # --- 앱 어댑터 직접 호출(전체 노출). 앱/COM 미설치 시 우아하게 실패. 스키마는
+    # 약한 모델 정확도 위해 타이트하게 — 미선언 옵션도 런타임은 통과시킨다. ---
+    "excel_app":       {"fn": _action_adapter_tool("office", _load_excel),       "required": ["action"], "optional": ["path", "range", "bas_path"], "description": "Excel/Word/PPT: open_copy/read_range/write_range/run_macro_file/save/close/md_to_docx/spec_to_pptx"},
+    "outlook_app":     {"fn": _action_adapter_tool("outlook", _load_outlook),    "required": ["action"], "optional": ["days"], "description": "Outlook: read_calendar/sync_calendar/read_inbox"},
+    "hwp_app":         {"fn": _action_adapter_tool("hwp", _load_hwp),            "required": ["action"], "optional": ["path", "out_path"], "description": "한글(HWP): md_to_hwp"},
+    "solidworks_app":  {"fn": _action_adapter_tool("solidworks", _load_solidworks), "required": ["action"], "optional": ["path"], "description": "SolidWorks: run_macro"},
+    "ocr_screen":      {"fn": _action_adapter_tool("ocr_screen", _load_ocr),      "required": ["action"], "optional": ["region", "path"], "description": "화면/이미지 OCR: read_screen/read_image/capabilities"},
+    "desktop_ui":      {"fn": _action_adapter_tool("desktop_ui", _load_desktop_ui), "required": ["action"], "optional": ["task"], "description": "COM 없는 앱 조작(UIA): capabilities/run_task"},
+    "matlab_run":      {"fn": _path_adapter_tool("matlab", lambda: __import__("agent_ops.adapters.matlab_batch", fromlist=["execute"]).execute, "script_path"), "required": ["script_path"], "optional": [], "description": "MATLAB -batch (.m) 실행"},
+    "fluent_run":      {"fn": _path_adapter_tool("fluent", lambda: __import__("agent_ops.adapters.fluent_batch", fromlist=["execute"]).execute, "journal_path"), "required": ["journal_path"], "optional": [], "description": "ANSYS Fluent journal(.jou) 실행"},
+    "autocad_run":     {"fn": tool_autocad_run,   "required": ["dwg_path", "scr_path"], "optional": [],           "description": "AutoCAD accoreconsole: .dwg 사본에 .scr 실행"},
 }
 
 _PARAM_DESCRIPTIONS = {
@@ -191,6 +320,23 @@ _PARAM_DESCRIPTIONS = {
     "output_dir": "output directory",
     "max_clicks": "maximum clicks to explore",
     "include_clickables": "true/false",
+    "action": "adapter action name",
+    "out_path": "output file path",
+    "sheet": "worksheet name",
+    "range": "cell range, e.g. A1:C10",
+    "values": "values to write",
+    "bas_path": "macro .bas path",
+    "days": "days ahead",
+    "count": "max items",
+    "folder": "mail folder",
+    "macro": "macro name",
+    "region": "screen region [x,y,w,h]",
+    "lang": "OCR language, e.g. kor+eng",
+    "task": "natural-language app task",
+    "script_path": "script file path (.m)",
+    "journal_path": "journal file path (.jou)",
+    "dwg_path": "AutoCAD drawing .dwg path",
+    "scr_path": "AutoCAD script .scr path",
 }
 
 _INT_PARAMS = {"count", "index", "timeout", "max_length", "max_text_length", "max_html_length", "max_clicks", "limit"}
