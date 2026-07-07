@@ -29,8 +29,31 @@ def _env_path(var: str, default: Path) -> Path:
     return Path(raw) if raw else default
 
 
-SECRET_ENV_PATH = _env_path("LIG_API_ENV_FILE", Path.home() / "OpenCodeLIG_USERDATA" / "secrets" / "lig-api.env")
+_DEFAULT_SECRET = Path.home() / "OpenCodeLIG_USERDATA" / "secrets" / "lig-api.env"
+SECRET_ENV_PATH = _env_path("LIG_API_ENV_FILE", _DEFAULT_SECRET)
 DIAG_DIR = _env_path("LIG_DIAG_DIR", Path.home() / "OpenCodeLIG_USERDATA" / "diagnostics")
+
+# 패키지에 동봉된 게이트웨이 설정 템플릿(사내 값 선탑재). secret 파일이 아직
+# 없을 때 이걸로 자가 시드해, 설치기/런처의 시드 단계를 안 거치고 opencode.exe를
+# 직접 실행하는 등 어떤 경로로 켜도 게이트웨이가 잡히도록 한다.
+_PACKAGED_EXAMPLE = Path(__file__).resolve().parent.parent / "config" / "lig-api.env.example"
+
+
+def _ensure_default_secret() -> None:
+    """secret 파일이 없으면 동봉 템플릿에서 1회 복사(자가치유). 비파괴: 이미
+    있으면 손대지 않는다. 실패해도 조용히 넘어간다(없으면 validate가 안내).
+
+    정규 기본 USERDATA 경로일 때만 시드한다 — 사용자/테스트가 LIG_API_ENV_FILE로
+    다른 위치를 지정한 경우엔 그 의도(미설정 상태 포함)를 존중해 건드리지 않는다."""
+    try:
+        if SECRET_ENV_PATH != _DEFAULT_SECRET:
+            return
+        if not SECRET_ENV_PATH.exists() and _PACKAGED_EXAMPLE.exists():
+            SECRET_ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy2(_PACKAGED_EXAMPLE, SECRET_ENV_PATH)
+    except Exception:
+        pass
 
 # 실측(2026-07-03): 라우트에는 "/gateway/" 접두가 필요하다 — 없으면 리버스 프록시가
 # 백엔드로 넘기지 않고 80포트 웹서버가 404를 반환한다 (probe/results/ 2차 실측 +
@@ -64,7 +87,11 @@ _ROUTE_CAPABILITY_MAP = {
 
 
 def load_lig_env(path: Optional[Path] = None) -> Dict[str, str]:
-    """Parse KEY=VALUE env file. Tolerates BOM, blank lines, # comments."""
+    """Parse KEY=VALUE env file. Tolerates BOM, blank lines, # comments.
+
+    기본 경로(secret) 사용 시, 파일이 없으면 동봉 템플릿에서 자가 시드한다."""
+    if path is None:
+        _ensure_default_secret()
     path = path or SECRET_ENV_PATH
     values: Dict[str, str] = {}
     if not path.exists():
@@ -174,6 +201,10 @@ def build_providers(env: Optional[Dict[str, str]] = None) -> Dict[str, Dict[str,
 
 def validate_config(env: Optional[Dict[str, str]] = None, path: Optional[Path] = None) -> Dict[str, Any]:
     """Presence/shape validation only — safe to print and to write to diagnostics."""
+    # 기본 경로 진단이면 자가 시드를 먼저 태워 secret_file_found가 실제 상태와
+    # 일치하게 한다(런타임이 시드하는데 doctor만 '없음'으로 보고하는 불일치 방지).
+    if path is None and env is None:
+        _ensure_default_secret()
     src = path or SECRET_ENV_PATH
     env = env if env is not None else load_lig_env(src)
     env = _with_shell_overrides(env)

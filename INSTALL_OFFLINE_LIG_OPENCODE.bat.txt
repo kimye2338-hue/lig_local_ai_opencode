@@ -62,15 +62,21 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-robocopy "%~dp0workspace" "%WS%" /E /NFL /NDL /NJH /NJS /NP >nul
+rem /PURGE mirrors the workspace to exactly match this package so stale files
+rem from a previous install (runtime output folders, results, snapshots)
+rem never linger. /XD tools keeps user-imported offline binaries
+rem (Obsidian/OCR/wheels) intact across reinstalls.
+robocopy "%~dp0workspace" "%WS%" /E /PURGE /XD "%WS%\tools" /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 (
   echo [ERROR] Workspace copy failed
   pause
   exit /b 1
 )
+rem Ensure tools\ exists (its README ships in the package but /XD skipped it).
+if not exist "%WS%\tools" mkdir "%WS%\tools"
 rem Seed OpenCodeLIG_USERDATA with the pre-filled gateway secret so the
 rem assistant connects with zero configuration. Non-destructive: only seeds
-rem the secret when it does not already exist (USERDATA is inviolable — an
+rem the secret when it does not already exist (USERDATA is inviolable - an
 rem existing key/memory/wiki is never overwritten here).
 if not exist "%USERDATA%\secrets" mkdir "%USERDATA%\secrets"
 if exist "%SEED%" (
