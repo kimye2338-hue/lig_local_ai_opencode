@@ -77,11 +77,14 @@ def _note_terms(path: Path, meta: Dict[str, str]) -> set:
     return {t for t in terms if len(t) >= 2}
 
 
-def detect_domains(prompt: str, top: int = 2, min_score: int = 2) -> List[Path]:
-    """작업 관련 노트를 반환. 부분매칭(용어가 프롬프트에 포함) + 최소 임계값.
+def detect_domains(prompt: str, top: int = 2, min_score: int = 1) -> List[Path]:
+    """작업 관련 노트를 반환. 부분매칭(노트 용어가 프롬프트에 포함).
 
-    약한 33B는 주입 컨텍스트를 과신하므로 **오주입 방지**가 미스보다 중요하다. 약한
-    신호(짧은 용어 1개)로는 주입하지 않고, 구체적 용어(길이≥3)나 다중 매칭이 있을 때만.
+    오주입 방지는 **임계값이 아니라 aliases curation**으로 한다: aliases에는 구체적
+    기술 용어(응력·피로·von mises·y+·fft 등)만 넣고 일상어(설계·데이터·해석 같은 광범위
+    단어 단독)는 피한다. 그러면 짧은 기술용어(2~3자)도 강한 신호로 살아나면서, 무관/코칭성
+    프롬프트는 애초에 매칭될 용어가 없어 주입되지 않는다(라우팅 골든셋 NEGATIVE로 회귀 검증).
+    약한 33B가 주입을 과신하므로 top=2로 제한한다.
     """
     low = (prompt or "").lower()
     if not low.strip():
@@ -91,12 +94,9 @@ def detect_domains(prompt: str, top: int = 2, min_score: int = 2) -> List[Path]:
         hits = [t for t in _note_terms(path, meta) if t in low]
         if not hits:
             continue
-        # 점수: 히트 수 + 긴 용어(구체적) 가중. 최장 히트 길이는 동점 해소용.
-        score = sum(1 + (1 if len(t) >= 4 else 0) for t in hits)
-        longest = max(len(t) for t in hits)
-        scored.append((score, longest, path))
-    # 임계: 점수 min_score 이상 또는 구체적 용어(길이≥3) 단독 매치만 통과(오주입 방지).
-    qualified = [(s, ln, p) for s, ln, p in scored if s >= min_score or ln >= 3]
+        score = sum(1 + (1 if len(t) >= 4 else 0) for t in hits)  # 긴 용어 가중
+        scored.append((score, max(len(t) for t in hits), path))
+    qualified = [(s, ln, p) for s, ln, p in scored if s >= min_score]
     qualified.sort(key=lambda x: (-x[0], -x[1]))
     return [p for _s, _l, p in qualified[:top]]
 
