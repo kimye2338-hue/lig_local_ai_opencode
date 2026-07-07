@@ -89,12 +89,29 @@ def detect_domains(prompt: str, top: int = 2, min_score: int = 1) -> List[Path]:
     low = (prompt or "").lower()
     if not low.strip():
         return []
-    scored: List[Tuple[int, int, Path]] = []
-    for path, meta, _body in _iter_notes():
+    # 문서빈도(df): 여러 노트에 흔한 용어(응력·굽힘)는 변별력이 낮고, 한 노트에만 있는
+    # 용어(기어·베어링·paris)는 강한 의도 신호다. 희소 용어에 가중(TF-IDF식)해 일반어가
+    # 구체 의도어를 이기지 못하게 한다.
+    notes = list(_iter_notes())
+    df: Dict[str, int] = {}
+    for path, meta, _b in notes:
+        for t in _note_terms(path, meta):
+            df[t] = df.get(t, 0) + 1
+
+    def _w(t: str) -> float:
+        d = df.get(t, 1)
+        rarity = 3.0 if d <= 1 else (2.0 if d == 2 else 1.0)   # 희소할수록↑
+        return rarity + (0.5 if len(t) >= 4 else 0.0)          # 긴 용어 소폭 가중
+
+    scored: List[Tuple[float, int, Path]] = []
+    for path, meta, _body in notes:
         hits = [t for t in _note_terms(path, meta) if t in low]
         if not hits:
             continue
-        score = sum(1 + (1 if len(t) >= 4 else 0) for t in hits)  # 긴 용어 가중
+        ws = sorted((_w(t) for t in hits), reverse=True)
+        # 가장 변별력 있는 단일 용어가 라우팅을 지배(기어 하나 > 일반어 응력+굽힘) +
+        # 나머지 히트는 소폭만 가산. 이러면 두 일반어가 한 구체어를 못 이긴다.
+        score = ws[0] + 0.4 * sum(ws[1:])
         scored.append((score, max(len(t) for t in hits), path))
     qualified = [(s, ln, p) for s, ln, p in scored if s >= min_score]
     qualified.sort(key=lambda x: (-x[0], -x[1]))
