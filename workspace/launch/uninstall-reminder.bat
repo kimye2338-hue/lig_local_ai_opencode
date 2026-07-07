@@ -1,6 +1,8 @@
 @echo off
 rem Prints and optionally removes the daily Windows Task Scheduler reminder.
 chcp 65001 >nul
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
 set TASK_NAME=OpenCodeLIG Morning Briefing
 set SCHTASKS_CMD=schtasks /Delete /TN "%TASK_NAME%" /F
 echo %SCHTASKS_CMD%

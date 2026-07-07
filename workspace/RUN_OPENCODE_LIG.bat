@@ -1,6 +1,8 @@
 @echo off
 chcp 65001 >nul
 setlocal EnableExtensions
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
 
 rem OpenCodeLIG unified launcher
 rem - loads userdata\secrets\lig-api.env

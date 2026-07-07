@@ -1,5 +1,7 @@
 @echo off
 chcp 65001 >nul
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
 rem Shared Pythonw 3.11 resolver. Sets %PYW% for the calling BAT. Exit 9 if none.
 set "PYW="
 pyw -3.11 -c "pass" >nul 2>&1 && set "PYW=pyw -3.11"

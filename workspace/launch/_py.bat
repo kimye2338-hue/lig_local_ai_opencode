@@ -1,5 +1,7 @@
 @echo off
 chcp 65001 >nul
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
 rem Shared Python 3.11 resolver. Sets %PY% for the calling BAT. Exit 9 if none.
 rem Order: py -3.11 -> python -> python3.11 -> python3 (must report 3.11.x)
 set "PY="
