@@ -838,3 +838,22 @@
   - 미검증: decay/promote 임계값(60일·3회·importance 0.45)의 운영 적정성은 사내망 장기 누적에서 튜닝.
   - 다음 작업: WS-10 전체 지능망 최종 리뷰 — INTELLIGENCE_COVERAGE_REPORT 최신화, auto route trace 8종 샘플, 미연결 0/안전
     우회 0/USERDATA 위험 0/GitHub push 0 판정, 사내망 필요 항목 체크리스트 분리.
+- WS-10 완료 기록(2026-07-09, 커밋 대기):
+  - 변경 요약: 신규 코드 없음(검증+문서). 전체 스위트 재실행 전부 PASS(intelligence_map 167·auto_policy 23·evaluation_loop 29·
+    memory_quality 35·capability_bench 222·launch_bats 101·work_command 4·doctor 0 등 20개 테스트 파일). `cmd_auto --dry-run`으로
+    8종 시나리오(문서/데이터리포트/일정/위키회상/앱파일/공학KB/루틴/위험삭제) route trace를 tmp 격리 실증 —
+    전부 exit 0, 정책+평가6축+memory_hooks+safety(approval_bypass=false) 기록. INTELLIGENCE_COVERAGE_REPORT에 WS-10 최종
+    리뷰 섹션(테스트 표·trace 표·판정·사내망 체크리스트·튜닝 소견) 기록.
+  - 최종 판정: 미연결 지능 0 / 안전 우회 0 / USERDATA 위험 변경 0 / GitHub push 0 / 모델 기본값 임의변경 0.
+  - 튜닝 소견(안전 문제 아님, 실사용 관측 후 조정): ①일정등록이 ask_user로 과잉질문(되돌릴 수 있음) ②공학KB "계산"이
+    plan_only로 라우팅(tool_agent가 더 적합). `_auto_command_hint`/`auto_policy` 신호 조정 대상.
+  - 철학 종료 체크: (닫힌 루프) 요청→라우팅→정책→실행→완료후크→평가가 오프라인에서 실증됨. (안전) 8종 전부 approval_bypass=
+    false, 위험 요청은 ask_user로 정지. (예측가능성) 사내망 필요 항목은 코드로 추측 치환하지 않고 체크리스트로 분리.
+  - 미검증/사내망 필요: 위 체크리스트 4종(WS-5 경로통합·모델 A/B·TUI 플러그인 실동작·라우팅 튜닝).
+
+## 10. 전체 완료 상태 (2026-07-09)
+
+WS-0~WS-10 **오프라인 검증 가능 범위 전부 구현·테스트·문서·로컬커밋 완료.** WS-5(실행/설정 통합)만 bash 셸 미확인으로
+핵심(48파일 경로 치환·ocd cwd)이 사내망-gated이며, 그 외는 완료. 사용자는 `/auto <요청>` 또는 기본 대화만으로 시작하고,
+내부가 capability→정책(execute/plan_only/ask_user/blocked)→실행→공통 완료후크→기억/위키/평가/유지보수로 자동 연결된다.
+안전(승인/가드/deny/USERDATA)은 모든 경로에서 불변. 다음: 사내망 체크리스트(INTELLIGENCE_COVERAGE_REPORT WS-10) 소화.
