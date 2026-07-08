@@ -189,6 +189,20 @@ def _write_auto_trace(trace: dict) -> None:
         pass
 
 
+def _append_auto_evaluation(trace: dict) -> None:
+    """WS-8: score the finished run and append it to the evaluation log.
+
+    평가는 보조 신호일 뿐이라 실패해도 auto 흐름에 영향이 없어야 한다
+    (best-effort). WS-3 완료후크/WS-7 정책 필드는 여기서 읽기만 한다."""
+    try:
+        from agent_ops.evaluation_loop import append_evaluation, score_run
+        record = score_run(trace, trace.get("outcome", ""))
+        append_evaluation(record)
+        trace["evaluation"] = record.get("scores", {})
+    except Exception:
+        pass
+
+
 def _auto_command_hint(task: str, plan: dict) -> dict:
     """Deterministic first-pass routing for the /auto entrypoint.
 
@@ -318,6 +332,7 @@ def cmd_auto(args):
         trace["exit_code"] = 0
         trace["outcome"] = "dry_run"
         trace["memory_hooks"] = ["dry_run: completion hook not fired"]
+        _append_auto_evaluation(trace)
         _write_auto_trace(trace)
         print(f"trace: {_auto_trace_path()}")
         return 0
@@ -403,6 +418,8 @@ def cmd_auto(args):
         trace["outcome"] = "blocked"
     else:
         trace["outcome"] = "completed"
+    # WS-8: 실행·완료후크·outcome 기록이 모두 끝난 뒤 평가만 얹는다.
+    _append_auto_evaluation(trace)
     _write_auto_trace(trace)
     print(f"trace: {_auto_trace_path()}")
     return exit_code

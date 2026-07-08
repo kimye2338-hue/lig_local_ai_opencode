@@ -307,6 +307,9 @@ MAINTENANCE_ITEMS = [
           "auto", "schedule", "Persistent local schedule intelligence.", "remove guarded"),
     _item("maintenance", "state_manager", ["workspace/agent_ops/state_manager.py"],
           "auto", "state", "Session checkpoint/done/blocker state used by resume and orchestrator.", "state append"),
+    _item("maintenance", "evaluation_loop", ["workspace/agent_ops/evaluation_loop.py"],
+          "auto", "evaluation", "WS-8 self-evaluation: scores each auto run and exposes read-only preference/growth signals.",
+          "평가는 보조 신호 — 안전·정책 미대체, append-only, 단일 성공 미승격"),
     _item("maintenance", "clean_stale", ["workspace/agent_ops/clean_stale.py"],
           "advanced", "maintenance", "Explicit stale-file cleanup helper; not automatic default.", "destructive cleanup requires care"),
 ]
