@@ -335,22 +335,37 @@ def format_recall_for_prompt(items: List[Dict[str, Any]]) -> str:
         lines.append(f"- [{item.get('kind')}/{item.get('priority')}/{item.get('source')}] {item.get('title')}: {body}")
     return "\n".join(lines)
 
-def record_self_error(area: str, detail: str, task: str = "") -> None:
+def record_self_error(area: str, detail: str, task: str = "",
+                      dedupe_day: bool = True) -> Optional[Dict[str, Any]]:
     """시스템이 '스스로 관찰한' 실수를 기억에 남긴다 — 사람이 안 불러줘도.
 
-    호출처: 품질검증이 LLM 출력을 거부했을 때, 어댑터 실행이 실패했을 때.
-    같은 제목이 같은 날 이미 있으면 중복 기록하지 않는다(원장 오염 방지).
+    호출처: 품질검증이 LLM 출력을 거부했을 때, 어댑터 실행이 실패했을 때,
+    공통 완료 후크(_complete_activity)가 실패 결과를 받았을 때.
+    중복억제(dedupe_day=True, 기본): 같은 날 + 같은 (area, detail) 원인이면
+    기록하지 않는다(원장 오염 방지). 원인 판별은 detail 해시 태그(dedupe:xxxx)로
+    하되, 해시 태그가 없는 과거 기록은 종전 규칙(같은 제목=중복)으로 보수 판정.
     기록된 error_pattern은 recall 기계주입으로 다음 작업에 자동 반영된다.
+    반환: 새로 기록된 항목 dict, 중복으로 건너뛰면 None.
     """
+    import hashlib
     title = f"자가 관찰 실수: {area}"
+    dedupe_tag = "dedupe:" + hashlib.sha1(
+        f"{area}|{(detail or '')[:300]}".encode("utf-8")).hexdigest()[:10]
     today = now()[:10]
-    for r in load_memory():
-        if r.get("title") == title and str(r.get("created_at", ""))[:10] == today:
-            return
+    if dedupe_day:
+        for r in load_memory():
+            if r.get("title") != title or str(r.get("created_at", ""))[:10] != today:
+                continue
+            tags = [str(t) for t in (r.get("tags") or [])]
+            existing_hash = next((t for t in tags if t.startswith("dedupe:")), None)
+            # 해시가 같으면 같은 원인 → skip. 해시 태그 없는 legacy 행은
+            # 종전 동작(제목+날짜 중복억제) 유지 → skip.
+            if existing_hash is None or existing_hash == dedupe_tag:
+                return None
     body = (detail or "")[:300] + (f" (작업: {task[:80]})" if task else "")
-    add_memory_event("error_pattern", title, body, status="active",
-                     priority="normal", source="self_observed",
-                     tags=extract_keywords(area + " " + task)[:6])
+    return add_memory_event("error_pattern", title, body, status="active",
+                            priority="normal", source="self_observed",
+                            tags=extract_keywords(area + " " + task)[:5] + [dedupe_tag])
 
 
 def record_success_lesson(task: Dict[str, Any], result: Dict[str, Any]) -> None:

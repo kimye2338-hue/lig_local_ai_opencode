@@ -279,7 +279,7 @@ def cmd_auto(args):
         },
         "context_sources": ["capabilities.plan_task"] + route_hints.get("context_sources", []),
         "verification": ["auto-route trace written"],
-        "memory_hooks": ["pending: WS-3 common completion hook"],
+        "memory_hooks": ["pending: fires after delegated command returns"],
         "safety": {
             "approval_bypass": False,
             "note": "Delegated commands keep their existing approval/guard behavior.",
@@ -298,6 +298,7 @@ def cmd_auto(args):
     if getattr(args, "dry_run", False):
         trace["exit_code"] = 0
         trace["outcome"] = "dry_run"
+        trace["memory_hooks"] = ["dry_run: completion hook not fired"]
         _write_auto_trace(trace)
         print(f"trace: {_auto_trace_path()}")
         return 0
@@ -332,11 +333,30 @@ def cmd_auto(args):
         ns = argparse.Namespace(task=task, input=getattr(args, "input", []),
                                 make_artifacts=False)
         code = cmd_plan(ns)
-    trace["exit_code"] = int(code or 0)
-    trace["outcome"] = "completed" if int(code or 0) == 0 else "failed"
+    exit_code = int(code or 0)
+    # WS-3 공통 완료 후크: artifact(work)/tool_agent(agent) 경로는 위임된 명령이
+    # 내부에서 _log_activity/_complete_activity 로 성공·실패를 이미 적재한다
+    # (cmd_work 말미, cmd_agent 말미). auto 레벨에서 또 적재하면 같은 작업이
+    # 이중으로 쌓이므로, auto 가 직접 마무리하는 command_native/memory_wiki/
+    # plan_only 경로에서만 자체 적재한다.
+    if hint["selected_path"] in {"artifact", "tool_agent"}:
+        trace["memory_hooks"] = [
+            f"delegated: '{cmd}' command fires its own completion hook"]
+    else:
+        hook = _complete_activity(
+            f"auto: {task}",
+            outcome=(f"경로 {cmd} 완료" if exit_code == 0 else ""),
+            ok=(exit_code == 0),
+            route=hint["selected_path"],
+            error_detail=("" if exit_code == 0
+                          else f"경로 {cmd} 실패 (exit {exit_code})"))
+        state = "fired" if hook.get("logged") else "skipped (dedupe/off)"
+        trace["memory_hooks"] = [f"_complete_activity {state}: {hook.get('kind')}"]
+    trace["exit_code"] = exit_code
+    trace["outcome"] = "completed" if exit_code == 0 else "failed"
     _write_auto_trace(trace)
     print(f"trace: {_auto_trace_path()}")
-    return int(code or 0)
+    return exit_code
 
 
 def _write_work_report(task: str, plan: dict, inputs, artifact_result: dict,
@@ -491,17 +511,49 @@ def _artifact_dir(default):
     return p
 
 
+def _complete_activity(task: str, outcome: str = "", *, ok: bool = True,
+                       kind: str = "activity", files=None, route=None,
+                       error_detail: str = "") -> dict:
+    """WS-3 공통 실행 완료 후크 — 결과가 어느 명령 경로에서 나오든 같은 방식으로
+    기억 원장에 축적한다(성공=activity/low, 실패=error_pattern/중복억제).
+
+    - ok=True: 기존 add_activity 경로(low priority, 같은날 같은제목 1회).
+      files 가 있으면 outcome 에 "산출물: ..." 을 부가한다.
+    - ok=False: record_self_error 로 자가 관찰 실수 기록. 당일+동일원인
+      (task+detail 해시) 중복억제는 memory_manager 쪽(dedupe_day)에서 처리.
+    - 적재 실패가 본 작업을 절대 막지 않는다(전체 try/except).
+    - 반환 dict {"logged", "kind", "path"} 는 auto route trace 등이 참조한다.
+    """
+    result = {"logged": False, "kind": ("activity" if ok else "error_pattern"),
+              "path": route}
+    try:
+        if ok:
+            from agent_ops.memory_manager import add_activity
+            body = (outcome or "").strip()
+            if files:
+                fl = list(files)
+                names = ", ".join(os.path.basename(str(f)) for f in fl[:3])
+                extra = f"산출물: {names}" + (f" (+{len(fl) - 3})" if len(fl) > 3 else "")
+                body = f"{body} / {extra}" if body else extra
+            result["logged"] = add_activity(task, body) is not None
+        else:
+            from agent_ops.memory_manager import record_self_error
+            result["logged"] = record_self_error(
+                task, error_detail or outcome, dedupe_day=True) is not None
+    except Exception:  # noqa: BLE001 - 자동 적재 실패가 작업을 막으면 안 된다
+        pass
+    return result
+
+
 def _log_activity(task: str, outcome: str = "") -> None:
     """완료된 작업을 기억에 자동 적재 → 증류되어 Obsidian 위키에 정리(cmd_work 와 동일).
 
+    WS-3: 공통 완료 후크(_complete_activity)의 얇은 성공 래퍼. 기존 성공 호출처는
+    이 함수를 그대로 유지해 자동으로 새 후크를 탄다(동작 불변, 이중 적재 없음).
     활동 기억은 low 우선순위라 사용자 규칙 회상을 밀어내지 않고,
     적재 실패가 본 작업의 성공을 막지 않는다. 성공 경로에서만 호출할 것.
     """
-    try:
-        from agent_ops.memory_manager import add_activity
-        add_activity(task, outcome)
-    except Exception:  # noqa: BLE001 - 자동 적재 실패가 작업을 막으면 안 된다
-        pass
+    _complete_activity(task, outcome, ok=True)
 
 
 def cmd_report_xlsx(args):
@@ -518,6 +570,8 @@ def cmd_report_xlsx(args):
     r = write_xlsx(out, headers, rows)
     if not r.get("ok"):
         print(f"[report-xlsx] 실패: {r.get('error')}\n  {r.get('hint','')}")
+        _complete_activity(f"XLSX 리포트 생성: {src.name}", ok=False,
+                           error_detail=str(r.get("error", ""))[:200])
         return 1
     print(f"XLSX 생성: {r['path']}")
     _log_activity(f"XLSX 리포트 생성: {src.name}", f"산출물: {r['path']}")
@@ -550,6 +604,8 @@ def cmd_office_doc(args):
         r = write_pptx(out, spec.get("slides", []) or [], title=title)
     if not r.get("ok"):
         print(f"[office-doc] 실패: {r.get('error')}\n  {r.get('hint','')}")
+        _complete_activity(f"{args.kind.upper()} 문서 생성: {title}", ok=False,
+                           error_detail=str(r.get("error", ""))[:200])
         return 1
     print(f"{args.kind.upper()} 생성: {r['path']}")
     _log_activity(f"{args.kind.upper()} 문서 생성: {title}", f"산출물: {r['path']}")
@@ -623,6 +679,8 @@ def cmd_doc_template(args):
                    title=(args.title or None), as_html=args.html, note=args.note)
     if not res.get("ok"):
         print(f"[doc-template] 실패: {res.get('error')}" + (f"\n  {res.get('hint','')}" if res.get("hint") else ""))
+        _complete_activity(f"정형문서 생성: {args.kind}", ok=False,
+                           error_detail=str(res.get("error", ""))[:200])
         return 1
     print(f"{res.get('kind')} 생성({res.get('format')}): {res['path']}")
     _log_activity(f"정형문서 생성: {args.kind}", f"{res.get('format')} 산출물: {res['path']}")
@@ -822,7 +880,18 @@ def cmd_recall(args):
             if r.get("id") not in seen:
                 seen.add(r.get("id"))
                 items.append(r)
-        print(format_recall_for_prompt(items))
+        # WS-3: 세션시작 주입 컨텍스트 오염 방지 — activity 항목의 outcome(body)만
+        # 표시 시 절단한다(원장 원본 불변). core/pinned(규칙·실수)는 그대로.
+        # add_activity 원장 상한은 280자지만 수동 적재 activity 는 더 길 수 있다.
+        max_len = 200
+        display = []
+        for r in items:
+            body = str(r.get("body", ""))
+            if r.get("kind") == "activity" and len(body) > max_len:
+                r = dict(r)
+                r["body"] = body[:max_len] + "…(절단)"
+            display.append(r)
+        print(format_recall_for_prompt(display))
         return 0
     keywords = extract_keywords(" ".join(args.keywords))
     items = recall(task_kind=args.kind or "", keywords=keywords, limit=args.limit)
@@ -964,6 +1033,12 @@ def cmd_agent(args):
     if result.get("ok"):
         _log_activity(task, f"agent 완료: {result.get('outcome')} "
                             f"(턴 {result['turns']}, 도구 {len(result['tool_results'])}회)")
+    else:
+        # WS-3 실패 표준화: 명백한 실패도 error_pattern 으로 남긴다(당일 동일원인
+        # 중복억제). run_agent_loop 내부의 개별 record_self_error(품질검증 거부 등)와는
+        # 제목(area)이 달라 이중이 아니다.
+        _complete_activity(task, ok=False,
+                           error_detail=f"agent 실패: {result.get('outcome', '')}")
     return 0 if result["ok"] else 1
 
 
@@ -1101,17 +1176,18 @@ def cmd_work(args):
     _audit_work(run_id, task, "report", "approved", report.name)
     print(f"최종 보고: {report}")
     ok = artifact_result.get("ok") and artifact_result.get("quality_ok", True)
-    # 완료된 작업을 기억에 자동 적재 → 증류되어 Obsidian 위키에 정리(사용자 개입 없이).
-    # 활동 기억은 low 우선순위라 사용자 규칙 회상을 밀어내지 않는다.
+    # WS-3 공통 완료 후크: 성공은 activity(low) 자동 적재 → 위키 증류(기존 동작 유지),
+    # 실패는 error_pattern(당일 동일원인 중복억제). 어댑터 개별 실패는 위(:142)에서
+    # 이미 record_self_error 로 기록되며 제목(area)이 달라 여기와 이중이 아니다.
     if ok:
-        try:
-            from agent_ops.memory_manager import add_activity
-            files = artifact_result.get("files", []) or []
-            outcome = f"산출물 {len(files)}건" + (f": {os.path.basename(str(files[0]))}" if files else "") \
-                + (f" (+{len(files) - 1})" if len(files) > 1 else "")
-            add_activity(task, outcome)
-        except Exception:  # noqa: BLE001 - 자동 적재 실패가 작업을 막으면 안 된다
-            pass
+        files = artifact_result.get("files", []) or []
+        outcome = f"산출물 {len(files)}건" + (f": {os.path.basename(str(files[0]))}" if files else "") \
+            + (f" (+{len(files) - 1})" if len(files) > 1 else "")
+        _complete_activity(task, outcome, ok=True)
+    else:
+        errs = "; ".join(str(e) for e in (artifact_result.get("errors") or [])[:3])
+        _complete_activity(task, ok=False,
+                           error_detail=(errs or "work 실패: 산출물/품질 검증 미통과")[:200])
     return 0 if ok else 1
 
 
