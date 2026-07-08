@@ -821,3 +821,20 @@
   - 다음 작업: WS-9 기억 품질 관리(`memory_quality.py`) — user_rule/preference/project_fact/activity/error_pattern/candidate
     등급 분리 + dedupe/decay/promote 규칙. **user_rule/manual wiki는 자동 감쇠·삭제 금지, 원본 로그 비파괴.** 첫 파일:
     `workspace/agent_ops/memory_quality.py`(신규), `workspace/tests/test_memory_quality.py`. **memory.jsonl append 최적화는 여전히 신중히(계측 후).**
+- WS-9 완료 기록(2026-07-09, 커밋 ebfd08c):
+  - 변경 요약: 신규 `memory_quality.py` — `classify_grade`(user_rule/preference/project_fact/activity/error_pattern/candidate),
+    `quality_decisions`(순수: promote=다른날 3회 관측 candidate 태그/priority 상향, decay=60일↑ activity status=archived 또는
+    저가치 candidate priority=low, dedupe_superseded=완전동일 중복만 status=superseded). `apply_quality`는 file_lock 안에서
+    status/priority/tags만 갱신, **행 삭제 없음** — 쓰기 직전 `ids_after==ids_before` 가드로 개수 불변 보장, protected
+    (user_rule/preference/project_fact/source=user)는 `continue`로 미접촉, 파괴적 연산(unlink/del/pop) 미사용.
+    memory_manager.recall은 등급 가중 8줄(user_rule/preference/project_fact 우선, 비user activity ×0.5 감쇠=제외 아님,
+    시그니처·core_memory 불변, append/rewrite 무변경). auto_maintain 스로틀에 apply_quality 배선(2d). error_pattern 승격은
+    WS-6에 위임(중복 없음). intelligence_map에 `memory:memory_quality` 등록(167). **memory.jsonl append 최적화는 미룸(계측 우선).**
+  - 철학 종료 체크: (기억은 정제) 반복 확인·검증된 것만 승격, 오래된 일회성 로그만 감쇠(삭제 아님)해 recall 품질↑. (안전)
+    user_rule/preference/manual 비감쇠, 원장 행 개수 불변을 가드+테스트로 이중 보장, 원본 비파괴. (남긴 trace) maybe_maintain
+    summary.quality{promoted,decayed,superseded,protected_untouched}.
+  - 검증: `test_memory_quality`(35, 안전회귀 포함), `test_recall_guarantee`(7), `test_memory_activity`(7), `test_recall_stemming`(9),
+    `test_wiki_manager`(41), `test_adapter_tools_maintain`(24), `test_intelligence_map`(167) 통과.
+  - 미검증: decay/promote 임계값(60일·3회·importance 0.45)의 운영 적정성은 사내망 장기 누적에서 튜닝.
+  - 다음 작업: WS-10 전체 지능망 최종 리뷰 — INTELLIGENCE_COVERAGE_REPORT 최신화, auto route trace 8종 샘플, 미연결 0/안전
+    우회 0/USERDATA 위험 0/GitHub push 0 판정, 사내망 필요 항목 체크리스트 분리.
