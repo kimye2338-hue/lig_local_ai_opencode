@@ -38,6 +38,8 @@ DEFAULT_USERDATA = INSTALL_ROOT / "userdata"
 DEFAULT_STATE_DIR = Path(os.environ.get("LIG_STATE_DIR") or (DEFAULT_USERDATA / "state"))
 DEFAULT_DIAG_DIR = Path(os.environ.get("LIG_DIAG_DIR") or (DEFAULT_USERDATA / "diagnostics"))
 STALE_SECONDS = int(os.environ.get("LIG_HAMSTER_STALE_SECONDS") or "900")
+# current_status.json(라이브 세션 상태)이 이 시간 이내로 최신이면 하위 진단파일보다 우선한다.
+LIVE_STATUS_FRESH_SECONDS = int(os.environ.get("LIG_HAMSTER_LIVE_FRESH_SECONDS") or "12")
 POLL_MS = int(os.environ.get("LIG_HAMSTER_POLL_MS") or "1000")
 # 항상 켜두는 펫이라 차분해야 집중을 안 깬다 — 프레임을 천천히 넘기고(ANIM_MS), 한 동작
 # 사이클이 끝나면(0프레임 복귀) REST_MS 만큼 가만히 쉰다("가끔 살짝 움직이는" 느낌). 둘 다 env 조절.
@@ -216,6 +218,11 @@ def load_snapshot(state_dir: Path = DEFAULT_STATE_DIR, diag_dir: Path = DEFAULT_
     candidates: List[Snapshot] = []
     snap = _snapshot_from_current_status(state_dir)
     if snap:
+        # 라이브 세션 상태(current_status.json)가 최근이면 그것을 우선한다. OpenCode 채팅 중에는
+        # 이 파일이 실시간 갱신되므로, 하위 도구의 일시적 needs_user/error 진단파일이 '작업 중'을
+        # 덮어 '확인 필요'로 잘못 뜨는 것을 막는다. (오래됐으면 아래 최신-우선 로직으로 폴백.)
+        if _age_seconds(state_dir / "current_status.json") <= LIVE_STATUS_FRESH_SECONDS:
+            return snap
         candidates.append(snap)
     for maker in (_snapshot_from_agent_loop, _snapshot_from_tool_dispatch):
         snap = maker(diag_dir)
@@ -803,10 +810,20 @@ class HamsterPetOverlay:
         y = 26
         icon_x = center_x - 58
 
-        # Original-sheet-like bold title with white outline.
-        for dx, dy in [(-2,0),(2,0),(0,-2),(0,2),(-1,-1),(1,1)]:
-            c.create_text(center_x + dx + 10, y + dy, text=label, fill="#ffffff", font=("Malgun Gothic", 18, "bold"))
-        c.create_text(center_x + 10, y, text=label, fill="#111111", font=("Malgun Gothic", 18, "bold"))
+        # 상태 글자를 마젠타(투명) 배경에 직접 그리면 안티에일리어싱 테두리가 분홍으로 번진다.
+        # 불투명 둥근 배경(하드엣지)을 깔고 그 위에 흰 글자를 얹어 분홍 fringe를 제거한다.
+        try:
+            from tkinter import font as _tkfont
+            tf = _tkfont.Font(family="Malgun Gothic", size=15, weight="bold")
+            tw = tf.measure(label); th = tf.metrics("linespace")
+        except Exception:
+            tf = ("Malgun Gothic", 15, "bold"); tw = max(40, len(label) * 16); th = 22
+        tx = center_x + 10
+        pad_x, pad_y = 9, 4
+        self._round_rect(tx - tw // 2 - pad_x, y - th // 2 - pad_y,
+                         tx + tw // 2 + pad_x, y + th // 2 + pad_y, 8,
+                         fill="#1f2937", outline="")
+        c.create_text(tx, y, text=label, fill="#ffffff", font=tf)
 
         if status == "done":
             self._round_rect(icon_x-15, y-15, icon_x+15, y+15, 6, fill="#22c55e", outline="#15803d", width=2)

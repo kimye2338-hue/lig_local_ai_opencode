@@ -95,19 +95,14 @@ py -3.11 -m agent_ops.clean_stale >nul 2>&1 || python -m agent_ops.clean_stale >
 rem 위키 자동화: 매번 wiki.bat 안 눌러도 되게 — vault 자동 시드 + Obsidian 자동 실행
 rem (설치돼 있고 아직 안 떠 있을 때만). 사용자가 아무것도 안 해도 기억 위키가 알아서 준비/표시.
 rem 끄고 싶으면 이 창 실행 전에 set LIG_AUTO_WIKI=0.
-if not "%LIG_AUTO_WIKI%"=="0" (
-  set "LIG_WIKI_VAULT=%OPENCODE_USERDATA%\memory\wiki"
-  if not exist "%OPENCODE_USERDATA%\memory\wiki" mkdir "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1
-  py -3.11 -m agent_ops.wiki_vault "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1 || python -m agent_ops.wiki_vault "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1
-  tasklist /FI "IMAGENAME eq Obsidian.exe" 2>nul | find /I "Obsidian.exe" >nul
-  if errorlevel 1 (
-    if exist "%OC_ROOT%\tools\Obsidian\Obsidian.exe" (
-      start "" "%OC_ROOT%\tools\Obsidian\Obsidian.exe" "%OPENCODE_USERDATA%\memory\wiki"
-    ) else if exist "%LOCALAPPDATA%\Obsidian\Obsidian.exe" (
-      start "" "%LOCALAPPDATA%\Obsidian\Obsidian.exe" "%OPENCODE_USERDATA%\memory\wiki"
-    )
-  )
-)
+if "%LIG_AUTO_WIKI%"=="0" goto :wiki_done
+if not exist "%OPENCODE_USERDATA%\memory\wiki" mkdir "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1
+py -3.11 -m agent_ops.wiki_vault "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1 || python -m agent_ops.wiki_vault "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1
+tasklist /FI "IMAGENAME eq Obsidian.exe" 2>nul | find /I "Obsidian.exe" >nul
+if not errorlevel 1 goto :wiki_done
+if exist "%OC_ROOT%\tools\Obsidian\Obsidian.exe" start "" "%OC_ROOT%\tools\Obsidian\Obsidian.exe" "%OPENCODE_USERDATA%\memory\wiki"
+if not exist "%OC_ROOT%\tools\Obsidian\Obsidian.exe" if exist "%LOCALAPPDATA%\Obsidian\Obsidian.exe" start "" "%LOCALAPPDATA%\Obsidian\Obsidian.exe" "%OPENCODE_USERDATA%\memory\wiki"
+:wiki_done
 
 "%OCODE_EXE%" %*
 
