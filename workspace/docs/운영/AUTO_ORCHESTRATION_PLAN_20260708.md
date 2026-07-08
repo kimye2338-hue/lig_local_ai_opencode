@@ -730,3 +730,20 @@
   - 미검증/사내망 필요: 실 TUI compaction 훅에서 log-activity 적재·중복억제 체감, recall --pinned 주입 효과.
   - 다음 작업: WS-4 Obsidian/manual 노트 recall 강화(`wiki_manager.recall_pages`에 manual 노트 포함, 원장 역주입 금지).
     첫 파일: `workspace/agent_ops/wiki_manager.py`, `workspace/tests/test_wiki_manager.py`.
+- WS-4 완료 기록(2026-07-08, 커밋 70e5e95):
+  - 변경 요약: `recall_pages`가 auto 주제페이지(WIKI_DIR 루트)뿐 아니라 사람이 쓴 `wiki/manual/*.md`도 스캔·점수화하고
+    반환 dict에 `source`(auto/manual)를 additive로 추가했다(기존 topic/excerpt 키 유지 → 호출처 tool_dispatch 무변경).
+    auto·manual 동시 매칭 시 manual을 최소 1개 우선 포함하고, frontmatter 없는 manual 노트도 본문이 보존되게 조건부 파싱으로
+    바꿨다. recall_pages는 읽기 전용 — manual 원본을 역주입/수정/삭제하지 않는다(테스트로 내용 해시 불변 고정).
+    tool_dispatch의 recall_pages 호출을 limit=1→2로 올려 manual이 rich한 auto 페이지를 밀어내지 않고 함께 주입되게 했다
+    (총량은 WS-8 전역 주입예산 6000자로 보호).
+  - 철학 종료 체크: (줄어든 사용자 선택) Obsidian에 손으로 적은 지식이 다음 작업에서 자동 회상돼 "이거 참고해"라고
+    말할 필요가 없다. (새로 연결된 지능) manual 위키 ↔ recall. (남긴 trace) 반환 항목의 source 구분. (안전) 사람이 쓴
+    원본 불변·역주입 금지를 테스트로 고정, USERDATA 미접촉. (미검증) 실제 사용자 vault의 manual 노트 품질·양은 사내망 실사용에서 관측.
+  - 검증: `test_wiki_manager`(41, was 34), `test_wiki_vault`, `test_recall_guarantee`(7), `test_recall_stemming`(9),
+    `test_tool_dispatch`(28), `test_knowledge_routing`(42) 통과.
+  - 미검증/사내망 필요: 실 vault manual 노트 recall 체감, manual/auto 혼합 주입의 프롬프트 효과.
+  - 다음 작업: WS-5(구 WS-INT) 실행/설정 통합 — AGENTOPS_HOME 기준 경로 통일, 커맨드 상대경로 정규화, ocd 폴더 복원,
+    opencode.json env 단일소스(1단계 JSON 유효성 고정), bat env 따옴표 정리. **한 커밋으로 묶고, 모델 기본값·env 보간 2단계는
+    사내망 검증 필요**. 첫 파일: `workspace/RUN_OPENCODE_LIG.bat`, `workspace/.opencode/commands/*.md`,
+    `workspace/.opencode/plugins/compaction-handoff.ts`, `workspace/tests/test_launch_bats.py`, `test_opencode_command_coverage.py`.
