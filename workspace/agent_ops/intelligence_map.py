@@ -67,6 +67,9 @@ def _items(kind: str, names: Iterable[str], owner_file: str, status: str,
 
 
 COMMAND_ITEMS = [
+    _item("command", "auto", ["workspace/agent_ops/agentops.py", "workspace/.opencode/commands/auto.md"],
+          "auto", "auto", "Single automatic entrypoint that routes to command-native/artifact/tool/memory paths.",
+          "delegates to existing approval/guard behavior"),
     _item("command", "work", ["workspace/agent_ops/agentops.py", "workspace/.opencode/commands/work.md"],
           "auto", "artifact_or_agent", "Current high-level work path; WS-1 will place /auto above it.",
           "approval required for --execute"),

@@ -25,7 +25,7 @@ def check(label: str, cond: bool, detail: str = "") -> None:
 
 def main() -> None:
     required = {
-        "work", "schedule", "briefing", "weekly", "remember", "recall",
+        "auto", "work", "schedule", "briefing", "weekly", "remember", "recall",
         "doctor", "verify", "status", "report", "resume", "checkpoint",
         "deps", "ocr", "routine", "report-html", "report-xlsx",
         "office-doc", "doc-template", "book", "wiki", "timeline", "watch",

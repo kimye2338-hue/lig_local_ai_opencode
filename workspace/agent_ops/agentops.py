@@ -175,6 +175,162 @@ def _run_agent_work(task: str, plan: dict, mode: str) -> dict:
     return run_agent_loop(task, ROOT, max_turns=10, capability_ids=capability_ids)
 
 
+def _auto_trace_path() -> Path:
+    from agent_ops.lig_providers import DIAG_DIR
+    DIAG_DIR.mkdir(parents=True, exist_ok=True)
+    return DIAG_DIR / "auto-route-last.json"
+
+
+def _write_auto_trace(trace: dict) -> None:
+    try:
+        _auto_trace_path().write_text(
+            json.dumps(trace, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _auto_command_hint(task: str, plan: dict) -> dict:
+    """Deterministic first-pass routing for the /auto entrypoint.
+
+    WS-1 keeps this layer deliberately thin: it chooses among existing stable
+    command paths and records why. WS-2/WS-7 will move more policy into shared
+    metadata and a full policy engine.
+    """
+    text = (task or "").lower()
+    caps = plan.get("capabilities", []) or []
+    cap_ids = [c.get("id", "") for c in caps]
+    top = caps[0] if caps else {}
+    artifact_kinds = list(plan.get("artifact_kinds", []) or [])
+
+    def has_any(*words: str) -> bool:
+        return any(w.lower() in text for w in words)
+
+    if has_any("위키", "wiki"):
+        return {"selected_path": "memory_wiki", "command": "wiki",
+                "reason": "wiki keyword detected"}
+    if has_any("지식책", "book"):
+        return {"selected_path": "memory_wiki", "command": "book",
+                "reason": "knowledge book keyword detected"}
+    if has_any("회상", "recall", "기억 찾아", "기억 검색", "기억 조회"):
+        return {"selected_path": "memory_wiki", "command": "recall",
+                "reason": "recall keyword detected"}
+    if has_any("기억해", "remember"):
+        return {"selected_path": "memory_wiki", "command": "remember",
+                "reason": "remember keyword detected"}
+    if has_any("루틴 목록", "routine list"):
+        return {"selected_path": "command_native", "command": "routine_list",
+                "reason": "routine list keyword detected"}
+    if (cap_ids == ["schedule_management"]
+            and top.get("confidence") == "high"):
+        return {"selected_path": "command_native", "command": "schedule_add",
+                "reason": "high-confidence schedule_management"}
+    if plan.get("routing") == "default_fallback":
+        return {"selected_path": "plan_only", "command": "plan",
+                "reason": "low-confidence fallback route"}
+    file_first = bool(cap_ids and cap_ids[0] == "file_ops")
+    file_action = has_any("파일", "읽어", "읽고", "찾아", "검색", "수정",
+                          "read", "search", "edit")
+    explicit_creation = has_any("문서 작성", "보고서", "요약문", "작성해",
+                                "만들어", "생성", "write report")
+    if file_first and file_action and not explicit_creation:
+        return {"selected_path": "tool_agent", "command": "agent",
+                "reason": "file_ops is primary; avoid artifact route from secondary document hint"}
+    if artifact_kinds:
+        return {"selected_path": "artifact", "command": "work",
+                "reason": "artifact kinds planned: " + ", ".join(artifact_kinds)}
+    return {"selected_path": "tool_agent", "command": "agent",
+            "reason": "no artifact kind; use tool-agent path"}
+
+
+def cmd_auto(args):
+    """Single automatic entrypoint: request -> route -> existing safe command."""
+    task = _load_task_arg(args)
+    if not task:
+        print("작업 내용이 없습니다. --task \"작업 설명\" 을 지정하세요.", file=sys.stderr)
+        return 2
+    inputs = _ingest_from_args(args)
+    _print_input_summary(inputs)
+    plan, _ctx = _plan_context(task, inputs)
+    hint = _auto_command_hint(task, plan)
+    trace = {
+        "timestamp": now(),
+        "request": task,
+        "routing": plan.get("routing"),
+        "planner_mode": plan.get("planner_mode"),
+        "capability_ids": [c.get("id") for c in plan.get("capabilities", [])],
+        "capabilities": plan.get("capabilities", []),
+        "artifact_kinds": plan.get("artifact_kinds", []),
+        "selected_path": hint["selected_path"],
+        "command": hint["command"],
+        "reason": hint["reason"],
+        "pending": plan.get("pending", []),
+        "dry_run": bool(getattr(args, "dry_run", False)),
+        "model_provider": {
+            "source": "unchanged",
+            "note": "WS-1 does not change LLM/provider defaults",
+        },
+        "context_sources": ["capabilities.plan_task"],
+        "verification": ["auto-route trace written"],
+        "memory_hooks": ["pending: WS-3 common completion hook"],
+        "safety": {
+            "approval_bypass": False,
+            "note": "Delegated commands keep their existing approval/guard behavior.",
+        },
+        "fallback": "plan_only on low-confidence/default route",
+    }
+    _write_auto_trace(trace)
+    print("AUTO route:")
+    print(json.dumps({
+        "selected_path": trace["selected_path"],
+        "command": trace["command"],
+        "capability_ids": trace["capability_ids"],
+        "artifact_kinds": trace["artifact_kinds"],
+        "reason": trace["reason"],
+    }, ensure_ascii=False, indent=2))
+    if getattr(args, "dry_run", False):
+        trace["exit_code"] = 0
+        trace["outcome"] = "dry_run"
+        _write_auto_trace(trace)
+        print(f"trace: {_auto_trace_path()}")
+        return 0
+
+    code = 0
+    cmd = hint["command"]
+    if cmd == "schedule_add":
+        ns = argparse.Namespace(schedule_cmd="add", text=[task], due="")
+        code = cmd_schedule(ns)
+    elif cmd == "work":
+        ns = argparse.Namespace(task=task, task_file="", input=getattr(args, "input", []),
+                                mode=getattr(args, "mode", "mock"),
+                                execute=bool(getattr(args, "execute", False)),
+                                yes=bool(getattr(args, "yes", False)))
+        code = cmd_work(ns)
+    elif cmd == "agent":
+        ns = argparse.Namespace(mode=getattr(args, "mode", "mock"), task=task,
+                                max_turns=int(getattr(args, "max_turns", 10)))
+        code = cmd_agent(ns)
+    elif cmd == "wiki":
+        code = cmd_wiki(argparse.Namespace(curate=False, open=False))
+    elif cmd == "book":
+        code = cmd_book(argparse.Namespace(open=False))
+    elif cmd == "recall":
+        code = cmd_recall(argparse.Namespace(keywords=extract_keywords(task), kind="",
+                                             limit=6, pinned=False))
+    elif cmd == "remember":
+        code = cmd_remember(argparse.Namespace(text=[task], title="Auto memory"))
+    elif cmd == "routine_list":
+        code = cmd_routine(argparse.Namespace(op="list", name="", desc=""))
+    else:
+        ns = argparse.Namespace(task=task, input=getattr(args, "input", []),
+                                make_artifacts=False)
+        code = cmd_plan(ns)
+    trace["exit_code"] = int(code or 0)
+    trace["outcome"] = "completed" if int(code or 0) == 0 else "failed"
+    _write_auto_trace(trace)
+    print(f"trace: {_auto_trace_path()}")
+    return int(code or 0)
+
+
 def _write_work_report(task: str, plan: dict, inputs, artifact_result: dict,
                        approval: dict, risks: list[dict], audit_rows: list[dict],
                        adapter_summary: list[dict]) -> Path:
@@ -1203,6 +1359,7 @@ def main(argv=None):
     p = sub.add_parser("orchestrator"); p.add_argument("--interval", type=int, default=60); p.add_argument("--parallel", action="store_true"); p.add_argument("--workers", type=int, default=3); p.set_defaults(func=cmd_orchestrator)
     sub.add_parser("stop").set_defaults(func=cmd_agentstop)
     sub.add_parser("unstop").set_defaults(func=cmd_unstop)
+    p = sub.add_parser("auto"); p.add_argument("--task", default=""); p.add_argument("--task-file", default=""); p.add_argument("--input", action="append", default=[], help="입력 파일/폴더 (반복 지정 가능)"); p.add_argument("--mode", choices=["mock", "real"], default="mock"); p.add_argument("--execute", action="store_true"); p.add_argument("--yes", action="store_true"); p.add_argument("--dry-run", action="store_true"); p.add_argument("--max-turns", type=int, default=10); p.set_defaults(func=cmd_auto)
     p = sub.add_parser("agent"); p.add_argument("--mode", choices=["mock", "real"], required=True); p.add_argument("--task", default=""); p.add_argument("--max-turns", type=int, default=10); p.set_defaults(func=cmd_agent)
     p = sub.add_parser("plan"); p.add_argument("--task", default=""); p.add_argument("--input", action="append", default=[], help="입력 파일/폴더 (반복 지정 가능)"); p.add_argument("--make-artifacts", action="store_true"); p.set_defaults(func=cmd_plan)
     p = sub.add_parser("work"); p.add_argument("--task", default=""); p.add_argument("--task-file", default=""); p.add_argument("--input", action="append", default=[], help="입력 파일/폴더 (반복 지정 가능)"); p.add_argument("--mode", choices=["mock", "real"], default="mock"); p.add_argument("--execute", action="store_true"); p.add_argument("--yes", action="store_true"); p.set_defaults(func=cmd_work)

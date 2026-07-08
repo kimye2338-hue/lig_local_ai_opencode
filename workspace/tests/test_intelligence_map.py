@@ -62,7 +62,7 @@ def main() -> None:
         "timeline", "deps", "report-xlsx", "office-doc", "routine", "ocr",
         "doc-template", "checkpoint", "doctor", "verify", "report", "selfheal",
         "log-failure", "memorycheck", "remember", "recall", "enqueue",
-        "continue-once", "orchestrator", "stop", "unstop", "agent", "plan",
+        "continue-once", "orchestrator", "stop", "unstop", "auto", "agent", "plan",
         "work", "schedule", "briefing", "weekly", "book", "wiki",
         "safety-check", "safe-write",
     }

@@ -693,3 +693,12 @@
   `workspace/docs/운영/INTELLIGENCE_COVERAGE_REPORT.md`를 추가했다. 140개 지능 항목을 분류했고
   `test_intelligence_map`, `test_tool_dispatch`, `test_capability_bench`, `test_opencode_command_coverage`가 통과했다.
   다음 작업은 WS-1 `/auto` 단일 진입점이다.
+- WS-1 완료 기록: `workspace/agent_ops/agentops.py`에 `auto` CLI와 `_auto_command_hint`/`cmd_auto`를 추가하고,
+  `workspace/.opencode/commands/auto.md`를 새로 만들었다. 자연어 요청은 먼저 `capabilities.plan_task`를 통과한 뒤
+  `command_native`, `artifact`, `tool_agent`, `memory_wiki`, `plan_only` 중 하나로 위임된다.
+  `diagnostics/auto-route-last.json`에는 selected path, command, capability, artifact, provider 불변 메모,
+  context source, verification, memory hook 예정, safety/fallback이 남는다.
+  파일 읽기류 요청이 "메모" 때문에 문서 산출물로 과대 라우팅되지 않도록 `file_ops`가 최상위일 때 tool-agent를 우선한다.
+  `test_auto_command`, `test_intelligence_map`, `test_opencode_command_coverage`, `test_tool_dispatch`,
+  `test_capability_bench`, `test_work_command`가 통과했다.
+  다음 작업은 WS-2 capability metadata와 tool/skill/context alignment다.
