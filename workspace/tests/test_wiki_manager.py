@@ -146,6 +146,38 @@ def main() -> None:
     check("backlink from manual page appears on excel.md",
           "## 언급된 곳" in excel_text and "manual/포털노트" in excel_text, excel_text[-400:])
 
+    # --- WS-4: 사람이 쓴 manual/ 노트도 자동 recall (읽기 전용) ---
+    # ①·④ frontmatter 없는 manual 노트 — 본문이 통째로 살아 excerpt 에 나온다.
+    ws4_note = wm.MANUAL_DIR / "출장정산 꿀팁.md"
+    ws4_note.write_text("# 출장 정산\n법인카드 출장정산은 전표를 먼저 끊는다.\n",
+                        encoding="utf-8")
+    from agent_ops.memory_manager import MEMORY_JSONL
+    ledger_before = MEMORY_JSONL.read_text(encoding="utf-8")
+    manual_before = {p.name: p.read_text(encoding="utf-8")
+                     for p in wm.MANUAL_DIR.glob("*.md")}
+    ws4 = wm.recall_pages(["출장정산"])
+    check("WS-4 manual note recalled with source=manual",
+          ws4 and ws4[0]["source"] == "manual" and ws4[0]["topic"] == "출장정산 꿀팁",
+          str(ws4)[:150])
+    check("WS-4 frontmatter-less manual body survives in excerpt",
+          "전표를 먼저 끊는다" in ws4[0]["excerpt"], str(ws4)[:200])
+    # ② auto+manual 같은 키워드 → 결과에 manual 최소 1개 포함 (auto 는 source=auto)
+    both = wm.recall_pages(["excel"], limit=2)
+    check("WS-4 mixed recall keeps auto page with source=auto",
+          any(x["source"] == "auto" and x["topic"] == "excel" for x in both), str(both)[:200])
+    check("WS-4 mixed recall guarantees at least one manual",
+          any(x["source"] == "manual" for x in both), str(both)[:200])
+    # limit=1 이라도 manual 매칭이 있으면 manual 이 최소 1개 슬롯을 확보한다.
+    one = wm.recall_pages(["excel"], limit=1)
+    check("WS-4 manual slot guaranteed even at limit=1",
+          len(one) == 1 and one[0]["source"] == "manual", str(one)[:200])
+    # ③ recall 은 읽기 전용 — manual 원본/원장 모두 불변이어야 한다.
+    check("WS-4 recall never mutates manual notes",
+          {p.name: p.read_text(encoding="utf-8")
+           for p in wm.MANUAL_DIR.glob("*.md")} == manual_before)
+    check("WS-4 recall never back-feeds the ledger",
+          MEMORY_JSONL.read_text(encoding="utf-8") == ledger_before)
+
     from agent_ops.tool_dispatch import run_agent_loop
     captured = {}
 
@@ -158,8 +190,12 @@ def main() -> None:
     run_agent_loop("excel 매크로 만들어줘", TMP / "ws", env=env, transport=fake_transport,
                    diag_dir=TMP / "diag")
     sys_texts = [m["content"] for m in captured["messages"] if m["role"] == "system"]
+    # WS-4 이후: tool_dispatch 는 limit=1 로 부르고, manual 매칭이 있으면 manual
+    # 노트가 최소 1개 슬롯을 확보한다 — 여기서는 excel수동노트가 주입된다.
+    # (auto 페이지 주입 자체는 위 recall_pages 검사들이 보장.)
     check("agent loop injects wiki page knowledge",
-          any("위키 'excel'" in t and "VBProject" in t for t in sys_texts),
+          any("축적된 주제 지식(위키" in t and ("VBProject" in t or "수동 노트" in t)
+              for t in sys_texts),
           str([t[:50] for t in sys_texts]))
 
     # --- curate: 품질 게이트 + 게이트웨이 부재 무해 ---

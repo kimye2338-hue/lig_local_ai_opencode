@@ -608,7 +608,10 @@ def run_agent_loop(
         # 복리 recall: 개별 사건보다 '주제 페이지'(증류된 지식)가 강하다.
         # 기록이 쌓일수록 같은 주제 발췌가 저절로 풍부해진다 (LLM Wiki 층).
         from .wiki_manager import recall_pages
-        pages = recall_pages(keywords, limit=1)
+        # limit=2: WS-4 이후 recall_pages가 사람이 쓴 manual/ 노트를 최소 1개 우선 포함하므로,
+        # 1이면 manual이 rich한 auto 주제페이지를 밀어낼 수 있다. 2로 두어 manual+auto를 함께
+        # 넣는다(총량은 아래 전역 주입예산 _INSERT_BUDGET로 이미 보호됨).
+        pages = recall_pages(keywords, limit=2)
         for page in pages:
             inserts.append((6, {"role": "system",
                                 "content": f"축적된 주제 지식(위키 '{page['topic']}') — 참고:\n"

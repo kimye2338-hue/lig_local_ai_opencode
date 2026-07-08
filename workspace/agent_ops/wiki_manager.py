@@ -568,6 +568,11 @@ def recall_pages(keywords: List[str], limit: int = 2, max_chars: int = 1200) -> 
 
     원장 recall(개별 사건)보다 페이지(주제 전체 요약)가 복리 효과가 크다:
     기록이 쌓일수록 같은 주제 발췌가 더 풍부해진다.
+
+    자동 페이지(WIKI_DIR 루트)뿐 아니라 사용자가 Obsidian 에서 직접 쓴
+    manual/ 노트도 회상 대상이다 — 단, **읽기 전용**: manual 원본을 원장으로
+    역주입하거나 수정/삭제하지 않는다. 반환 항목의 "source" 키("auto"/"manual")로
+    출처를 구분한다 (기존 "topic"/"excerpt" 키는 그대로 — 호출처 호환).
     """
     if not WIKI_DIR.is_dir():
         return []
@@ -577,27 +582,58 @@ def recall_pages(keywords: List[str], limit: int = 2, max_chars: int = 1200) -> 
     # 별칭 확장: "엑셀"로 물어도 "excel" 페이지를 찾는다 (green-dalii
     # obsidian-llm-wiki 의 alias 기법 — 페이지 이름은 그대로, 검색만 넓힌다).
     keys = _expand_query_terms(keys)
-    scored: List[Tuple[int, str, Path]] = []
-    for p in WIKI_DIR.glob("*.md"):
-        # 운영 파일 + vault 시드 안내노트('0-' 접두: 0-위키-안내/0-대시보드,
-        # wiki_vault.py 시드)는 지식 페이지가 아니다 — 프롬프트 주입에서 제외.
-        if p.name in ("index.md", "log.md", "WIKI_SCHEMA.md") or p.name.startswith("0-"):
-            continue
+
+    def _score(p: Path) -> int:
+        # 파일명(stem) 매칭이 본문(head) 매칭보다 강하다 — auto/manual 동일 방식.
         stem = p.stem.lower()
         score = sum(3 for k in keys if k in stem)
         if not score:
             head = read_text(p)[:800].lower()
             score = sum(1 for k in keys if k in head)
+        return score
+
+    scored: List[Tuple[int, str, Path, str]] = []
+    for p in WIKI_DIR.glob("*.md"):
+        # 운영 파일 + vault 시드 안내노트('0-' 접두: 0-위키-안내/0-대시보드,
+        # wiki_vault.py 시드)는 지식 페이지가 아니다 — 프롬프트 주입에서 제외.
+        if p.name in ("index.md", "log.md", "WIKI_SCHEMA.md") or p.name.startswith("0-"):
+            continue
+        score = _score(p)
         if score:
-            scored.append((score, stem, p))
+            scored.append((score, p.stem.lower(), p, "auto"))
+    # 사람이 쓴 manual/ 노트도 회상 후보 — 파일명이 임의라 '0-'/AUTO_MARK 제외
+    # 규칙은 적용하지 않는다. 여기서는 절대 쓰지 않는다(읽기 전용).
+    if MANUAL_DIR.is_dir():
+        for p in MANUAL_DIR.glob("*.md"):
+            score = _score(p)
+            if score:
+                scored.append((score, p.stem.lower(), p, "manual"))
     scored.sort(key=lambda x: (-x[0], x[1]))
+    picked = scored[:limit]
+    # manual 최소 1개 보장: auto·manual 양쪽에 매칭이 있으면, 점수순 top-limit 에
+    # manual 이 없더라도 가장 점수 높은 manual 1개가 마지막 슬롯을 차지한다
+    # (사용자가 손으로 쓴 노트가 자동 페이지에 항상 밀리지 않게). manual 매칭이
+    # 없으면 기존처럼 auto 만 반환. 정렬은 점수 우선을 유지한다 — 교체되는
+    # manual 은 picked 내 최저 점수이므로 마지막 자리가 맞다.
+    if picked and not any(entry[3] == "manual" for entry in picked):
+        manuals = [entry for entry in scored if entry[3] == "manual"]
+        if manuals:
+            picked = picked[:-1] + [manuals[0]]
     out = []
-    for _s, stem, p in scored[:limit]:
+    for _s, stem, p, source in picked:
         text = read_text(p)
-        text = text.split("---", 2)[-1].replace(AUTO_MARK, "").strip()  # frontmatter 제거
+        # frontmatter 제거 — 문서가 '---'로 시작하고 닫는 '---'가 있을 때만.
+        # manual 노트는 frontmatter 가 없을 수 있고, 본문 속 '---' 구분선 때문에
+        # 무조건 split 하면 본문이 통째로 날아간다 (없으면 원문 유지).
+        if text.lstrip().startswith("---"):
+            parts = text.split("---", 2)
+            if len(parts) == 3:
+                text = parts[2]
+        text = text.replace(AUTO_MARK, "").strip()
+        ref = ("wiki/manual/" if source == "manual" else "wiki/") + p.name
         if len(text) > max_chars:
-            text = text[:max_chars] + "\n…(원문: wiki/" + p.name + ")"
-        out.append({"topic": stem, "excerpt": text})
+            text = text[:max_chars] + "\n…(원문: " + ref + ")"
+        out.append({"topic": stem, "excerpt": text, "source": source})
     return out
 
 
