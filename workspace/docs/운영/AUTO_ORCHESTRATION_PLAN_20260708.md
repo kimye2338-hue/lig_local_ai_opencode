@@ -710,3 +710,23 @@
   `test_routing_alignment`, `test_auto_command`, `test_tool_dispatch`, `test_skill_router`, `test_intelligence_map`,
   `test_capability_bench`, `test_work_command`가 통과했다.
   다음 작업은 WS-3 공통 실행 완료/학습 후크다.
+- WS-3 완료 기록(2026-07-08, 커밋 854505f + c79ae88):
+  - 변경 요약: `agentops.py`에 공통 완료 후크 `_complete_activity(task, outcome, *, ok, kind, files, route, error_detail)`를
+    추가하고 `_log_activity`를 그 래퍼로 격상했다. 성공 경로 7곳(work/agent/report-html/xlsx/office-doc/doc-template/routine)은
+    무변경으로 새 후크를 탄다(이중적재 없음). 실패는 `record_self_error`가 당일+동일원인(area|detail sha1) 중복억제하도록
+    확장했고, 해시 태그 없는 legacy 행은 종전 규칙(제목+날짜)으로 보수 판정해 기존 호출처 동작을 넓히지 않는다.
+    `cmd_auto`는 위임 경로별로 이중적재를 회피하며(work/agent는 하위 명령이 적재, command_native/memory_wiki/plan_only만 자체 적재)
+    `memory_hooks` trace를 실값으로 남긴다. `recall --pinned`는 activity 출력만 200자로 절단(원장 불변).
+    `memory-inject.ts`의 compaction 요약은 high-priority `remember` → low-priority `log-activity`(신규 CLI, 고정 title로 일 중복억제)로
+    낮춰 장기기억 오염을 제거했다. 신규 `log-activity`는 intelligence_map에 advanced로 등록.
+  - 철학 종료 체크: (줄어든 사용자 선택) 어느 경로로 실행하든 결과가 같은 방식으로 기억/audit에 축적돼 "이건 기억되나"를
+    사용자가 신경쓸 필요가 없다. (새로 연결된 지능) 실행 결과 → activity/error_pattern 단일 후크 → recall 재주입.
+    (남긴 trace) auto-route-last.json의 memory_hooks 실값, error_pattern dedupe 태그. (안전) USERDATA는 add_activity/
+    record_self_error 경유만, 적재 실패가 본 작업을 막지 않음, 승인/가드 무변경. (미검증) memory-inject.ts는 실 TUI 실행이
+    사내망 필요 — 오프라인에선 node --check 구문검증 + log-activity CLI 동작만 확인.
+  - 검증: `test_auto_learning_hooks`(18), `test_memory_inject_plugin`(23), `test_memory_activity`(7), `test_recall_guarantee`(7),
+    `test_recall_stemming`(9), `test_auto_command`(18), `test_intelligence_map`(164), `test_tool_dispatch`(28),
+    `test_wiki_manager`(34), `test_opencode_command_coverage`(25), `pytest test_work_command`(4) 통과.
+  - 미검증/사내망 필요: 실 TUI compaction 훅에서 log-activity 적재·중복억제 체감, recall --pinned 주입 효과.
+  - 다음 작업: WS-4 Obsidian/manual 노트 recall 강화(`wiki_manager.recall_pages`에 manual 노트 포함, 원장 역주입 금지).
+    첫 파일: `workspace/agent_ops/wiki_manager.py`, `workspace/tests/test_wiki_manager.py`.

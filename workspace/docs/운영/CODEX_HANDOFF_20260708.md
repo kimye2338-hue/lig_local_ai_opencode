@@ -3,6 +3,11 @@
 이 문서 하나로 전체 맥락·경로·남은 일·작업방식·주의점을 파악할 수 있게 자립적으로 썼다.
 먼저 이 문서 → 그다음 `docs/운영/REMEDIATION_PLAN_20260708.md`(워크스트림 원본) 순으로 읽어라.
 
+> **[갱신 2026-07-08]** 이후 작업은 새 틀 `docs/운영/AUTO_ORCHESTRATION_PLAN_20260708.md`(WS-0~WS-10, "모든 지능 연결
+> 자동운영 구조")로 이관됨. 이 REMEDIATION 문서의 WS-D(TUI 기억주입)는 완료(커밋 0c1b3cb)됐고, WS-INT는 AUTO 계획의
+> **WS-5**로 재편됐다. 현재 진행: AUTO 계획 기준 **WS-0/1/2(Codex)·WS-3 완료**, 다음은 **WS-4(Obsidian manual recall)**.
+> 진행 로그·다음 작업은 AUTO_ORCHESTRATION_PLAN 9절과 BUILD_PHILOSOPHY 체크를 본다.
+
 ---
 
 ## 0. 한 줄 요약 + 지금 상태
