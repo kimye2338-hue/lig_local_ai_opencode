@@ -75,11 +75,17 @@ def add_memory_event(kind: str, title: str, body: str, status: str = "active", p
                     r["deprecated_reason"] = "memory cap exceeded; auto-archived (lowest value first)"
         write_jsonl(MEMORY_JSONL, rows)
     render_memory_views()
-    # ingest 워크플로(LLM Wiki): 새 기록이 들어올 때마다 주제 페이지를 갱신한다.
+    # ingest 워크플로(LLM Wiki): 새 기록이 들어오면 주제 페이지를 갱신한다.
     # 기록이 쌓일수록 같은 페이지가 두꺼워지는 복리 구조 — 실패해도 저장은 유효.
+    # 스로틀(자동적재 activity 한정): add_activity 가 여러 명령으로 확대되면서
+    # 매 이벤트마다 전체 위키 재빌드를 돌리면 쓰기증폭이 심해진다. 최근에 돌았으면
+    # 건너뛰고 다음 이벤트나 auto_maintain(하루 2회)이 따라잡는다 — 원장은 이미
+    # 저장됨. 사용자가 직접 남긴 규칙/교훈(remember 등)은 즉시 반영(기존 동작).
     try:
-        from .wiki_manager import consolidate_quietly
-        consolidate_quietly()
+        if kind != "activity" or _should_consolidate():
+            from .wiki_manager import consolidate_quietly
+            consolidate_quietly()
+            _touch_consolidate_stamp()
     except Exception:
         pass
     # 자율 유지(스로틀): 사용자 호출 없이도 하루 약 2회 정리·최적화가 돈다.
@@ -90,6 +96,30 @@ def add_memory_event(kind: str, title: str, body: str, status: str = "active", p
     except Exception:
         pass
     return item
+
+CONSOLIDATE_MIN_INTERVAL = 600  # 초 — activity 자동적재의 위키 재빌드 최소 간격(쓰기증폭 방지)
+_CONSOLIDATE_STAMP = MEMORY / ".wiki_consolidate.stamp"
+
+def _should_consolidate(min_interval: int = CONSOLIDATE_MIN_INTERVAL) -> bool:
+    """마지막 consolidate 후 min_interval 초가 지났을 때만 True.
+
+    판정은 스탬프 파일 mtime — 프로세스가 재시작돼도 유효하다.
+    스탬프 확인 실패 시엔 True(기존 동작 유지 — 재빌드가 빠지는 것보다 안전).
+    """
+    try:
+        import time
+        return not (_CONSOLIDATE_STAMP.exists()
+                    and (time.time() - _CONSOLIDATE_STAMP.stat().st_mtime) < max(0, min_interval))
+    except Exception:  # noqa: BLE001 - 스탬프 문제로 위키 갱신이 멈추면 안 된다
+        return True
+
+def _touch_consolidate_stamp() -> None:
+    """consolidate 실행 직후 호출 — 다음 스로틀 판정의 기준 시각을 남긴다."""
+    try:
+        _CONSOLIDATE_STAMP.parent.mkdir(parents=True, exist_ok=True)
+        _CONSOLIDATE_STAMP.write_text(now() + "\n", encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
 
 def _protect_rank(row: Dict[str, Any]) -> int:
     """캡 초과 시 아카이브 우선순위(작을수록 먼저 아카이브 = 보호 약함).
@@ -145,16 +175,39 @@ def load_memory(status: str | None = None) -> List[Dict[str, Any]]:
         rows = [r for r in rows if r.get("status") == status]
     return rows
 
+# 한국어 조사(뒤에 붙는 격조사·보조사) — 긴 것부터 벗겨야 '에서'가 '서'로 안 남는다.
+# 형태소 분석기 없는 오프라인 근사: '보고서를'→'보고서', '엑셀로'→'엑셀'.
+_KO_JOSA = sorted(
+    ["으로부터", "에서부터", "에게서", "으로써", "으로서", "까지", "부터", "에서", "에게",
+     "한테", "처럼", "보다", "으로", "이나", "이란", "라는", "하고", "이며", "이다",
+     "을", "를", "이", "가", "은", "는", "에", "의", "로", "와", "과", "도", "만", "나", "야"],
+    key=len, reverse=True)
+
+def _strip_josa(word: str) -> str:
+    """한글 토큰 말미의 조사를 1회 제거한 어간. 어간이 2자 미만이면 원형 유지."""
+    for j in _KO_JOSA:
+        if word.endswith(j) and len(word) - len(j) >= 2:
+            return word[: -len(j)]
+    return word
+
 def extract_keywords(text: str, limit: int = 20) -> List[str]:
     raw = re.findall(r"[A-Za-z0-9_./:-]{3,}|[가-힣]{2,}", text or "")
     stop = {"the", "and", "for", "with", "this", "that", "from", "json", "file", "task", "해야", "있는", "없는", "그리고"}
     out: List[str] = []
+
+    def _push(w: str) -> None:
+        if w and w not in stop and w not in out and len(out) < limit:
+            out.append(w)
+
     for w in raw:
         lw = w.lower()
         if lw in stop:
             continue
-        if lw not in out:
-            out.append(lw)
+        _push(lw)
+        # 한국어 조사 스테밍: '보고서를'만 저장하면 '보고서' 질의와 못 만난다.
+        # 원형과 어간을 둘 다 보유 — 부분문자열 매칭이 어느 쪽으로도 성립.
+        if re.fullmatch(r"[가-힣]{2,}", lw):
+            _push(_strip_josa(lw))
         if len(out) >= limit:
             break
     return out
@@ -162,6 +215,19 @@ def extract_keywords(text: str, limit: int = 20) -> List[str]:
 def recall(task_kind: str = "", keywords: List[str] | None = None, limit: int = 6) -> List[Dict[str, Any]]:
     ensure_memory()
     keys = [k.lower() for k in (keywords or []) if k]
+    # 어간 보강: 호출자가 extract_keywords 를 안 거친 원형('보고서를')을 줘도
+    # 조사 제거형('보고서')으로 원장 본문과 만나게 한다.
+    for k in list(keys):
+        stem = _strip_josa(k)
+        if stem != k and stem not in keys:
+            keys.append(stem)
+    # 별칭 확장(위키와 동일 사전): '엑셀'↔'excel' 같은 동의어가 원장 회상에도
+    # 먹히게 한다 — 페이지 검색(recall_pages)에만 적용되던 것을 원장에도 적용.
+    try:
+        from .wiki_manager import _expand_query_terms
+        keys = _expand_query_terms(keys)
+    except Exception:  # noqa: BLE001 - 별칭 확장 실패가 회상 자체를 막으면 안 된다
+        pass
     rows = load_memory(status="active")
     scored: List[tuple[int, Dict[str, Any]]] = []
     for row in rows:

@@ -579,7 +579,9 @@ def recall_pages(keywords: List[str], limit: int = 2, max_chars: int = 1200) -> 
     keys = _expand_query_terms(keys)
     scored: List[Tuple[int, str, Path]] = []
     for p in WIKI_DIR.glob("*.md"):
-        if p.name in ("index.md", "log.md", "WIKI_SCHEMA.md"):
+        # 운영 파일 + vault 시드 안내노트('0-' 접두: 0-위키-안내/0-대시보드,
+        # wiki_vault.py 시드)는 지식 페이지가 아니다 — 프롬프트 주입에서 제외.
+        if p.name in ("index.md", "log.md", "WIKI_SCHEMA.md") or p.name.startswith("0-"):
             continue
         stem = p.stem.lower()
         score = sum(3 for k in keys if k in stem)

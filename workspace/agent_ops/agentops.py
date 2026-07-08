@@ -266,7 +266,10 @@ def cmd_watch(args):
       0 = 진행중/대기(정상), 3 = 멈춤 의심(stale heartbeat), 4 = 정지 요청됨.
     메인은 위임(orchestrator/work 등) 사이사이 이 명령을 돌려, 멈춤이면 개입한다.
     """
-    max_age = int(getattr(args, "max_age", 0) or 600)
+    # `or 600` 폴백은 사용자가 명시한 `--max-age 0`(즉시 stale 판정)까지 600으로
+    # 바꿔버린다 — None(미지정)일 때만 기본값을 쓴다.
+    max_age = getattr(args, "max_age", None)
+    max_age = 600 if max_age is None else int(max_age)
     interruption = detect_interruption(max_age_seconds=max_age)
     active = read_json(STATE / "ACTIVE_TASK.json", {})
     run_state = read_json(STATE / "RUN_STATE.json", {})
@@ -305,6 +308,7 @@ def cmd_report_html(args):
     path = report_from_csv(src, out_dir, title=(args.title or None))
     print(f"HTML 리포트 생성: {path}")
     print("브라우저로 열면 표/차트가 보입니다 (오프라인, 외부 리소스 없음).")
+    _log_activity(f"HTML 리포트 생성: {src.name}", f"산출물: {path}")
     return 0
 
 
@@ -323,6 +327,19 @@ def _artifact_dir(default):
     return p
 
 
+def _log_activity(task: str, outcome: str = "") -> None:
+    """완료된 작업을 기억에 자동 적재 → 증류되어 Obsidian 위키에 정리(cmd_work 와 동일).
+
+    활동 기억은 low 우선순위라 사용자 규칙 회상을 밀어내지 않고,
+    적재 실패가 본 작업의 성공을 막지 않는다. 성공 경로에서만 호출할 것.
+    """
+    try:
+        from agent_ops.memory_manager import add_activity
+        add_activity(task, outcome)
+    except Exception:  # noqa: BLE001 - 자동 적재 실패가 작업을 막으면 안 된다
+        pass
+
+
 def cmd_report_xlsx(args):
     """CSV → 서식 있는 .xlsx (Office 설치 불필요, openpyxl). 헤더 굵게/숫자 우측정렬."""
     from pathlib import Path as _P
@@ -339,6 +356,7 @@ def cmd_report_xlsx(args):
         print(f"[report-xlsx] 실패: {r.get('error')}\n  {r.get('hint','')}")
         return 1
     print(f"XLSX 생성: {r['path']}")
+    _log_activity(f"XLSX 리포트 생성: {src.name}", f"산출물: {r['path']}")
     return 0
 
 
@@ -370,6 +388,7 @@ def cmd_office_doc(args):
         print(f"[office-doc] 실패: {r.get('error')}\n  {r.get('hint','')}")
         return 1
     print(f"{args.kind.upper()} 생성: {r['path']}")
+    _log_activity(f"{args.kind.upper()} 문서 생성: {title}", f"산출물: {r['path']}")
     return 0
 
 
@@ -421,6 +440,7 @@ def cmd_routine(args):
         res = R.run_routine(args.name, disp)
         if res.get("ok"):
             print(f"루틴 재생 완료: {res['total']}단계 모두 성공")
+            _log_activity(f"루틴 재생: {args.name}", f"{res['total']}단계 모두 성공")
             return 0
         print(f"루틴 재생 중단: {res.get('stopped_at')}단계에서 실패 — {res.get('reason')}")
         return 1
@@ -441,6 +461,7 @@ def cmd_doc_template(args):
         print(f"[doc-template] 실패: {res.get('error')}" + (f"\n  {res.get('hint','')}" if res.get("hint") else ""))
         return 1
     print(f"{res.get('kind')} 생성({res.get('format')}): {res['path']}")
+    _log_activity(f"정형문서 생성: {args.kind}", f"{res.get('format')} 산출물: {res['path']}")
     return 0
 
 
@@ -620,6 +641,25 @@ def cmd_remember(args):
     return 0
 
 def cmd_recall(args):
+    if getattr(args, "pinned", False):
+        # 세션 시작 컨텍스트용(TUI 플러그인이 주입): 키워드 없이도 '항상 보여야 할'
+        # 기억만 — core memory(사용자 규칙+최근 실수) + pinned + 최근 활동 5건.
+        from agent_ops.memory_manager import core_memory, load_memory, pinned_recall
+        items = core_memory(limit=5)
+        seen = {r.get("id") for r in items}
+        for r in pinned_recall():
+            if r.get("id") not in seen:
+                seen.add(r.get("id"))
+                items.append(r)
+        recent_acts = sorted(
+            [r for r in load_memory(status="active") if r.get("kind") == "activity"],
+            key=lambda r: str(r.get("created_at", "")), reverse=True)[:5]
+        for r in recent_acts:
+            if r.get("id") not in seen:
+                seen.add(r.get("id"))
+                items.append(r)
+        print(format_recall_for_prompt(items))
+        return 0
     keywords = extract_keywords(" ".join(args.keywords))
     items = recall(task_kind=args.kind or "", keywords=keywords, limit=args.limit)
     print(format_recall_for_prompt(items))
@@ -757,6 +797,9 @@ def cmd_agent(args):
     print("-----------------")
     print(f"응답 저장: {out}")
     print(f"진단 위치: {DIAG_DIR}")
+    if result.get("ok"):
+        _log_activity(task, f"agent 완료: {result.get('outcome')} "
+                            f"(턴 {result['turns']}, 도구 {len(result['tool_results'])}회)")
     return 0 if result["ok"] else 1
 
 
@@ -813,12 +856,18 @@ def cmd_work(args):
         # 축적된 규칙/교훈을 기계 주입 — 페르소나가 잊어도 반영된다 (복리 구조의 쐐기돌)
         memories_text = ""
         try:
-            from agent_ops.memory_manager import (extract_keywords,
+            from agent_ops.memory_manager import (core_memory, extract_keywords,
                                                   format_recall_for_prompt, recall)
-            mem_items = recall(keywords=extract_keywords(task), limit=5)
+            # 회상 보장(tool_dispatch.run_agent_loop 와 동일 패턴): core memory
+            # (사용자 규칙+최근 실수)는 키워드가 안 맞아도 항상 주입하고,
+            # 키워드 매칭분은 id 중복 제거 후 그 위에 얹는다.
+            pinned = core_memory(limit=5)
+            matched = recall(keywords=extract_keywords(task), limit=5)
+            seen_ids = {r.get("id") for r in pinned}
+            mem_items = pinned + [r for r in matched if r.get("id") not in seen_ids]
             memories_text = format_recall_for_prompt(mem_items) if mem_items else ""
             if memories_text:
-                print(f"축적된 기억 {len(mem_items)}건 반영 (recall)")
+                print(f"축적된 기억 {len(mem_items)}건 반영 (core+recall)")
         except Exception:  # noqa: BLE001
             pass
         artifact_result = generate_artifacts(task, plan["artifact_kinds"],
@@ -1148,7 +1197,7 @@ def main(argv=None):
     p = sub.add_parser("log-failure"); p.add_argument("text", nargs="*"); p.set_defaults(func=cmd_log_failure)
     sub.add_parser("memorycheck").set_defaults(func=cmd_memorycheck)
     p = sub.add_parser("remember"); p.add_argument("text", nargs="*"); p.add_argument("--title", default="User instruction"); p.set_defaults(func=cmd_remember)
-    p = sub.add_parser("recall"); p.add_argument("keywords", nargs="*"); p.add_argument("--kind", default=""); p.add_argument("--limit", type=int, default=6); p.set_defaults(func=cmd_recall)
+    p = sub.add_parser("recall"); p.add_argument("keywords", nargs="*"); p.add_argument("--kind", default=""); p.add_argument("--limit", type=int, default=6); p.add_argument("--pinned", action="store_true", help="키워드 없이 core memory+고정 기억+최근 활동을 출력(세션 시작 주입용)"); p.set_defaults(func=cmd_recall)
     p = sub.add_parser("enqueue"); p.add_argument("title"); p.add_argument("--kind", default="manual"); p.add_argument("--owner", default="agent"); p.add_argument("--priority", type=int, default=5); p.add_argument("--risk", default="safe"); p.add_argument("--payload", default=""); p.add_argument("--touches", nargs="*", default=[]); p.set_defaults(func=cmd_enqueue)
     sub.add_parser("continue-once").set_defaults(func=cmd_continue)
     p = sub.add_parser("orchestrator"); p.add_argument("--interval", type=int, default=60); p.add_argument("--parallel", action="store_true"); p.add_argument("--workers", type=int, default=3); p.set_defaults(func=cmd_orchestrator)
