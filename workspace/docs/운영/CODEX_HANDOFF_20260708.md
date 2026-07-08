@@ -3,10 +3,12 @@
 이 문서 하나로 전체 맥락·경로·남은 일·작업방식·주의점을 파악할 수 있게 자립적으로 썼다.
 먼저 이 문서 → 그다음 `docs/운영/REMEDIATION_PLAN_20260708.md`(워크스트림 원본) 순으로 읽어라.
 
-> **[갱신 2026-07-08]** 이후 작업은 새 틀 `docs/운영/AUTO_ORCHESTRATION_PLAN_20260708.md`(WS-0~WS-10, "모든 지능 연결
-> 자동운영 구조")로 이관됨. 이 REMEDIATION 문서의 WS-D(TUI 기억주입)는 완료(커밋 0c1b3cb)됐고, WS-INT는 AUTO 계획의
-> **WS-5**로 재편됐다. 현재 진행: AUTO 계획 기준 **WS-0/1/2(Codex)·WS-3 완료**, 다음은 **WS-4(Obsidian manual recall)**.
-> 진행 로그·다음 작업은 AUTO_ORCHESTRATION_PLAN 9절과 BUILD_PHILOSOPHY 체크를 본다.
+> **[갱신 2026-07-09]** 이후 작업은 새 틀 `docs/운영/AUTO_ORCHESTRATION_PLAN_20260708.md`(WS-0~WS-10, "모든 지능 연결
+> 자동운영 구조")로 이관됨. **WS-0~WS-10 오프라인 검증 가능 범위 전부 완료**(구현·테스트·문서·로컬커밋). 단 **WS-5(실행/설정
+> 통합)의 핵심(48파일 커맨드 경로 치환·ocd cwd 복원)은 patched opencode.exe bash 셸(cmd/POSIX) 미확인으로 사내망-gated**.
+> 남은 것 = **사내망 체크리스트**(INTELLIGENCE_COVERAGE_REPORT WS-10 섹션): ①WS-5 경로통합(셸 확인 선행) ②모델 A/B
+> (`lig-exaone-chat` 우선) ③TUI 플러그인 실동작 ④라우팅 튜닝(일정 과잉질문·공학KB plan_only). 최종 리뷰·판정·trace 8종은
+> INTELLIGENCE_COVERAGE_REPORT WS-10, 진행 로그는 AUTO_ORCHESTRATION_PLAN 9~10절.
 
 ---
 
