@@ -771,3 +771,17 @@
     env 보간/모델 기본값 = 전부 사내망 필요.
   - 다음 작업: WS-6 자동 유지보수/효율화(오프라인 가능). 첫 파일: `workspace/agent_ops/auto_maintain.py`,
     `workspace/agent_ops/activity_timeline.py`, `workspace/tests/test_adapter_tools_maintain.py`.
+- WS-6 완료 기록(2026-07-08, 커밋 6dcc314):
+  - 변경 요약: `auto_maintain.promote_repeated_failures(min_count=3)` 신규 — error_pattern을 dedupe 해시(없으면 제목)로
+    묶어 **서로 다른 날 3회 이상** 관측된 그룹만 priority high + "반복확인됨" 태그로 승격(태그/우선순위만, 삭제·병합·status
+    변경 없음, source=user 제외, 멱등). `activity_timeline.recent_stalls()` 순수조회 계측 추가. `maybe_maintain` summary에
+    promoted/stalls 키 + book 신선도 skip 사유. 기존 스로틀/마커 구조·WS-C의 activity consolidate 스로틀은 불변. **위험한
+    memory.jsonl append 최적화는 계획대로 미룸**(계측 먼저).
+  - 철학 종료 체크: (관측 후 최적화) 승격/stall을 먼저 계측·기록만 하고 자동 개입은 하지 않는다. (기억 정제) 반복 확인된
+    실패만 승격해 recall 우선순위를 올리되 잡음(1~2회 관측)은 승격 안 함. (안전) 원본 로그 비파괴를 테스트(개수 불변)로 고정,
+    user_rule/preference 미대상, USERDATA 미접촉. (남긴 trace) maybe_maintain summary에 promoted/stalls.
+  - 검증: `test_adapter_tools_maintain`(24), `test_memory_activity`(7), `test_recall_guarantee`(7), `test_wiki_manager`(41) 통과.
+  - 미검증: 실제 장기 누적 원장에서 승격 빈도·stall 패턴(사내망 실사용 관측).
+  - 다음 작업: WS-7 정책 엔진(`auto_policy.py`)과 사용자 선택 최소화 — cmd_auto가 capability 결과를 바로 실행하지 않고
+    `choose_execution_policy`(execute/plan_only/ask_user/blocked)를 거치게. 첫 파일: `workspace/agent_ops/auto_policy.py`(신규),
+    `workspace/agent_ops/agentops.py`(cmd_auto), `workspace/tests/test_auto_policy.py`. **safety는 우회 못 하고 더 보수적으로만.**
