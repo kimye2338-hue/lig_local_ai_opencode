@@ -58,6 +58,53 @@
 
 ---
 
+## 2.1 개발 대원칙과 연동 계약
+
+이 계획의 최우선 목표는 기능을 많이 붙이는 것이 아니라 **기능들이 한 방향으로 자라게 만드는 것**이다.
+따라서 모든 작업은 아래 계약을 따른다.
+
+1. **단일 입구 원칙**
+   - 일반 사용자는 기본 대화 또는 `/auto`만 써도 된다.
+   - `/work`, `/agent`, `/recall`, `/routine`, `/schedule` 같은 직접 명령은 고급/진단/우회 경로로 유지한다.
+   - 새 기능은 먼저 `auto`에서 접근 가능한지 검토하고, 불가능하면 `intelligence_map.py`에 `advanced` 또는 `pending` 사유를 남긴다.
+
+2. **단일 판단 근거 원칙**
+   - 요청 분류의 기준 이름은 capability id로 통일한다.
+   - tool group, skill hint, KB hint, artifact type, verification policy는 capability id에서 파생된다.
+   - 키워드 라우터는 남기되 capability metadata와 불일치하면 테스트가 실패해야 한다.
+
+3. **Trace가 공개 계약이다**
+   - 자동 경로는 모두 `AutoRouteTrace` 형태의 기록을 남긴다.
+   - trace에는 request, capability ids, selected path, model/provider, context sources, tools exposed, verification, memory hooks,
+     safety decision, fallback reason이 들어간다.
+   - 다른 모듈은 내부 구현을 추측하지 않고 trace/metadata를 보고 후속 처리를 한다.
+
+4. **후처리 단일 후크 원칙**
+   - 성공/실패/보류/사용자확인 필요 결과는 모두 `_complete_activity()` 같은 공통 후크를 통과한다.
+   - 기억, 위키, 지식책, audit, 성장 평가, status writer는 이 후크 뒤에만 붙인다.
+   - 개별 명령이 자기 방식으로 기억을 쓰면 중복/누락이 생기므로 테스트로 막는다.
+
+5. **기억 위생 우선 원칙**
+   - 장기 기억은 사용자 규칙/업무 선호/반복 검증된 패턴만 승격한다.
+   - 단일 실행 로그는 activity에 남기고, 반복된 실패만 error_pattern으로 승격한다.
+   - Obsidian manual 노트는 사람이 쓴 원본이므로 자동 원장으로 역주입하지 않는다. recall 대상에만 포함한다.
+
+6. **사용자 선택 최소화 원칙**
+   - 애매하지만 되돌릴 수 있는 일은 시스템이 합리적 기본값으로 진행한다.
+   - 사용자에게 묻는 경우는 위험 실행, 외부 파괴 변경, 모델/게이트웨이 기본값 변경, 의미가 둘 이상으로 갈리는 업무 목표로 제한한다.
+   - 질문이 필요하면 선택지를 줄이고, 질문 자체도 trace에 남겨 다음에는 덜 묻게 만든다.
+
+7. **안전 불변 원칙**
+   - approval, command_guard, deny rule, USERDATA 보호는 자동화보다 상위 계층이다.
+   - 어떤 WS도 안전 장치를 우회하거나 약화할 수 없다.
+   - 자동화 실패 시 fallback은 안전한 plan/report이지 강제 실행이 아니다.
+
+8. **관측 후 최적화 원칙**
+   - 성능/토큰/메모리 최적화는 먼저 계측을 만들고, 그 다음 정책을 바꾼다.
+   - "더 똑똑해 보이는" 변경이라도 trace와 평가 점수가 없으면 기본 경로로 승격하지 않는다.
+
+---
+
 ## 3. "모든 지능을 잇는다"의 정확한 정의
 
 여기서 말하는 "모든 지능"은 단순히 기능 목록을 많이 호출한다는 뜻이 아니다. 사용자가 자연어로 요청했을 때
@@ -326,7 +373,148 @@
 
 ---
 
-### WS-7. 전체 지능망 최종 리뷰
+### WS-7. 정책 엔진과 사용자 선택 최소화
+
+**목표:** 기능 선택을 사용자에게 떠넘기지 않고, 내부 정책이 안전하고 일관되게 기본 선택을 하게 한다.
+
+**파일**
+- 생성: `workspace/agent_ops/auto_policy.py`
+- 수정: `workspace/agent_ops/agentops.py`
+- 수정: `workspace/agent_ops/capabilities.py`
+- 수정: `workspace/agent_ops/intelligence_map.py`
+- 생성: `workspace/tests/test_auto_policy.py`
+- 생성/수정: `workspace/tests/test_auto_command.py`
+
+**작업**
+1. `auto_policy.py`에 `choose_execution_policy(request, capabilities, context, safety)`를 만든다.
+2. 정책 결과는 다음 필드를 가진다.
+   - `mode`: `execute`, `plan_only`, `ask_user`, `blocked`
+   - `path`: `artifact`, `tool_agent`, `command_native`, `memory_wiki`, `routine`, `schedule`
+   - `priority`: `speed`, `quality`, `safety`, `learning`
+   - `requires_confirmation`: bool
+   - `reason`: 사람이 읽을 수 있는 한 문장
+   - `fallback`: 실패 시 이동할 안전 경로
+3. 기본 정책:
+   - 되돌릴 수 있는 산출물 생성/읽기/분석/recall은 `execute`
+   - 파일 삭제, 앱에서 저장, 외부 시스템 변경, 모델 기본값 변경은 `ask_user`
+   - 앱/도구 준비가 안 된 기능은 `plan_only` 또는 `blocked`
+   - 일정/루틴처럼 command-native가 더 안정적인 요청은 해당 명령으로 위임
+4. `cmd_auto`는 capability 결과를 바로 실행하지 않고 `auto_policy`를 거쳐 실행한다.
+5. 정책 결정은 route trace에 저장하고, 사용자가 선택한 답변도 다음 평가에 쓰도록 기록한다.
+
+**연동 주의**
+- `auto_policy`는 safety를 우회하지 않는다. safety 결과를 입력받아 더 보수적으로만 바꿀 수 있다.
+- 모델/provider 선택은 정책에 기록하되, 기본값 변경은 하지 않는다.
+- policy가 `ask_user`를 남발하면 사용자 선택 최소화 원칙 위반으로 본다.
+
+**검증**
+- `py -3.11 tests\test_auto_policy.py`
+- `py -3.11 tests\test_auto_command.py`
+- `py -3.11 tests\test_intelligence_map.py`
+
+**서브에이전트 배정**
+- 구현: `worker`, `gpt-5.4`, 파일 소유 `auto_policy.py`, `agentops.py`, `test_auto_policy.py`
+- 검토: `gpt-5.5` 또는 main agent, 사용자 선택 전가/안전 우회 여부 검토
+
+---
+
+### WS-8. 자기평가와 성장 루프
+
+**목표:** 시스템이 실행 후 "잘했는지"를 평가하고, 다음 실행에서 더 좋은 선택을 하도록 근거를 축적한다.
+
+**파일**
+- 생성: `workspace/agent_ops/evaluation_loop.py`
+- 수정: `workspace/agent_ops/agentops.py`
+- 수정: `workspace/agent_ops/memory_manager.py`
+- 수정: `workspace/agent_ops/auto_maintain.py`
+- 생성: `workspace/tests/test_evaluation_loop.py`
+- 생성/수정: `workspace/docs/운영/INTELLIGENCE_COVERAGE_REPORT.md`
+
+**작업**
+1. `evaluation_loop.py`에 `score_run(trace, outcome)`을 만든다.
+2. 평가 항목:
+   - `route_confidence`: 라우팅 확신도
+   - `tool_success`: 도구 실행 성공/실패/재시도
+   - `artifact_quality`: 산출물 검증 결과
+   - `user_friction`: 사용자 질문/확인/수정 요구 횟수
+   - `learning_value`: 기억으로 남길 가치
+   - `safety_margin`: 안전 차단 또는 보수적 fallback 여부
+3. 평가 결과는 `diagnostics/evaluations/*.jsonl` 또는 기존 diagnostics 구조에 누적한다.
+4. 반복적으로 좋은 결과를 낸 route는 policy에서 선호도를 높인다.
+5. 반복 실패 route는 `error_pattern` 후보로 만들고, 바로 장기 기억으로 승격하지 않는다.
+6. 성장 리포트는 주간 단위로 다음을 보여준다.
+   - 자동 선택된 기능
+   - 사용자에게 물어본 횟수
+   - 반복 실패에서 개선된 항목
+   - 새로 승격된 기억/선호
+   - 아직 보류 중인 기능
+
+**연동 주의**
+- 평가 점수는 정책의 보조 신호다. 안전 정책을 덮어쓸 수 없다.
+- 사용자 피드백이 없는 상태에서 단일 성공만으로 장기 선호를 만들지 않는다.
+- 평가 저장은 USERDATA 손상 위험이 없도록 append-only 또는 tmp 후 교체로 한다.
+
+**검증**
+- `py -3.11 tests\test_evaluation_loop.py`
+- `py -3.11 tests\test_auto_learning_hooks.py`
+- `py -3.11 tests\test_memory_activity.py`
+
+**서브에이전트 배정**
+- 구현: `worker`, `gpt-5.4`, 파일 소유 `evaluation_loop.py`, 평가 테스트
+- 검토: `verification-runner`, `gpt-5.4-mini`, tmp USERDATA 격리와 중복 누적 확인
+
+---
+
+### WS-9. 기억 품질 관리와 장기 지식 승격
+
+**목표:** 기억이 많이 쌓일수록 더 똑똑해지는 구조를 만들되, 잡음과 오래된 정보가 판단을 망치지 않게 한다.
+
+**파일**
+- 생성: `workspace/agent_ops/memory_quality.py`
+- 수정: `workspace/agent_ops/memory_manager.py`
+- 수정: `workspace/agent_ops/wiki_manager.py`
+- 수정: `workspace/agent_ops/knowledge_book.py`
+- 수정: `workspace/agent_ops/auto_maintain.py`
+- 생성: `workspace/tests/test_memory_quality.py`
+
+**작업**
+1. 기억 등급을 명확히 분리한다.
+   - `user_rule`: 사용자가 명시한 규칙. 가장 높은 우선순위, 자동 삭제 금지
+   - `preference`: 반복 확인된 사용자 선호
+   - `project_fact`: 프로젝트별 사실
+   - `activity`: 실행 로그와 요약
+   - `error_pattern`: 반복 실패/주의사항
+   - `candidate`: 승격 전 후보
+2. `memory_quality.py`에 dedupe/decay/promote 규칙을 둔다.
+3. 승격 조건:
+   - 같은 패턴이 여러 번 관측되거나
+   - 사용자가 명시적으로 확인했거나
+   - 평가 루프에서 충분히 높은 learning_value가 반복된 경우
+4. 감쇠 조건:
+   - 오래된 activity
+   - 한 번만 관측된 낮은 가치 기록
+   - 최신 규칙과 충돌하는 자동 기록
+5. recall은 `user_rule`, `preference`, `project_fact`, `manual wiki`를 우선하고 activity는 제한적으로만 넣는다.
+6. Obsidian wiki는 자동 정리 페이지와 manual 페이지를 계속 분리한다.
+
+**연동 주의**
+- 사용자가 직접 남긴 기억과 manual wiki는 자동 감쇠/삭제하지 않는다.
+- 기억 품질 관리는 recall 품질을 높이기 위한 것이며, 원본 로그를 조용히 파괴하지 않는다.
+- 품질 점수는 route trace와 evaluation 결과를 참고하지만, 안전 결정을 대체하지 않는다.
+
+**검증**
+- `py -3.11 tests\test_memory_quality.py`
+- `py -3.11 tests\test_recall_guarantee.py`
+- `py -3.11 tests\test_memory_activity.py`
+- `py -3.11 tests\test_wiki_manager.py`
+
+**서브에이전트 배정**
+- 구현: `worker`, `gpt-5.4`, 파일 소유 `memory_quality.py`, memory/wiki 테스트
+- 검토: `gpt-5.5` 또는 main agent, 기억 손상/과잉 승격/수동 노트 보존 검토
+
+---
+
+### WS-10. 전체 지능망 최종 리뷰
 
 **목표:** 구현이 끝난 뒤 "기능 몇 개를 붙였다"가 아니라 전체 지능망이 닫힌 루프인지 검토한다.
 
@@ -337,14 +525,16 @@
 
 **작업**
 1. `INTELLIGENCE_COVERAGE_REPORT.md`를 최신 코드 기준으로 갱신한다.
-2. `auto` route trace 샘플을 최소 6개 남긴다.
+2. `auto` route trace 샘플을 최소 8개 남긴다.
    - 문서 작성
    - 데이터/HTML 리포트
    - 일정/비서 요청
    - Obsidian/wiki/recall 요청
    - 앱/브라우저/파일 조작 요청
    - 공학/전공 KB 질문
-3. 각 샘플에서 모델/provider, context, tools, verification, memory/wiki hook이 기록되는지 확인한다.
+   - 반복 루틴 요청
+   - 위험하거나 애매해 사용자 확인이 필요한 요청
+3. 각 샘플에서 모델/provider, context, tools, policy, verification, evaluation, memory/wiki hook이 기록되는지 확인한다.
 4. `gpt-5.5` reviewer 또는 main agent 최종 검토로 다음을 판정한다.
    - 미연결 지능 0개
    - 안전 장치 우회 0개
@@ -357,10 +547,43 @@
 - `py -3.11 tests\test_auto_command.py`
 - `py -3.11 tests\test_routing_alignment.py`
 - `py -3.11 tests\test_auto_learning_hooks.py`
+- `py -3.11 tests\test_auto_policy.py`
+- `py -3.11 tests\test_evaluation_loop.py`
+- `py -3.11 tests\test_memory_quality.py`
 - `py -3.11 tests\test_wiki_manager.py`
 - `py -3.11 tests\test_launch_bats.py`
 - `python -m pytest tests\test_work_command.py -q`
 - `python agent_ops\agentops.py doctor`
+
+---
+
+## 5.1 워크스트림 간 연동 계약
+
+| WS | 입력 | 산출물 | 다음 WS가 의존하는 계약 | 깨지면 안 되는 것 |
+| --- | --- | --- | --- | --- |
+| WS-0 지능 지도 | 실제 commands/tools/adapters/capabilities 파일 목록 | `intelligence_map.py`, coverage report, orphan test | 모든 기능은 `auto/advanced/pending/deprecated` 중 하나 | 지도에 없는 새 기능 추가 금지 |
+| WS-1 자동 진입점 | capability 결과, intelligence map | `cmd_auto`, `/auto`, route trace | 모든 일반 요청은 selected path와 fallback을 가진다 | 기존 직접 명령의 호환성 |
+| WS-2 라우팅 정렬 | capability ids, tool registry, skill router | capability metadata, routing alignment test | tool/skill/context 선택은 capability id에서 파생 | 키워드 라우터와 문서 레시피 drift |
+| WS-3 공통 후크 | auto/work/agent/command 결과 | `_complete_activity`, learning hook tests | 실행 결과는 outcome 하나로 후처리된다 | 기억 중복, 실패 누락, USERDATA 손상 |
+| WS-4 Obsidian recall | wiki auto/manual pages, recall query | manual-aware recall | manual wiki는 recall 대상이지만 원장 역주입 금지 | 사용자가 쓴 Obsidian 노트 |
+| WS-5 실행/설정 통합 | launcher/env/TUI/plugin paths | AGENTOPS_HOME 기준 실행 경로 | 모든 명령은 같은 workspace/userdata를 본다 | BAT CRLF, LLM 설정 불변, 오프라인성 |
+| WS-6 유지보수 | memory/wiki/evaluation/audit data | maintain metrics, error promotion | 정리/승격/skip reason이 기록된다 | 원본 로그 파괴, 과잉 최적화 |
+| WS-7 정책 엔진 | capability, safety, context, evaluation hints | execution policy | 사용자 질문/실행/보류 기준이 일관된다 | safety 우회, 모델 기본값 임의 변경 |
+| WS-8 자기평가 | route trace, outcome, verification | evaluation records, growth report | 다음 정책은 평가를 보조 신호로 쓴다 | 단일 성공을 장기 선호로 과잉 승격 |
+| WS-9 기억 품질 | memory records, wiki, evaluation | dedupe/decay/promote rules | recall은 정제된 기억 우선순위를 따른다 | user_rule/manual wiki 자동 삭제 |
+| WS-10 최종 리뷰 | 모든 테스트와 trace 샘플 | intelligence coverage final report | 제품 완성 판단의 기준 문서 | 미검증 항목을 완료로 표시 |
+
+공통 인터페이스:
+
+- `IntelligenceItem`: 기능 존재와 연결 상태를 나타내는 지도 항목.
+- `AutoRouteTrace`: 요청에서 실행 후크까지의 단일 추적 기록.
+- `ExecutionPolicy`: 실행/계획/질문/차단 결정을 나타내는 정책 결과.
+- `ActivityOutcome`: 성공/실패/보류 결과와 산출 파일, 오류, 검증 결과를 담는 후처리 입력.
+- `EvaluationRecord`: 실행 품질, 사용자 마찰, 학습 가치를 담는 자기평가 기록.
+- `MemoryQualityDecision`: 기억 유지/승격/감쇠/중복 억제 판단.
+
+이 인터페이스 이름은 계획상 계약명이다. 구현 시 실제 class/dataclass/dict 이름은 코드 스타일에 맞춰도 되지만,
+테스트와 문서에는 위 역할이 보존되어야 한다.
 
 ---
 
@@ -382,8 +605,11 @@
 6. WS-4 Obsidian manual recall 강화.
 7. WS-5 WS-INT 경로/설정 통합. 이 단계는 한 커밋으로 묶는다.
 8. WS-6 유지보수/효율화.
-9. WS-7 전체 지능망 최종 리뷰.
-10. 작업 종료 기록 업데이트 + 로컬 커밋. GitHub push는 사용자 지시 전까지 금지.
+9. WS-7 정책 엔진과 사용자 선택 최소화.
+10. WS-8 자기평가와 성장 루프.
+11. WS-9 기억 품질 관리와 장기 지식 승격.
+12. WS-10 전체 지능망 최종 리뷰.
+13. 작업 종료 기록 업데이트 + 로컬 커밋. GitHub push는 사용자 지시 전까지 금지.
 
 ---
 
@@ -410,10 +636,13 @@
 
 - `test_intelligence_map.py` 기준 미분류/고아 지능 요소가 0개다.
 - 사용자는 `/auto <요청>` 또는 기본 에이전트 대화만으로 대부분의 업무를 시작할 수 있다.
-- 내부는 요청을 command-native, artifact, tool-agent, schedule, wiki/memory 경로 중 하나로 자동 선택한다.
+- 내부는 요청을 command-native, artifact, tool-agent, schedule, wiki/memory, routine 경로 중 하나로 자동 선택한다.
+- 선택 전에 `ExecutionPolicy`가 실행/계획/질문/차단을 결정하고, 사용자 질문은 위험하거나 의미가 갈리는 경우로 제한된다.
 - 모든 실행은 route trace와 work report를 남긴다. trace에는 선택된 capability, command/tool 경로, model/provider,
-  context source, verification, memory/wiki hook이 포함된다.
+  context source, policy, verification, evaluation, memory/wiki hook이 포함된다.
 - 성공은 activity/lesson으로, 실패 반복은 error_pattern으로 자동 축적된다.
+- 실행 품질은 evaluation record로 남고, 반복적으로 좋은 선택만 다음 정책의 선호 신호가 된다.
+- 장기 기억은 품질 관리 규칙으로 승격/감쇠/중복 억제되고, user_rule과 manual wiki는 보호된다.
 - Obsidian 자동 위키와 manual 노트가 다음 작업 recall에 반영된다.
 - 런처/ocd/TUI/Python이 같은 경로와 설정을 본다.
 - 위험 실행은 여전히 approval/command_guard에 걸린다.
@@ -429,5 +658,7 @@
 - 미검증: 실제 TUI env 보간, ocd 실행, 모델 A/B, 사내 게이트웨이 tool calling은 사내망 필요.
 - 보강 기록: 사용자 지적에 따라 기존 계획을 "자동 루프" 수준에서 "모든 지능층 연결" 수준으로 강화했다. WS-0 지능 지도,
   고아 기능 방지 테스트, 지능층 연결 지도, WS-7 전체 지능망 최종 리뷰를 추가했다.
+- 추가 보강 기록: 완성 제품 수준으로 가기 위해 개발 대원칙, 워크스트림 간 연동 계약, 정책 엔진, 자기평가 루프,
+  기억 품질 관리, 사용자 선택 최소화 기준을 추가했다. 최종 리뷰는 WS-10으로 이동했다.
 - 다음 첫 작업: 바로 `cmd_auto` 구현으로 들어가지 말고 `workspace/agent_ops/intelligence_map.py`와
   `workspace/tests/test_intelligence_map.py`를 먼저 작성해 전체 지능 목록을 고정한다.
