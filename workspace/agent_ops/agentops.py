@@ -252,24 +252,32 @@ def cmd_auto(args):
     _print_input_summary(inputs)
     plan, _ctx = _plan_context(task, inputs)
     hint = _auto_command_hint(task, plan)
+    capability_ids = [c.get("id") for c in plan.get("capabilities", [])]
+    try:
+        from agent_ops.capabilities import route_hints_for_capabilities
+        route_hints = route_hints_for_capabilities(capability_ids)
+    except Exception:
+        route_hints = {"capabilities": [], "tools": [],
+                       "skill_sections": [], "context_sources": []}
     trace = {
         "timestamp": now(),
         "request": task,
         "routing": plan.get("routing"),
         "planner_mode": plan.get("planner_mode"),
-        "capability_ids": [c.get("id") for c in plan.get("capabilities", [])],
+        "capability_ids": capability_ids,
         "capabilities": plan.get("capabilities", []),
         "artifact_kinds": plan.get("artifact_kinds", []),
         "selected_path": hint["selected_path"],
         "command": hint["command"],
         "reason": hint["reason"],
+        "route_hints": route_hints,
         "pending": plan.get("pending", []),
         "dry_run": bool(getattr(args, "dry_run", False)),
         "model_provider": {
             "source": "unchanged",
             "note": "WS-1 does not change LLM/provider defaults",
         },
-        "context_sources": ["capabilities.plan_task"],
+        "context_sources": ["capabilities.plan_task"] + route_hints.get("context_sources", []),
         "verification": ["auto-route trace written"],
         "memory_hooks": ["pending: WS-3 common completion hook"],
         "safety": {

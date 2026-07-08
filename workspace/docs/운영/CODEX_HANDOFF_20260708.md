@@ -13,12 +13,13 @@ Fable 상세검토 49건(높음8)을 "땜질 말고 한 번에 정합적으로" 
 `docs/운영/AUTO_ORCHESTRATION_PLAN_20260708.md`에 전체 자동 운영 루프 개선 계획을 작성했다.
 남은 큰 축은 **AUTO 루프 구현**, **WS-INT(경로·통합·config 단일소스)**, **모델 A/B(사용자 사내망 확인)** 다.
 2026-07-08 Codex 이어작업에서 자동 운영 루프의 **WS-0 지능 지도와 고아 기능 방지 테스트**와
-**WS-1 `/auto` 단일 진입점**을 완료했다. `agent_ops/intelligence_map.py`가 141개 지능 항목을
+**WS-1 `/auto` 단일 진입점**, **WS-2 라우팅 단일 근거화**를 완료했다. `agent_ops/intelligence_map.py`가 141개 지능 항목을
 command/capability/artifact/tool/adapter/context/memory/maintenance/safety/packaging으로 분류하고,
 `tests/test_intelligence_map.py`가 실제 코드 목록과 지도 drift를 잡는다.
 `agent_ops/agentops.py auto`와 `.opencode/commands/auto.md`는 자연어 요청을 `command_native`,
 `artifact`, `tool_agent`, `memory_wiki`, `plan_only`로 자동 위임하며 `diagnostics/auto-route-last.json`에
-route trace를 남긴다. 다음 첫 작업은 WS-2 capability metadata와 tool/skill/context alignment다.
+route trace를 남긴다. WS-2에서 `CAPABILITY_ROUTE_HINTS`가 tool/skill/context 선택의 공통 근거가 되었고
+trace에는 `route_hints`가 남는다. 다음 첫 작업은 WS-3 공통 실행 완료/학습 후크다.
 
 - 리포: `C:\Users\김예찬\OneDrive\바탕 화면\LIG_OPENCODE` (Git, 브랜치 `codex/offline-release-hardening-20260708`)
 - 베이스라인 태그: `baseline-20260708-review` (commit b7a94b6)
@@ -240,7 +241,7 @@ python agent_ops\agentops.py doctor
 1. `git log --oneline -10` 로 위 8커밋 확인, `git status` clean 확인.
 2. 6절 회귀 게이트 실행해 baseline green 재확인.
 3. `docs/운영/AUTO_ORCHESTRATION_PLAN_20260708.md`와 `docs/운영/BUILD_PHILOSOPHY_20260708.md`를 읽고,
-   `docs/운영/INTELLIGENCE_COVERAGE_REPORT.md`의 WS-0/WS-1 결과를 확인한 뒤 WS-2 라우팅 alignment부터 진행한다.
-4. 이후 WS-3 공통 학습 후크 → WS-4 Obsidian manual recall → WS-INT 순서로 간다.
+   `docs/운영/INTELLIGENCE_COVERAGE_REPORT.md`의 WS-0/WS-1/WS-2 결과를 확인한 뒤 WS-3 공통 학습 후크부터 진행한다.
+4. 이후 WS-4 Obsidian manual recall → WS-INT 순서로 간다.
 5. 여력 되면 5절 선택/저순위. **#8-4는 데이터 위험 크니 tmp 격리 테스트 충분히.**
 6. 사용자에게: 모델 A/B 절차(4절)와 사내망 검증 필요 항목 목록을 정리해 전달.

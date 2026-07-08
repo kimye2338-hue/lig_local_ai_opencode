@@ -28,8 +28,26 @@ _SKILLS: List[Tuple[str, Tuple[str, ...]]] = [
                 "기획서", "요약", "초안", "작성")),
 ]
 
+_SKILLS_BY_CAPABILITY = {
+    "macro_generation": "매크로",
+    "spreadsheet_generation": "데이터 분석",
+    "browser_automation": "웹",
+    "web_mail_assistant": "웹",
+    "document_generation": "보고서",
+    "presentation_generation": "보고서",
+    "meeting_minutes": "보고서",
+    "weekly_report": "보고서",
+    "matlab_automation": "데이터 분석",
+    "simulation_automation": "매크로",
+    "office_cad_automation": "매크로",
+}
 
-def detect_skill(prompt: str) -> Optional[str]:
+
+def detect_skill(prompt: str, capability_ids: Optional[List[str]] = None) -> Optional[str]:
+    for cap_id in capability_ids or []:
+        section = _SKILLS_BY_CAPABILITY.get(cap_id)
+        if section:
+            return section
     low = (prompt or "").lower()
     for section, keys in _SKILLS:
         if any(k.lower() in low for k in keys):
@@ -51,9 +69,10 @@ def _section_text(section_title_kw: str, max_chars: int) -> Optional[str]:
     return None
 
 
-def context_for_prompt(prompt: str, max_chars: int = 1200) -> Optional[str]:
+def context_for_prompt(prompt: str, max_chars: int = 1200,
+                       capability_ids: Optional[List[str]] = None) -> Optional[str]:
     """작업 유형에 맞는 절차 스킬 하나를 system 주입 문자열로. 없으면 None."""
-    section = detect_skill(prompt)
+    section = detect_skill(prompt, capability_ids=capability_ids)
     if not section:
         return None
     body = _section_text(section, max_chars)

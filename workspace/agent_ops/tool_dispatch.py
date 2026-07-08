@@ -364,10 +364,21 @@ _TOOL_GROUPS = (
 )
 
 
-def _tools_for_prompt(prompt: str) -> List[str]:
-    """작업에 관련된 도구 이름 목록(핵심 + 키워드 매칭 그룹)."""
+def _tools_for_capabilities(capability_ids: Optional[List[str]]) -> set:
+    if not capability_ids:
+        return set()
+    try:
+        from .capabilities import route_hints_for_capabilities
+        hints = route_hints_for_capabilities(capability_ids)
+    except Exception:
+        return set()
+    return {name for name in hints.get("tools", []) if name in REGISTRY}
+
+
+def _tools_for_prompt(prompt: str, capability_ids: Optional[List[str]] = None) -> List[str]:
+    """작업에 관련된 도구 이름 목록(핵심 + capability + 키워드 매칭 그룹)."""
     low = (prompt or "").lower()
-    names = set(_CORE_TOOLS)
+    names = set(_CORE_TOOLS) | _tools_for_capabilities(capability_ids)
     for kws, group in _TOOL_GROUPS:
         if any(k in low for k in kws):
             names |= group
@@ -377,10 +388,11 @@ def _tools_for_prompt(prompt: str) -> List[str]:
     return [n for n in REGISTRY if n in names]
 
 
-def tool_definitions(prompt: Optional[str] = None) -> List[Dict[str, Any]]:
+def tool_definitions(prompt: Optional[str] = None,
+                     capability_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """OpenAI-style function definitions. prompt 주면 작업 관련 서브셋만(약한 모델
     정확도↑). prompt 없으면 전체(하위호환)."""
-    names = _tools_for_prompt(prompt) if prompt else list(REGISTRY)
+    names = _tools_for_prompt(prompt or "", capability_ids) if (prompt or capability_ids) else list(REGISTRY)
     return _definitions_for(names)
 
 
@@ -566,7 +578,7 @@ def run_agent_loop(
     """
     dispatcher = ToolDispatcher(workspace_root, diag_dir=diag_dir)
     # 작업별 도구 서브셋(약한 모델 정확도↑) + "사용 가능 도구 N개" 카운터(도구 누락 방지).
-    tools = tool_definitions(prompt)
+    tools = tool_definitions(prompt, capability_ids=capability_ids)
     sys_prompt = AGENT_SYSTEM_PROMPT + f"\n\n사용 가능한 도구: {len(tools)}개. 이 목록 안의 도구만 호출하라."
     messages: List[Dict[str, Any]] = [
         {"role": "system", "content": sys_prompt},
@@ -648,7 +660,7 @@ def run_agent_loop(
     try:
         # 프로세스 스킬 자동 적용: 작업 유형에 맞는 '일하는 절차'를 넣어 방법까지 따르게 한다.
         from .skill_router import context_for_prompt as _skill_ctx
-        skill_ref = _skill_ctx(prompt)
+        skill_ref = _skill_ctx(prompt, capability_ids=capability_ids)
         if skill_ref:
             inserts.append((3, {"role": "system", "content": skill_ref}))
     except Exception:  # noqa: BLE001 - 스킬 주입 실패도 작업을 막으면 안 된다

@@ -87,6 +87,15 @@ def main() -> None:
           trace["selected_path"] == "memory_wiki" and trace["command"] == "wiki",
           str(trace))
 
+    cp, trace_path = run_auto("크롬으로 회사 포털 확인해줘", "--dry-run")
+    trace = read_trace(trace_path)
+    check("auto browser trace exits 0", cp.returncode == 0)
+    hints = trace.get("route_hints", {})
+    check("auto trace records tool hints",
+          "browser_action" in hints.get("tools", []), str(trace))
+    check("auto trace records skill hints",
+          "웹" in hints.get("skill_sections", []), str(trace))
+
     print(f"\nALL {PASS} CHECKS PASSED (auto command)")
 
 

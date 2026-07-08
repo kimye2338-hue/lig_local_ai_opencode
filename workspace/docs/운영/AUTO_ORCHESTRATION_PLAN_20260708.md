@@ -702,3 +702,11 @@
   `test_auto_command`, `test_intelligence_map`, `test_opencode_command_coverage`, `test_tool_dispatch`,
   `test_capability_bench`, `test_work_command`가 통과했다.
   다음 작업은 WS-2 capability metadata와 tool/skill/context alignment다.
+- WS-2 완료 기록: `workspace/agent_ops/capabilities.py`에 `CAPABILITY_ROUTE_HINTS`와
+  `route_hints_for_capabilities()`를 추가해 capability id가 tool/skill/context 선택의 공통 근거가 되게 했다.
+  `tool_dispatch.tool_definitions(..., capability_ids=...)`는 capability 기반 도구를 먼저 열고 기존 키워드 그룹은 보조로 유지한다.
+  `skill_router.detect_skill/context_for_prompt(..., capability_ids=...)`도 capability 기반 절차 스킬을 우선한다.
+  `/auto` trace에는 `route_hints`가 추가되어 tools, skill_sections, context_sources가 남는다.
+  `test_routing_alignment`, `test_auto_command`, `test_tool_dispatch`, `test_skill_router`, `test_intelligence_map`,
+  `test_capability_bench`, `test_work_command`가 통과했다.
+  다음 작업은 WS-3 공통 실행 완료/학습 후크다.

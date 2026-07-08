@@ -113,3 +113,34 @@ WS-1은 `/auto` 단일 진입점을 구현한다. 시작 전 `BUILD_PHILOSOPHY_2
 ## 다음 단계
 
 WS-2는 capability 기준으로 도구/스킬/컨텍스트 선택 메타데이터를 정렬한다. `/auto`가 남기는 route trace를 입력으로 삼되, 안전과 USERDATA 보호는 계속 상위 원칙으로 둔다.
+
+## WS-2 시작 전 철학 체크
+
+- 이 작업이 줄이는 사용자 부담: 사용자가 같은 요청을 할 때 어떤 명령은 도구를 알고 어떤 명령은 모르는 식의 차이를 신경 쓰지 않아도 된다.
+- 연결되는 지능층: capability planning, tool exposure, process skill injection, context source trace, route alignment tests.
+- 사용자가 선택하지 않아도 되게 만드는 부분: 자연어 키워드가 약하거나 우회 표현이어도 capability id가 있으면 관련 도구와 절차 스킬이 먼저 선택된다.
+- 반드시 멈춰야 하는 위험: 도구를 너무 많이 열어 약한 모델의 선택 정확도를 떨어뜨리는 것, schema byte budget을 깨는 것, capability와 tool registry drift를 테스트 없이 방치하는 것.
+- 작업 결과가 돌아갈 기억/평가/위키/유지보수 경로: WS-2의 alignment 메타데이터는 `/auto` route trace와 WS-3 공통 completion hook에서 "왜 이 도구/스킬이 보였는가"를 설명하는 근거가 된다.
+
+## WS-2 종료 후 철학 체크
+
+- 줄어든 사용자 선택: 사용자가 웹/메일/MATLAB/CAD/보고서 같은 작업에서 어떤 도구나 절차 스킬을 열어야 하는지 고르지 않아도 capability id가 하위 선택을 이끈다.
+- 새로 연결된 지능: `CAPABILITY_ROUTE_HINTS`가 capability planning, `tool_dispatch.tool_definitions`, `skill_router.detect_skill/context_for_prompt`, `/auto` route trace를 연결한다.
+- 남긴 trace/report/evaluation/memory: `/auto` trace의 `route_hints`에 capability, tools, skill_sections, context_sources가 기록된다. evaluation과 memory 승격은 WS-3/WS-8/WS-9로 이어질 입력만 만든 상태다.
+- 보호한 안전 조건: tool registry에 없는 도구명은 노출하지 않으며, 기존 schema 설명을 늘리지 않아 tool schema byte budget을 유지했다. USERDATA, LLM/provider 설정, approval/command_guard는 수정하지 않았다.
+- 아직 이어지지 않은 부분과 이유: 실행 결과를 공통 activity/evaluation/memory로 보내는 후처리는 아직 없다. 이 연결은 WS-3에서 `_complete_activity`류 공통 후크로 구현한다.
+- 다음 작업자가 먼저 봐야 할 파일: `workspace/agent_ops/capabilities.py`의 `CAPABILITY_ROUTE_HINTS`, `workspace/agent_ops/tool_dispatch.py`의 `tool_definitions(..., capability_ids=...)`, `workspace/agent_ops/skill_router.py`, `workspace/tests/test_routing_alignment.py`, WS-3 계획.
+
+## WS-2 검증 결과
+
+- `py -3.11 tests\test_routing_alignment.py`: PASS, ALL 9 CHECKS PASSED.
+- `py -3.11 tests\test_tool_dispatch.py`: PASS, ALL 28 CHECKS PASSED.
+- `py -3.11 tests\test_skill_router.py`: PASS, ALL 11 CHECKS PASSED.
+- `py -3.11 tests\test_intelligence_map.py`: PASS, ALL 163 CHECKS PASSED.
+- `py -3.11 tests\test_auto_command.py`: PASS, ALL 18 CHECKS PASSED.
+- `py -3.11 tests\test_capability_bench.py`: PASS, ALL 222 CHECKS PASSED.
+- `$env:PYTHONUTF8='1'; $env:PYTHONIOENCODING='utf-8'; python -m pytest tests\test_work_command.py -q`: PASS, 4 passed.
+
+## 다음 단계
+
+WS-3는 어떤 경로에서 실행되든 성공/실패/보류 결과가 공통 후처리로 들어가게 만든다. 기억 중복과 USERDATA 보호를 최우선으로 확인한다.

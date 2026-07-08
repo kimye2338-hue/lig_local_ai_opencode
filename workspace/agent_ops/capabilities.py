@@ -149,6 +149,109 @@ CAPABILITIES: Dict[str, Dict[str, Any]] = {
 # produce a document, so route unknown office tasks there.
 DEFAULT_CAPABILITIES = ["file_ops", "document_generation"]
 
+# Capability id is the shared routing key for downstream tool exposure,
+# process-skill injection, and traceable context choices. Keep this small:
+# prompt keywords still refine the route, but capability hints prevent drift.
+CAPABILITY_ROUTE_HINTS: Dict[str, Dict[str, Any]] = {
+    "file_ops": {
+        "tools": ["read_file", "write_file", "append_file", "replace_in_file",
+                  "list_dir", "search_files", "run_diagnostic"],
+        "skill_sections": ["문제 해결"],
+        "context_sources": ["memory", "project_profile"],
+    },
+    "document_generation": {
+        "tools": [],
+        "skill_sections": ["보고서"],
+        "context_sources": ["design_guidance", "domain_context", "skill_router"],
+    },
+    "macro_generation": {
+        "tools": ["excel_app", "hwp_app", "solidworks_app", "autocad_run"],
+        "skill_sections": ["매크로"],
+        "context_sources": ["api_reference", "skill_router"],
+    },
+    "spreadsheet_generation": {
+        "tools": ["excel_app"],
+        "skill_sections": ["데이터 분석"],
+        "context_sources": ["api_reference", "skill_router"],
+    },
+    "presentation_generation": {
+        "tools": ["excel_app"],
+        "skill_sections": ["보고서"],
+        "context_sources": ["design_guidance", "domain_context", "skill_router"],
+    },
+    "browser_automation": {
+        "tools": ["browse_tabs", "read_web_page", "browser_action", "new_tab",
+                  "snapshot", "find_clickables", "click", "screenshot",
+                  "wait_for_selector", "select_tab", "spa_map"],
+        "skill_sections": ["웹"],
+        "context_sources": ["api_reference", "skill_router"],
+    },
+    "web_mail_assistant": {
+        "tools": ["browse_tabs", "read_web_page", "browser_action", "snapshot",
+                  "outlook_app"],
+        "skill_sections": ["웹"],
+        "context_sources": ["domain_context", "skill_router"],
+    },
+    "schedule_management": {
+        "tools": ["outlook_app"],
+        "skill_sections": [],
+        "context_sources": ["memory", "schedule_store"],
+    },
+    "meeting_minutes": {
+        "tools": [],
+        "skill_sections": ["보고서"],
+        "context_sources": ["domain_context", "design_guidance", "skill_router"],
+    },
+    "weekly_report": {
+        "tools": [],
+        "skill_sections": ["보고서"],
+        "context_sources": ["memory", "domain_context", "skill_router"],
+    },
+    "matlab_automation": {
+        "tools": ["matlab_run"],
+        "skill_sections": ["데이터 분석"],
+        "context_sources": ["api_reference", "skill_router"],
+    },
+    "simulation_automation": {
+        "tools": ["fluent_run"],
+        "skill_sections": ["매크로"],
+        "context_sources": ["api_reference", "knowledge_base", "skill_router"],
+    },
+    "office_cad_automation": {
+        "tools": ["solidworks_app", "autocad_run", "excel_app"],
+        "skill_sections": ["매크로"],
+        "context_sources": ["api_reference", "knowledge_base", "skill_router"],
+    },
+}
+
+
+def route_hints_for_capabilities(capability_ids: List[str]) -> Dict[str, Any]:
+    """Return merged downstream route hints for known capability ids."""
+    seen_caps: List[str] = []
+    tools: List[str] = []
+    skill_sections: List[str] = []
+    context_sources: List[str] = []
+    for cap_id in capability_ids or []:
+        hints = CAPABILITY_ROUTE_HINTS.get(cap_id)
+        if not hints:
+            continue
+        seen_caps.append(cap_id)
+        for name in hints.get("tools", []):
+            if name not in tools:
+                tools.append(name)
+        for section in hints.get("skill_sections", []):
+            if section not in skill_sections:
+                skill_sections.append(section)
+        for source in hints.get("context_sources", []):
+            if source not in context_sources:
+                context_sources.append(source)
+    return {
+        "capabilities": seen_caps,
+        "tools": tools,
+        "skill_sections": skill_sections,
+        "context_sources": context_sources,
+    }
+
 # Planning metadata per artifact kind: which file(s) the kind yields and what
 # the user gets from it. Actual filenames are owned by artifact_generators.py.
 ARTIFACT_KIND_INFO: Dict[str, Dict[str, str]] = {
