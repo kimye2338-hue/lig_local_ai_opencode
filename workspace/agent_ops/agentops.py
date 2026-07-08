@@ -253,6 +253,19 @@ def cmd_auto(args):
     plan, _ctx = _plan_context(task, inputs)
     hint = _auto_command_hint(task, plan)
     capability_ids = [c.get("id") for c in plan.get("capabilities", [])]
+    # WS-7: safety 분류는 입력으로만 쓰고, 정책은 더 보수적으로만 조정한다.
+    try:
+        safety_result = classify_action(task)
+    except Exception:
+        safety_result = None
+    from agent_ops.auto_policy import choose_execution_policy
+    policy = choose_execution_policy(
+        task,
+        plan.get("capabilities", []),
+        {"pending": plan.get("pending", []), "routing": plan.get("routing")},
+        safety_result,
+        hint,
+    )
     try:
         from agent_ops.capabilities import route_hints_for_capabilities
         route_hints = route_hints_for_capabilities(capability_ids)
@@ -283,7 +296,12 @@ def cmd_auto(args):
         "safety": {
             "approval_bypass": False,
             "note": "Delegated commands keep their existing approval/guard behavior.",
+            "classifier": {
+                "decision": (safety_result or {}).get("decision", ""),
+                "matched_danger": (safety_result or {}).get("matched_danger", []),
+            },
         },
+        "policy": policy,
         "fallback": "plan_only on low-confidence/default route",
     }
     _write_auto_trace(trace)
@@ -295,6 +313,7 @@ def cmd_auto(args):
         "artifact_kinds": trace["artifact_kinds"],
         "reason": trace["reason"],
     }, ensure_ascii=False, indent=2))
+    print(f"AUTO policy: mode={policy['mode']} priority={policy['priority']} - {policy['reason']}")
     if getattr(args, "dry_run", False):
         trace["exit_code"] = 0
         trace["outcome"] = "dry_run"
@@ -303,8 +322,29 @@ def cmd_auto(args):
         print(f"trace: {_auto_trace_path()}")
         return 0
 
+    # WS-7: 정책 mode로 실행 분기. safety보다 느슨해지는 방향의 전환은 없다.
+    # ask_user만 사용자가 명시한 --yes/--execute로 승격 가능(blocked는 불가).
+    effective_mode = policy["mode"]
+    user_override = bool(getattr(args, "yes", False) or getattr(args, "execute", False))
+    if effective_mode == "ask_user" and user_override:
+        effective_mode = "execute"
+        trace["policy_override"] = "user passed --yes/--execute; ask_user promoted to execute"
+    trace["effective_mode"] = effective_mode
+
+    if effective_mode == "ask_user":
+        print("확인 필요: 이 요청은 되돌리기 어려운 동작을 포함합니다.")
+        print(f"  이유: {policy['reason']}")
+        print(f"  질문: {policy['question']}")
+        print("  우선 안전한 계획만 출력합니다. 진행하려면 --yes 를 붙여 다시 실행하세요.")
+    elif effective_mode == "blocked":
+        print("실행 거부: 안전 분류상 자동 실행할 수 없는 요청입니다.")
+        print(f"  이유: {policy['reason']}")
+        print(f"  대안: 안전 fallback({policy['fallback']})으로 계획/보고만 생성합니다.")
+    elif effective_mode == "plan_only" and hint["selected_path"] != "plan_only":
+        print(f"계획 전환: {policy['reason']}")
+
     code = 0
-    cmd = hint["command"]
+    cmd = hint["command"] if effective_mode == "execute" else "plan"
     if cmd == "schedule_add":
         ns = argparse.Namespace(schedule_cmd="add", text=[task], due="")
         code = cmd_schedule(ns)
@@ -339,7 +379,8 @@ def cmd_auto(args):
     # (cmd_work 말미, cmd_agent 말미). auto 레벨에서 또 적재하면 같은 작업이
     # 이중으로 쌓이므로, auto 가 직접 마무리하는 command_native/memory_wiki/
     # plan_only 경로에서만 자체 적재한다.
-    if hint["selected_path"] in {"artifact", "tool_agent"}:
+    # (정책이 plan으로 우회시킨 경우 위임 명령이 실행되지 않았으므로 auto가 적재)
+    if effective_mode == "execute" and hint["selected_path"] in {"artifact", "tool_agent"}:
         trace["memory_hooks"] = [
             f"delegated: '{cmd}' command fires its own completion hook"]
     else:
@@ -353,7 +394,15 @@ def cmd_auto(args):
         state = "fired" if hook.get("logged") else "skipped (dedupe/off)"
         trace["memory_hooks"] = [f"_complete_activity {state}: {hook.get('kind')}"]
     trace["exit_code"] = exit_code
-    trace["outcome"] = "completed" if exit_code == 0 else "failed"
+    if exit_code != 0:
+        trace["outcome"] = "failed"
+    elif effective_mode == "ask_user":
+        # WS-8 평가 입력: 무엇을 왜 물었는지 남겨 사용자의 다음 답을 학습에 쓴다.
+        trace["outcome"] = "needs_confirmation"
+    elif effective_mode == "blocked":
+        trace["outcome"] = "blocked"
+    else:
+        trace["outcome"] = "completed"
     _write_auto_trace(trace)
     print(f"trace: {_auto_trace_path()}")
     return exit_code

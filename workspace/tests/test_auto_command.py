@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""WS-1 auto command routing tests.
+"""WS-1 auto command routing + WS-7 policy layer tests.
 
 Run: py -3.11 tests\test_auto_command.py
 """
@@ -59,6 +59,9 @@ def main() -> None:
           trace["selected_path"] == "command_native" and trace["command"] == "schedule_add",
           str(trace))
     check("auto schedule keeps safety note", trace["safety"]["approval_bypass"] is False)
+    check("auto schedule policy stays execute (no ask spam on reversible native path)",
+          trace["policy"]["mode"] == "execute"
+          and trace["policy"]["requires_confirmation"] is False, str(trace.get("policy")))
 
     cp, trace_path = run_auto("이 내용으로 문서 작성해줘")
     trace = read_trace(trace_path)
@@ -67,6 +70,25 @@ def main() -> None:
     check("auto routes document to work artifact path",
           trace["selected_path"] == "artifact" and trace["command"] == "work"
           and "document" in trace["artifact_kinds"], str(trace))
+    check("auto artifact policy stays execute (reversible output)",
+          trace["policy"]["mode"] == "execute", str(trace.get("policy")))
+
+    cp, trace_path = run_auto("업무 폴더의 임시 파일 전부 삭제해줘")
+    out = cp.stdout.decode("utf-8", errors="replace")
+    err = cp.stderr.decode("utf-8", errors="replace")
+    trace = read_trace(trace_path)
+    check("auto delete request exits 0 without executing", cp.returncode == 0, out + err)
+    check("auto delete request asks the user (policy ask_user)",
+          trace["policy"]["mode"] == "ask_user"
+          and trace["policy"]["requires_confirmation"] is True, str(trace.get("policy")))
+    check("auto delete request falls back to plan, not silent execution",
+          trace.get("effective_mode") == "ask_user"
+          and trace.get("outcome") == "needs_confirmation", str(trace))
+    check("auto delete trace records the question for WS-8 evaluation",
+          bool(trace["policy"].get("question")), str(trace.get("policy")))
+    check("auto delete keeps approval note (no safety bypass)",
+          trace["safety"]["approval_bypass"] is False)
+    check("auto delete prints confirmation guidance", "확인 필요" in out, out)
 
     cp, trace_path = run_auto("메모 파일 읽어줘", "--dry-run")
     trace = read_trace(trace_path)

@@ -264,6 +264,9 @@ ADAPTER_ITEMS = [
 
 
 CONTEXT_ITEMS = [
+    _item("context", "auto_policy", ["workspace/agent_ops/auto_policy.py"],
+          "auto", "policy", "WS-7 execution policy engine: reversible work runs quietly, risky work asks/blocks.",
+          "safety input only demotes (one-way); never bypasses approval/guard"),
     *_items("context", ["input_ingest", "api_reference", "knowledge_base", "design_guidance",
                         "domain_context", "skill_router", "project_profile"],
             "workspace/agent_ops", "auto", "context_injection",
