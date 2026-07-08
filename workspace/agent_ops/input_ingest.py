@@ -52,8 +52,15 @@ def _mask_secrets(text: str) -> str:
         for line in text.splitlines())
 
 
+def _mask_cell(cell: str) -> str:
+    return "[masked: secret-like cell]" if _SECRET_LINE.search(cell) else cell
+
+
 def _csv_facts(text: str, delimiter: str) -> Tuple[List[str], List[str]]:
-    rows = [r for r in csv.reader(io.StringIO(text), delimiter=delimiter)
+    # 원문(text)을 먼저 파싱하고 셀 단위로 마스킹한다 — 행 전체를 미리 한 줄로
+    # 치환하면 'password:' 포함 행이 1셀로 뭉개져 행/열 구조가 왜곡된다.
+    rows = [[_mask_cell(cell) for cell in r]
+            for r in csv.reader(io.StringIO(text), delimiter=delimiter)
             if any(cell.strip() for cell in r)]
     if not rows:
         return (["빈 CSV"], [])
@@ -72,41 +79,45 @@ def _csv_facts(text: str, delimiter: str) -> Tuple[List[str], List[str]]:
 
 def _xlsx_facts(path: Path, max_rows: int = 2000) -> Tuple[List[str], List[str], str]:
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)  # type: ignore[union-attr]
-    ws = wb.worksheets[0]
-    sheet_names = wb.sheetnames
-    rows = []
-    for idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
-        if idx > max_rows:
-            break
-        # 다른 입력 경로와 동일하게 비밀번호/토큰 등 secret-like 셀은 마스킹한다.
-        values = ["" if cell is None else _mask_secrets(str(cell).strip()) for cell in row]
-        if any(values):
-            rows.append(values)
-    if not rows:
-        facts = [f"XLSX 첫 시트 '{ws.title}' 빈 시트"]
+    try:
+        ws = wb.worksheets[0]
+        sheet_names = wb.sheetnames
+        rows = []
+        for idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
+            if idx > max_rows:
+                break
+            # 다른 입력 경로와 동일하게 비밀번호/토큰 등 secret-like 셀은 마스킹한다.
+            values = ["" if cell is None else _mask_secrets(str(cell).strip()) for cell in row]
+            if any(values):
+                rows.append(values)
+        if not rows:
+            facts = [f"XLSX 첫 시트 '{ws.title}' 빈 시트"]
+            if len(sheet_names) > 1:
+                facts.append(f"시트 {len(sheet_names)}개: {', '.join(sheet_names[:8])}")
+            return facts, [], ""
+        header, data = rows[0], rows[1:]
+        facts = [f"XLSX 첫 시트 '{ws.title}' {len(data)}행 × {len(header)}열 "
+                 f"(컬럼: {', '.join(h for h in header if h)})"]
         if len(sheet_names) > 1:
             facts.append(f"시트 {len(sheet_names)}개: {', '.join(sheet_names[:8])}")
-        return facts, [], ""
-    header, data = rows[0], rows[1:]
-    facts = [f"XLSX 첫 시트 '{ws.title}' {len(data)}행 × {len(header)}열 "
-             f"(컬럼: {', '.join(h for h in header if h)})"]
-    if len(sheet_names) > 1:
-        facts.append(f"시트 {len(sheet_names)}개: {', '.join(sheet_names[:8])}")
-    if ws.max_row and ws.max_row > max_rows:
-        facts.append(f"대용량 XLSX: 앞 {max_rows:,}행만 분석 (전체 {ws.max_row:,}행)")
-    notable = []
-    for row in data:
-        joined = " ".join(row).lower()
-        if any(marker in joined for marker in _ABNORMAL_MARKERS):
-            notable.append(" / ".join(c for c in row if c)[:120])
-    if notable:
-        facts.append(f"이상/주의 행 {len(notable)}건 감지")
-    preview = "\n".join(" | ".join(c for c in row if c) for row in rows[:8])[:_PREVIEW_CHARS]
-    try:
-        wb.close()
-    except Exception:
-        pass
-    return facts, notable, preview
+        if ws.max_row and ws.max_row > max_rows:
+            facts.append(f"대용량 XLSX: 앞 {max_rows:,}행만 분석 (전체 {ws.max_row:,}행)")
+        notable = []
+        for row in data:
+            joined = " ".join(row).lower()
+            if any(marker in joined for marker in _ABNORMAL_MARKERS):
+                notable.append(" / ".join(c for c in row if c)[:120])
+        if notable:
+            facts.append(f"이상/주의 행 {len(notable)}건 감지")
+        preview = "\n".join(" | ".join(c for c in row if c) for row in rows[:8])[:_PREVIEW_CHARS]
+        return facts, notable, preview
+    finally:
+        # 빈 시트 early return·중간 예외 포함 모든 경로에서 핸들 반납 —
+        # read_only openpyxl은 파일을 잡고 있어 Windows에서 원본이 잠긴다.
+        try:
+            wb.close()
+        except Exception:
+            pass
 
 
 def _log_facts(text: str) -> Tuple[List[str], List[str]]:
@@ -263,11 +274,14 @@ def ingest_inputs(paths: Sequence[Any], max_files: int = MAX_FILES) -> Dict[str,
         if "\x00" in text[:2000]:
             unsupported.append({"name": path.name, "reason": "binary content (텍스트 아님)"})
             continue
+        # CSV/TSV는 파싱 전에 마스킹하면 행/열 구조가 깨지므로 원문을 넘기고
+        # _csv_facts 내부에서 셀 단위 마스킹한다. preview용 text는 아래에서 마스킹.
+        raw_text = text
         text = _mask_secrets(text)
         mails: Optional[List[Dict[str, str]]] = None
         try:
             if suffix in (".csv", ".tsv"):
-                facts, notable = _csv_facts(text, "\t" if suffix == ".tsv" else ",")
+                facts, notable = _csv_facts(raw_text, "\t" if suffix == ".tsv" else ",")
                 kind = "csv"
             elif suffix == ".log":
                 facts, notable = _log_facts(text)

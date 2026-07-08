@@ -482,6 +482,7 @@ class WindowsTrayIcon:
         from ctypes import wintypes
         menu = user32.CreatePopupMenu()
         user32.AppendMenuW(menu, MF_STRING, CMD_SHOW, "다시 표시")
+        user32.AppendMenuW(menu, MF_STRING, CMD_HIDE, "숨기기")
         user32.AppendMenuW(menu, MF_STRING, CMD_DETAILS, "상세 보기")
         user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, MF_STRING, CMD_EXIT, "완전종료")

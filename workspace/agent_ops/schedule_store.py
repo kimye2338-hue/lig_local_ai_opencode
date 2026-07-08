@@ -102,13 +102,21 @@ def _parse_time(text: str) -> tuple[Optional[tuple[int, int]], str]:
     if "오후" in cleaned:
         ampm = "pm"
         cleaned = cleaned.replace("오후", " ")
+    minute = 0
     m = re.search(r"(\d{1,2})\s*:\s*(\d{2})", cleaned)
-    if not m:
-        m = re.search(r"(\d{1,2})\s*시", cleaned)
+    if m:
+        minute = int(m.group(2))
+    else:
+        # 'N시 M분' / 'N시 반'(=30분)도 인식 — 분 정보를 버리지 않는다.
+        m = re.search(r"(\d{1,2})\s*시\s*(?:(\d{1,2})\s*분|(반))?", cleaned)
+        if m:
+            if m.group(2):
+                minute = int(m.group(2))
+            elif m.group(3):
+                minute = 30
     if not m:
         return None, cleaned
     hour = int(m.group(1))
-    minute = int(m.group(2)) if m.lastindex and m.lastindex >= 2 and m.group(2) else 0
     if hour > 23 or minute > 59:
         return None, cleaned
     if ampm == "pm" and hour < 12:
@@ -272,7 +280,8 @@ def mark_done(id: int) -> Dict[str, Any]:
     with file_lock("schedule"):
         data = _load()
         for item in data["items"]:
-            if item.get("id") == id:
+            # 수동편집/외부도구가 문자열 id를 써도 매칭되게 문자열로 정규화 비교.
+            if str(item.get("id")) == str(id):
                 item["status"] = "done"
                 _save(data)
                 return {"ok": True, "item": item}
@@ -283,7 +292,7 @@ def remove(id: int) -> Dict[str, Any]:
     with file_lock("schedule"):
         data = _load()
         before = len(data["items"])
-        data["items"] = [item for item in data["items"] if item.get("id") != id]
+        data["items"] = [item for item in data["items"] if str(item.get("id")) != str(id)]
         if len(data["items"]) == before:
             return {"ok": False, "error": "schedule item not found"}
         _save(data)

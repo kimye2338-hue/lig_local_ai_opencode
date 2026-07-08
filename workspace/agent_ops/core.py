@@ -203,12 +203,23 @@ def file_lock(name: str, timeout: float = 10.0, stale_after_seconds: int = 900):
         except FileExistsError:
             if time.time() - start > timeout:
                 if _lock_is_stale(lock_path, stale_after_seconds):
+                    # rename-to-claim: 두 대기자가 동시에 stale 판정해도 rename에
+                    # 성공한 한 프로세스만 제거 권한을 얻는다. 곧바로 unlink하면
+                    # 상대가 그 사이 새로 만든 락을 지워 이중 진입이 생긴다.
+                    claim = lock_path.with_name(f"{lock_path.name}.claim.{os.getpid()}")
                     try:
-                        lock_path.unlink()
+                        os.replace(str(lock_path), str(claim))
+                    except OSError:
+                        # 다른 대기자가 먼저 claim했거나(락이 새것) 보유자가 아직
+                        # 파일을 열고 있음 — 기존 unlink 실패 경로와 동일하게 timeout.
+                        pass
+                    else:
+                        try:
+                            claim.unlink()
+                        except Exception:
+                            pass
                         start = time.time()
                         continue
-                    except Exception:
-                        pass
                 raise TimeoutError(f"lock timeout: {lock_path}")
             time.sleep(0.1)
     try:
@@ -291,11 +302,28 @@ def validate_written_file(path: Path) -> Dict[str, Any]:
             info["py_compile"] = r
     name_lower = path.name.lower()
     if path.suffix.lower() in {".bat", ".cmd"} or name_lower.endswith(".bat.txt") or name_lower.endswith(".cmd.txt"):
+        # 프로젝트 관행(chcp 65001)상 한글 주석 포함 .bat를 허용한다.
+        # 대신 'BOM 없는 UTF-8 + CRLF'만 통과 — BOM/UTF-16은 cmd 파서를 깨고,
+        # LF는 chcp 65001 + 한글 환경에서 오작동한다 (CLAUDE.md 불변 규칙).
         try:
-            path.read_text(encoding="ascii")
-        except Exception:
+            raw = path.read_bytes()
+        except Exception as exc:
             info["ok"] = False
-            info["errors"].append("bat_cmd_must_be_ascii")
+            info["errors"].append("bat_cmd_read_failed:" + repr(exc))
+        else:
+            if raw.startswith(b"\xef\xbb\xbf") or raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+                info["ok"] = False
+                info["errors"].append("bat_cmd_must_not_have_bom")
+            else:
+                try:
+                    raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    info["ok"] = False
+                    info["errors"].append("bat_cmd_must_be_utf8")
+                # CRLF 쌍을 제거한 뒤 남는 \n은 bare LF다.
+                if b"\n" in raw.replace(b"\r\n", b""):
+                    info["ok"] = False
+                    info["errors"].append("bat_cmd_must_use_crlf")
     return info
 
 def is_stop_requested() -> bool:
