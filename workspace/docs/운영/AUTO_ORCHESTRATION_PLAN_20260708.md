@@ -747,3 +747,27 @@
     opencode.json env 단일소스(1단계 JSON 유효성 고정), bat env 따옴표 정리. **한 커밋으로 묶고, 모델 기본값·env 보간 2단계는
     사내망 검증 필요**. 첫 파일: `workspace/RUN_OPENCODE_LIG.bat`, `workspace/.opencode/commands/*.md`,
     `workspace/.opencode/plugins/compaction-handoff.ts`, `workspace/tests/test_launch_bats.py`, `test_opencode_command_coverage.py`.
+- WS-5 부분완료 + 사내망-gated 기록(2026-07-08, 커밋 대기):
+  - **판단(안전 우선)**: WS-5의 핵심(48개 커맨드 .md의 `python agent_ops/…` 상대경로 정규화 + ocd cwd 복원)은
+    **패치 opencode.exe 의 bash 도구 셸이 cmd.exe 인지 POSIX sh 인지 미확인**이라 블라인드로 하면 안 된다.
+    셸이 POSIX면 `%AGENTOPS_HOME%`가 리터럴 쓰레기가 되고(`$AGENTOPS_HOME`이 맞음), 반대면 그 역. 잘못 치환하면
+    48개 커맨드가 사내망에서 전부 깨지고 원격 복구가 불가하다. cwd 복원과 커맨드 치환은 결합돼 있어(한쪽만 하면 깨짐)
+    한 커밋으로 묶어야 하므로 **셸 확인 전에는 착수 금지**. 현재 런처는 사내망에서 정상 작동 중이므로 건드리지 않는다.
+  - **오프라인에서 완료한 것(무위험)**: `workspace/tests/test_opencode_config.py` 신규 — opencode.json 1단계 무결성 고정
+    (JSON 유효성, 기본 model이 정의된 provider/model로 resolve, 모든 provider의 baseURL/apiKey/models, baseURL이 사내
+    게이트웨이 형식, **기본 라우트 think_off = tool-calling 안전**). 27 checks PASS. 이로써 모델 A/B로 기본값을 바꾸더라도
+    think_off 불변식이 회귀로 지켜진다. (opencode.json 자체는 커밋 8a9a933에서 tool-confirmed 모델 additive 노출 완료.)
+  - **사내망 실행 절차(다음 작업자/사용자)**:
+    1. 셸 확인: TUI 에서 `echo %AGENTOPS_HOME%`(cmd면 경로 출력, POSIX면 리터럴) 또는 `echo $AGENTOPS_HOME` 로 판별.
+    2. 셸에 맞는 절대경로 토큰 결정(cmd=`%AGENTOPS_HOME%\agent_ops\agentops.py`, POSIX=`"$AGENTOPS_HOME/agent_ops/agentops.py"`).
+    3. `.opencode/commands/*.md`(48파일, 92참조)를 그 토큰으로 일괄 치환 + `compaction-handoff.ts:10`을 `process.env.AGENTOPS_HOME`
+       우선으로 + `RUN_OPENCODE_LIG.bat`에 opencode 실행 직전 `if defined AGENTOPS_PROJECT_DIR cd /d "%AGENTOPS_OUTPUT_DIR%"` 추가
+       — **반드시 한 커밋**. 그 후 TUI 에서 커맨드 3개+ 실제 실행 + `ocd`로 프로젝트 폴더 열어 파일트리 확인.
+    4. `RUN_OPENCODE_LIG.bat:73-75` env 로더 값 양끝 따옴표 정리(#9-4)는 위와 같은 커밋에서, 사내망 게이트웨이 연결 재확인 후.
+    5. opencode.json env 보간(2단계): OpenCode 빌드가 `{env:…}` 보간을 지원하는지 확인 후 적용, 미지원이면 런처가
+       `opencode.generated.json` 생성 방식. 모델 기본값 단일화(python `LIG_DEFAULT_PROVIDER` ↔ TUI)는 **사용자 A/B 확정 후**.
+  - 철학 종료 체크: (안전) 검증 불가한 변경으로 작동 중인 런처를 깨지 않았다 — "오프라인=예측가능성" 원칙. (남긴 trace)
+    config 불변식을 테스트로 고정, 사내망 절차를 문서로 남겨 다음 작업자가 셸 확인부터 이어받는다. (미검증) 커맨드 경로/ocd/
+    env 보간/모델 기본값 = 전부 사내망 필요.
+  - 다음 작업: WS-6 자동 유지보수/효율화(오프라인 가능). 첫 파일: `workspace/agent_ops/auto_maintain.py`,
+    `workspace/agent_ops/activity_timeline.py`, `workspace/tests/test_adapter_tools_maintain.py`.
