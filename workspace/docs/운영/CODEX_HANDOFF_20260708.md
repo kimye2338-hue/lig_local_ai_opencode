@@ -9,8 +9,9 @@
 
 Fable 상세검토 49건(높음8)을 "땜질 말고 한 번에 정합적으로" 고치는 중. 전체 10개 우선순위 중
 **8개 워크스트림이 커밋 완료(green)**. **WS-D(TUI 기억주입 플러그인)** 는 Codex 로컬 이어작업으로
-구현·오프라인 검증 완료했다. 남은 건 **WS-INT(경로·통합·config 단일소스)** 와
-**모델 A/B(사용자 사내망 확인)** 다.
+구현·오프라인 검증 완료했다. 이후 사용자가 "기능을 고르지 않아도 알아서 선택·실행·축적·개선"을 요구해
+`docs/운영/AUTO_ORCHESTRATION_PLAN_20260708.md`에 전체 자동 운영 루프 개선 계획을 작성했다.
+남은 큰 축은 **AUTO 루프 구현**, **WS-INT(경로·통합·config 단일소스)**, **모델 A/B(사용자 사내망 확인)** 다.
 
 - 리포: `C:\Users\김예찬\OneDrive\바탕 화면\LIG_OPENCODE` (Git, 브랜치 `codex/offline-release-hardening-20260708`)
 - 베이스라인 태그: `baseline-20260708-review` (commit b7a94b6)
@@ -231,6 +232,7 @@ python agent_ops\agentops.py doctor
 ## 8. 시작 체크리스트 (Codex 첫 세션)
 1. `git log --oneline -10` 로 위 8커밋 확인, `git status` clean 확인.
 2. 6절 회귀 게이트 실행해 baseline green 재확인.
-3. WS-D는 완료됨. 다음은 WS-INT를 한 커밋 세트로(9-1~9-4+split-brain) 작성 → 오프라인 가능한 것만 검증 → "사내망 실검증 필요" 표시 → 커밋.
+3. `docs/운영/AUTO_ORCHESTRATION_PLAN_20260708.md`를 읽고, WS-1 `auto/do` 단일 진입점부터 진행한다.
+4. 이후 WS-2 라우팅 alignment → WS-3 공통 학습 후크 → WS-4 Obsidian manual recall → WS-INT 순서로 간다.
 5. 여력 되면 5절 선택/저순위. **#8-4는 데이터 위험 크니 tmp 격리 테스트 충분히.**
 6. 사용자에게: 모델 A/B 절차(4절)와 사내망 검증 필요 항목 목록을 정리해 전달.
