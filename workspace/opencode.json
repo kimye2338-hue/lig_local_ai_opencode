@@ -5,7 +5,7 @@
   "server": {
     "mdns": false
   },
-  "model": "lig-gateway/EXAONE-4.5-33B",
+  "model": "lig-gateway-qwen/Qwen3.6-27B",
   "provider": {
     "lig-gateway": {
       "npm": "@ai-sdk/openai-compatible",
