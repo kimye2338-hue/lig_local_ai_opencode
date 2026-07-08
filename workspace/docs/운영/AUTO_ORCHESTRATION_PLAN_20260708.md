@@ -689,3 +689,7 @@
   기억 품질 관리, 사용자 선택 최소화 기준을 추가했다. 최종 리뷰는 WS-10으로 이동했다.
 - 다음 첫 작업: 바로 `cmd_auto` 구현으로 들어가지 말고 `workspace/agent_ops/intelligence_map.py`와
   `workspace/tests/test_intelligence_map.py`를 먼저 작성해 전체 지능 목록을 고정한다.
+- WS-0 완료 기록: `workspace/agent_ops/intelligence_map.py`, `workspace/tests/test_intelligence_map.py`,
+  `workspace/docs/운영/INTELLIGENCE_COVERAGE_REPORT.md`를 추가했다. 140개 지능 항목을 분류했고
+  `test_intelligence_map`, `test_tool_dispatch`, `test_capability_bench`, `test_opencode_command_coverage`가 통과했다.
+  다음 작업은 WS-1 `/auto` 단일 진입점이다.
