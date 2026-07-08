@@ -38,19 +38,24 @@ function write(status: string, message: string, force = false): void {
   }
 }
 
-export const HamsterStatus = async (_ctx: any) => ({
-  "tool.execute.before": async () => {
-    write("working", "도구 실행 중...")
-  },
-  "tool.execute.after": async () => {
-    write("working", "작업 중...", true)
-  },
-  event: async ({ event }: any) => {
-    const t: string = (event && event.type) || ""
-    if (t === "session.idle" || t === "session.error") {
-      write("idle", "대기 중입니다. 작업이 시작되면 알려드릴게요.", true)
-    } else if (t.indexOf("message") >= 0 || t.indexOf("part") >= 0) {
-      write("working", "모델이 응답 중...")
-    }
-  },
-})
+export const HamsterStatus = async (_ctx: any) => {
+  // OpenCode 시작 시 지난 세션의 완료/작업 상태가 남아 "완료"로 뜨지 않도록 대기중으로 초기화.
+  // (햄스터는 상태 파일 중 가장 최근 것을 표시하므로, 시작 시 최신 idle 을 써서 이전 상태를 덮는다.)
+  write("idle", "대기 중입니다. 작업이 시작되면 알려드릴게요.", true)
+  return {
+    "tool.execute.before": async () => {
+      write("working", "도구 실행 중...")
+    },
+    "tool.execute.after": async () => {
+      write("working", "작업 중...", true)
+    },
+    event: async ({ event }: any) => {
+      const t: string = (event && event.type) || ""
+      if (t === "session.idle" || t === "session.error") {
+        write("idle", "대기 중입니다. 작업이 시작되면 알려드릴게요.", true)
+      } else if (t.indexOf("message") >= 0 || t.indexOf("part") >= 0) {
+        write("working", "모델이 응답 중...")
+      }
+    },
+  }
+}
