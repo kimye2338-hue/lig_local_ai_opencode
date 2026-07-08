@@ -785,3 +785,23 @@
   - 다음 작업: WS-7 정책 엔진(`auto_policy.py`)과 사용자 선택 최소화 — cmd_auto가 capability 결과를 바로 실행하지 않고
     `choose_execution_policy`(execute/plan_only/ask_user/blocked)를 거치게. 첫 파일: `workspace/agent_ops/auto_policy.py`(신규),
     `workspace/agent_ops/agentops.py`(cmd_auto), `workspace/tests/test_auto_policy.py`. **safety는 우회 못 하고 더 보수적으로만.**
+- WS-7 완료 기록(2026-07-08, 커밋 a840562):
+  - 변경 요약: 신규 `auto_policy.choose_execution_policy(request, capabilities, context, safety, hint)` →
+    `{mode(execute/plan_only/ask_user/blocked), path, priority, requires_confirmation, reason, fallback, question}`.
+    되돌릴 수 있는 산출물/조회/recall/plan은 execute, 삭제·앱저장·외부전송·모델기본값 변경 신호만 ask_user, pending 도구는
+    plan_only, deny/불가역(초기화·format·rm -rf)은 blocked. **safety는 severity ladder에서 `max(base, floor)` 단방향 강등만** —
+    execute를 낮출 순 있어도 ask_user를 execute로 올릴 수 없다(승인/가드 우회 불가, 구조적). ask_user 남발 방지(append/조회는 execute).
+    cmd_auto가 `classify_action(task)`+hint를 정책에 넣어 trace에 policy/effective_mode/question 기록 후 mode로 실행 분기.
+    plan_only/ask_user/blocked는 cmd_plan+안내(exit 0), `--yes`/`--execute`는 ask_user만 승격(blocked 불가). **WS-3 후크 보존**:
+    위임 적재는 effective_mode==execute일 때만(정책이 plan으로 돌리면 auto가 자체 적재, 이중/누락 없음). intelligence_map에
+    `context:auto_policy` 등록(165 checks).
+  - 철학 종료 체크: (사용자 선택 최소화) 되돌릴 수 있으면 묻지 않고 실행 — ask_user는 위험/불가역/의미분기만. (안전) safety
+    단방향 강등으로 자동화가 안전을 우회 불가, blocked는 안전 plan/report로 fallback. (남긴 trace) policy 전체+질문을 trace에
+    기록해 WS-8 평가 입력이 된다. (모델) 기본값 미변경.
+  - 검증: `test_auto_policy`(23), `test_auto_command`(27), `test_intelligence_map`(165), `test_capability_bench`(222),
+    `test_auto_learning_hooks`(18), `pytest test_work_command`(4) 통과.
+  - 미검증: 실 대화에서 ask_user 빈도·프롬프트 체감(사내망), `--yes` 승격 end-to-end(코드경로만 확인).
+  - 다음 작업: WS-8 자기평가/성장 루프(`evaluation_loop.py`) — score_run(trace, outcome)로 route_confidence/tool_success/
+    artifact_quality/user_friction/learning_value/safety_margin 채점, diagnostics/evaluations/*.jsonl append. **평가는 정책의
+    보조 신호일 뿐 안전을 못 덮고, 단일 성공을 장기 선호로 과잉 승격하지 않는다.** 첫 파일: `workspace/agent_ops/evaluation_loop.py`(신규),
+    `workspace/tests/test_evaluation_loop.py`.
