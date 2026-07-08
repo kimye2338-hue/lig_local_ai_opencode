@@ -58,7 +58,87 @@
 
 ---
 
-## 3. 워크스트림
+## 3. "모든 지능을 잇는다"의 정확한 정의
+
+여기서 말하는 "모든 지능"은 단순히 기능 목록을 많이 호출한다는 뜻이 아니다. 사용자가 자연어로 요청했을 때
+아래 지능층들이 하나의 경로 안에서 서로 이어지고, 어떤 기능도 방치되지 않으며, 실행 결과가 다음 실행의
+맥락으로 돌아오는 상태를 뜻한다.
+
+완료 정의:
+
+- 모든 command/capability/tool/adapter/plugin/knowledge/memory/wiki/maintain 기능은 `auto`, 고급 직접 명령,
+  문서화된 보류, 폐기 후보 중 하나로 분류되어야 한다.
+- 자동 경로에 포함되는 기능은 route trace에 "왜 선택됐는지", "어떤 모델/컨텍스트/도구/검증/기억 후크를 썼는지"를 남긴다.
+- 고급 직접 명령으로만 남기는 기능은 이유가 있어야 한다. 예: 위험 실행, 대용량 배치, 수동 승인 필요, 사내망 실기기 필요.
+- 실행 결과는 성공/실패/보류 모두 공통 후크로 들어가고, activity/error_pattern/preference/wiki/book 중 적절한 곳으로 축적된다.
+- 안전 장치는 자동화 대상이 아니다. approval, command_guard, deny rule, USERDATA 보호는 어느 경로에서도 유지된다.
+- 모델/provider 설정은 단일 소유자를 가져야 하며, 자동 모델 변경은 사용자 확인 전에는 하지 않는다.
+
+---
+
+## 4. 지능층 연결 지도
+
+아래 표가 이번 계획의 기준선이다. 구현은 이 표를 코드/테스트로 고정하는 것부터 시작한다.
+
+| 지능층 | 현재 대표 파일/기능 | 현재 연결 상태 | 계획상 연결 방식 |
+| --- | --- | --- | --- |
+| 사용자 의도/대화 | `.opencode/agents/agent.md`, `.opencode/commands/*.md`, `RUN_OPENCODE_LIG.bat`, `ocd.py` | 레시피는 있으나 명령 선택을 사용자가 해야 함 | WS-1에서 `/auto`를 기본 입구로 만들고 기존 명령은 고급 직접 실행으로 유지 |
+| 의도 분류/라우팅 | `capabilities.py`, `tool_dispatch.py`, `skill_router.py`, agent.md 레시피 | 판단 근거가 여러 곳에 분산 | WS-0에서 지능 지도 생성, WS-2에서 capability 기준 메타데이터로 정렬 |
+| 모델/provider | `lig_providers.py`, `lig_runtime.py`, `opencode.json`, `config/lig-api.env.example` | TUI/Python 기본 모델과 설정 소스가 갈라짐 | WS-5에서 경로/설정 소유권 정리. 모델 기본값 변경은 별도 사용자 확인 |
+| 도구 실행 | `tool_dispatch.REGISTRY`, `adapters/*`, approval/command_guard | agent 루프에서는 잘 쓰이나 work/schedule/wiki와 통합 약함 | WS-1/2에서 route 결과가 도구 노출을 결정하게 하고 안전 가드는 유지 |
+| 컨텍스트 주입 | `memory_manager.py`, `knowledge_base.py`, `api_reference.py`, `design_guidance.py`, `domain_context.py`, `skill_router.py` | 일부 경로에 자동 주입, 근거 trace는 제한적 | WS-2/3에서 선택된 컨텍스트를 route trace와 work report에 기록 |
+| 산출물 생성 | `artifact_generators.py`, `artifact_quality.py`, `office_writer.py`, `doc_templates.py`, `html_report.py` | work 중심으로 강함, agent/tool 경로와 자연 연결 부족 | WS-1에서 산출물 요청은 자동으로 artifact 경로를 타고, 필요 시 agent 도구 후속 실행 |
+| 데스크톱/앱 자동화 | `browser_cdp.py`, `office_adapter.py`, `hwp_adapter.py`, `solidworks_adapter.py`, `autocad_adapter.py`, `matlab_adapter.py`, `fluent_adapter.py`, `ocr_screen.py`, `desktop_ui.py` | tool agent에서 사용 가능, 사용자 명령 선택 의존 | WS-0에서 adapter별 상태 분류, WS-1/2에서 요청 유형별 자동 노출 |
+| 기억/학습 | `memory_manager.py`, `wiki_manager.py`, `wiki_vault.py`, `knowledge_book.py`, `memory-inject.ts`, `compaction-handoff.ts` | work/activity와 TUI 주입은 있으나 일부 중복/누락 | WS-3/4/6에서 공통 학습 후크, manual wiki recall, 중복 억제 |
+| 검증/자가치유 | `doctor`, verifier, `auto_maintain.py`, `activity_timeline.py`, `status_writer.py`, `watch`, `secretary` | 기능은 있으나 전체 실행 종료 후 표준화 부족 | WS-3에서 post-run 검증 후크, WS-6에서 반복 실패 승격과 유지보수 계측 |
+| 반복/재사용 | routine, schedule, queue/orchestrator, briefing/weekly | 개별 명령으로 존재 | WS-1에서 command-native routing 대상에 포함하고 실행 후 기억 후크 적용 |
+| 안전/감사 | `command_guard`, approval 정책, audit, RUNBOOK | 유지 중 | 모든 WS의 불변 조건. 자동화가 안전 차단을 우회하지 않도록 테스트 |
+| 패키징/오프라인 | installer, wheelhouse, `tools/`, launch bats, `SHA256SUMS.txt` | 배포 구조 존재 | 이번 자동지능 연결과 직접 충돌 없게 유지. 새 런처/명령 변경은 CRLF/오프라인 테스트 |
+
+---
+
+## 5. 워크스트림
+
+### WS-0. 지능 지도와 고아 기능 방지 테스트
+
+**목표:** "모든 지능을 이었다"는 말을 감으로 하지 않고, 프로그램 안의 지능 요소를 먼저 목록화한 뒤
+연결 상태를 테스트로 고정한다.
+
+**파일**
+- 생성: `workspace/agent_ops/intelligence_map.py`
+- 생성: `workspace/tests/test_intelligence_map.py`
+- 생성: `workspace/docs/운영/INTELLIGENCE_COVERAGE_REPORT.md`
+- 수정: `workspace/docs/운영/AUTO_ORCHESTRATION_PLAN_20260708.md`
+
+**작업**
+1. `intelligence_map.py`에 command/capability/tool/adapter/plugin/knowledge/memory/wiki/maintain 항목을 선언한다.
+2. 각 항목은 다음 필드를 가진다.
+   - `id`: 안정적인 식별자
+   - `kind`: `command`, `capability`, `tool`, `adapter`, `context`, `memory`, `maintenance`, `safety`, `packaging`
+   - `owner_files`: 대표 파일 목록
+   - `status`: `auto`, `advanced`, `pending`, `deprecated`
+   - `route`: 자동 경로에 포함되면 capability/command/tool group 이름
+   - `reason`: advanced/pending/deprecated 사유
+   - `safety`: approval/guard/readonly/userdata 보호 필요 여부
+3. `test_intelligence_map.py`는 다음을 실패 조건으로 둔다.
+   - `.opencode/commands/*.md` 중 지도에 없는 명령
+   - `tool_dispatch.REGISTRY` 중 지도에 없는 tool
+   - `agent_ops/adapters/*adapter*.py` 또는 주요 adapter 파일 중 지도에 없는 adapter
+   - `capabilities.py`의 capability id 중 지도에 없는 항목
+   - `status`가 비어 있거나 `pending`인데 사유가 없는 항목
+4. `INTELLIGENCE_COVERAGE_REPORT.md`는 자동/고급/보류/폐기 목록과 미연결 0개 여부를 사람이 읽기 좋게 남긴다.
+5. 이후 모든 WS는 새 기능을 추가하거나 상태를 바꾸면 이 지도를 함께 갱신한다.
+
+**검증**
+- `py -3.11 tests\test_intelligence_map.py`
+- `py -3.11 tests\test_tool_dispatch.py`
+- `py -3.11 tests\test_capability_bench.py`
+
+**서브에이전트 배정**
+- 구현: `worker`, `gpt-5.4`, 파일 소유 `intelligence_map.py`, `test_intelligence_map.py`
+- 검토: `codebase-explorer`, `gpt-5.4-mini`, 실제 파일 목록과 지도 누락 여부만 독립 확인
+
+---
 
 ### WS-1. 자동 진입점 `auto` / `do`
 
@@ -246,7 +326,45 @@
 
 ---
 
-## 4. 실행 순서
+### WS-7. 전체 지능망 최종 리뷰
+
+**목표:** 구현이 끝난 뒤 "기능 몇 개를 붙였다"가 아니라 전체 지능망이 닫힌 루프인지 검토한다.
+
+**파일**
+- 수정: `workspace/docs/운영/INTELLIGENCE_COVERAGE_REPORT.md`
+- 수정: `workspace/docs/운영/AUTO_ORCHESTRATION_PLAN_20260708.md`
+- 필요 시 수정: 발견된 누락 테스트/문서
+
+**작업**
+1. `INTELLIGENCE_COVERAGE_REPORT.md`를 최신 코드 기준으로 갱신한다.
+2. `auto` route trace 샘플을 최소 6개 남긴다.
+   - 문서 작성
+   - 데이터/HTML 리포트
+   - 일정/비서 요청
+   - Obsidian/wiki/recall 요청
+   - 앱/브라우저/파일 조작 요청
+   - 공학/전공 KB 질문
+3. 각 샘플에서 모델/provider, context, tools, verification, memory/wiki hook이 기록되는지 확인한다.
+4. `gpt-5.5` reviewer 또는 main agent 최종 검토로 다음을 판정한다.
+   - 미연결 지능 0개
+   - 안전 장치 우회 0개
+   - USERDATA 위험 변경 0개
+   - GitHub push 없음
+   - 사내망 실기기 필요 항목은 별도 체크리스트로 분리
+
+**검증**
+- `py -3.11 tests\test_intelligence_map.py`
+- `py -3.11 tests\test_auto_command.py`
+- `py -3.11 tests\test_routing_alignment.py`
+- `py -3.11 tests\test_auto_learning_hooks.py`
+- `py -3.11 tests\test_wiki_manager.py`
+- `py -3.11 tests\test_launch_bats.py`
+- `python -m pytest tests\test_work_command.py -q`
+- `python agent_ops\agentops.py doctor`
+
+---
+
+## 6. 실행 순서
 
 1. Baseline 확인:
    - `git status --short --branch`
@@ -257,18 +375,19 @@
    - `python -m pytest tests\test_work_command.py -q`
    - `python agent_ops\agentops.py doctor`
 
-2. WS-1 `auto` 단일 진입점 구현.
-3. WS-2 라우팅 alignment 테스트와 capability 기반 도구/스킬 연결.
-4. WS-3 공통 완료/학습 후크와 compaction 중복 억제.
-5. WS-4 Obsidian manual recall 강화.
-6. WS-5 WS-INT 경로/설정 통합. 이 단계는 한 커밋으로 묶는다.
-7. WS-6 유지보수/효율화.
-8. 전체 회귀 + 최종 `gpt-5.5` 코드리뷰 에이전트.
-9. 작업 종료 기록 업데이트 + 로컬 커밋. GitHub push는 사용자 지시 전까지 금지.
+2. WS-0 지능 지도와 고아 기능 방지 테스트 구현. 이 단계가 실패하면 WS-1로 넘어가지 않는다.
+3. WS-1 `auto` 단일 진입점 구현.
+4. WS-2 라우팅 alignment 테스트와 capability 기반 도구/스킬 연결.
+5. WS-3 공통 완료/학습 후크와 compaction 중복 억제.
+6. WS-4 Obsidian manual recall 강화.
+7. WS-5 WS-INT 경로/설정 통합. 이 단계는 한 커밋으로 묶는다.
+8. WS-6 유지보수/효율화.
+9. WS-7 전체 지능망 최종 리뷰.
+10. 작업 종료 기록 업데이트 + 로컬 커밋. GitHub push는 사용자 지시 전까지 금지.
 
 ---
 
-## 5. 서브에이전트 운용 원칙
+## 7. 서브에이전트 운용 원칙
 
 - main agent가 설계, 파일 소유권, 통합, 최종 판단을 맡는다.
 - 구현 작업은 파일 소유권이 겹치지 않을 때만 병렬화한다.
@@ -285,13 +404,15 @@
 
 ---
 
-## 6. 완료 기준
+## 8. 완료 기준
 
 사용자 관점 완료 기준:
 
+- `test_intelligence_map.py` 기준 미분류/고아 지능 요소가 0개다.
 - 사용자는 `/auto <요청>` 또는 기본 에이전트 대화만으로 대부분의 업무를 시작할 수 있다.
 - 내부는 요청을 command-native, artifact, tool-agent, schedule, wiki/memory 경로 중 하나로 자동 선택한다.
-- 모든 실행은 route trace와 work report를 남긴다.
+- 모든 실행은 route trace와 work report를 남긴다. trace에는 선택된 capability, command/tool 경로, model/provider,
+  context source, verification, memory/wiki hook이 포함된다.
 - 성공은 activity/lesson으로, 실패 반복은 error_pattern으로 자동 축적된다.
 - Obsidian 자동 위키와 manual 노트가 다음 작업 recall에 반영된다.
 - 런처/ocd/TUI/Python이 같은 경로와 설정을 본다.
@@ -300,10 +421,13 @@
 
 ---
 
-## 7. 이번 계획 작업 기록
+## 9. 이번 계획 작업 기록
 
 - 완료한 변경 요약: 세 개의 탐색 서브에이전트로 라우팅/기억/런처 통합을 읽기 전용 감사했고, 그 결과를 통합해 이 계획 문서를 작성했다.
 - 방향성: 기존 기능을 새로 대체하지 않고 `auto` 조율 계층과 공통 후크로 엮는다. 기능 목록을 늘리는 대신 기본 흐름으로 만든다.
 - 검증: 이 단계는 계획 수립이라 코드 테스트는 실행하지 않았다. 탐색 에이전트들은 파일 수정과 GitHub push를 하지 않았다.
 - 미검증: 실제 TUI env 보간, ocd 실행, 모델 A/B, 사내 게이트웨이 tool calling은 사내망 필요.
-- 다음 첫 작업: `workspace/agent_ops/agentops.py`에서 `cmd_auto` 설계/테스트를 시작하고 `workspace/tests/test_auto_command.py`를 추가한다.
+- 보강 기록: 사용자 지적에 따라 기존 계획을 "자동 루프" 수준에서 "모든 지능층 연결" 수준으로 강화했다. WS-0 지능 지도,
+  고아 기능 방지 테스트, 지능층 연결 지도, WS-7 전체 지능망 최종 리뷰를 추가했다.
+- 다음 첫 작업: 바로 `cmd_auto` 구현으로 들어가지 말고 `workspace/agent_ops/intelligence_map.py`와
+  `workspace/tests/test_intelligence_map.py`를 먼저 작성해 전체 지능 목록을 고정한다.
