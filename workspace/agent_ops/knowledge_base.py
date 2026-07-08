@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 KB_DIR = Path(__file__).resolve().parent / "knowledge"
 # 공학 도메인 / 규격 / 소프트스킬. (기존 skills/=프로세스 스킬, domain/=한국 비즈니스
@@ -47,19 +47,45 @@ def _parse_frontmatter(text: str) -> Tuple[Dict[str, str], str]:
     return meta, body
 
 
+# 모듈 캐시: 경로 → (mtime, meta, terms). 라우팅은 frontmatter+파일명 용어만 쓰므로
+# 본문은 캐시하지 않는다 — 본문 read는 context_for_prompt에서 최종 선택된 노트만.
+# mtime이 바뀐 파일만 재읽기 → 매 호출마다 KB 전체(~176KB)를 read+파싱하던 IO 제거.
+_NOTE_CACHE: Dict[Path, Tuple[float, Dict[str, str], frozenset]] = {}
+
+
+def _note_entry(p: Path) -> Optional[Tuple[Dict[str, str], frozenset]]:
+    """캐시 경유로 노트의 (meta, terms) 반환. mtime 불변이면 read 없음."""
+    try:
+        mtime = p.stat().st_mtime
+    except OSError:
+        return None
+    cached = _NOTE_CACHE.get(p)
+    if cached is not None and cached[0] == mtime:
+        return cached[1], cached[2]
+    try:
+        text = p.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return None
+    meta, _body = _parse_frontmatter(text)
+    terms = frozenset(_note_terms(p, meta))
+    _NOTE_CACHE[p] = (mtime, meta, terms)
+    return meta, terms
+
+
 def _iter_notes():
-    """(path, meta, body) for every reference note."""
+    """(path, meta, terms) for every reference note — 캐시 경유(본문 미포함).
+
+    라우팅/진단/상태 조회는 frontmatter만 필요하므로 본문을 싣지 않는다.
+    본문이 필요한 곳(context_for_prompt)은 선택된 노트만 개별 read."""
     for sub in _NOTE_DIRS:
         d = KB_DIR / sub
         if not d.is_dir():
             continue
         for p in sorted(d.glob("*.md")):
-            try:
-                text = p.read_text(encoding="utf-8", errors="replace")
-            except Exception:
+            ent = _note_entry(p)
+            if ent is None:
                 continue
-            meta, body = _parse_frontmatter(text)
-            yield p, meta, body
+            yield p, ent[0], ent[1]
 
 
 def _note_terms(path: Path, meta: Dict[str, str]) -> set:
@@ -94,8 +120,8 @@ def detect_domains(prompt: str, top: int = 2, min_score: int = 1) -> List[Path]:
     # 구체 의도어를 이기지 못하게 한다.
     notes = list(_iter_notes())
     df: Dict[str, int] = {}
-    for path, meta, _b in notes:
-        for t in _note_terms(path, meta):
+    for _path, _meta, terms in notes:
+        for t in terms:
             df[t] = df.get(t, 0) + 1
 
     def _w(t: str) -> float:
@@ -104,8 +130,8 @@ def detect_domains(prompt: str, top: int = 2, min_score: int = 1) -> List[Path]:
         return rarity + (0.5 if len(t) >= 4 else 0.0)          # 긴 용어 소폭 가중
 
     scored: List[Tuple[float, int, Path]] = []
-    for path, meta, _body in notes:
-        hits = [t for t in _note_terms(path, meta) if t in low]
+    for path, _meta, terms in notes:
+        hits = [t for t in terms if t in low]
         if not hits:
             continue
         ws = sorted((_w(t) for t in hits), reverse=True)
@@ -122,8 +148,8 @@ def routing_debug(prompt: str) -> Dict[str, Any]:
     """진단용: 어떤 노트가 왜 뽑혔는지(히트 용어·점수). 라우팅 실패 관측·테스트에 사용."""
     low = (prompt or "").lower()
     rows = []
-    for path, meta, _b in _iter_notes():
-        hits = [t for t in _note_terms(path, meta) if t in low]
+    for path, _meta, terms in _iter_notes():
+        hits = [t for t in terms if t in low]
         if hits:
             rows.append({"note": path.name, "hits": hits,
                          "score": sum(1 + (1 if len(t) >= 4 else 0) for t in hits)})
@@ -152,12 +178,17 @@ def _excerpt(body: str, max_chars: int, prompt: str) -> str:
         return score
 
     scored = sorted(((_sc(b), b) for b in blocks[1:]), key=lambda x: -x[0])
+    # 절대 문장 중간 절단 금지: 예산 초과 섹션은 통째로 skip(아래 continue와 동일 원칙).
+    # 잘린 공식/수치가 소형모델에 주입되는 것보다 섹션을 빼는 쪽이 안전하다.
+    if len(intro) > max_chars:
+        cut = intro.rfind("\n", 0, max_chars)  # intro만 큰 경우: 줄 경계까지만
+        intro = intro[:cut + 1] if cut > 0 else ""
     out = intro
     for ov, b in scored:
         if ov <= 0 or len(out) + len(b) > max_chars:
             continue
         out += b
-    return out[:max_chars]
+    return out
 
 
 def _moc_for(domain: str) -> Optional[str]:
@@ -217,6 +248,10 @@ def context_for_prompt(prompt: str, max_chars: int = 2600) -> Optional[str]:
             break
     if not chunks:
         return None
+    # 헤더/지도까지 합친 총량이 예산을 넘으면 마지막 chunk를 통째로 드랍(최소 1개 유지).
+    # _excerpt와 같은 원칙: 문장 중간 절단으로 잘린 공식·수치를 주입하지 않는다.
+    while len(chunks) > 1 and sum(len(c) for c in chunks) > max_chars:
+        chunks.pop()
     intro = (
         "아래는 사내 레퍼런스 지식베이스 발췌다(공학 도메인·규격·실무). 사용 규약:\n"
         "① 공식/원리는 노트의 공식을 그대로 인용하고, 계산은 숫자를 단계별로 대입해 보여라.\n"
@@ -264,7 +299,7 @@ def kb_status() -> Dict[str, int]:
     """도메인/규격/스킬 노트 수 + verified 수(doctor/진단용)."""
     total = 0
     verified = 0
-    for _p, meta, _b in _iter_notes():
+    for _p, meta, _terms in _iter_notes():
         total += 1
         if str(meta.get("verified", "")).lower() in ("true", "yes", "1"):
             verified += 1
