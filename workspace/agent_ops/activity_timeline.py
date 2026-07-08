@@ -62,6 +62,32 @@ def load_events(audit_path: Optional[Path] = None, limit: int = 300) -> List[Dic
     return events
 
 
+def recent_stalls(threshold_seconds: int = DEFAULT_STALL_GAP, limit: int = 300,
+                  audit_path: Optional[Path] = None) -> Dict[str, Any]:
+    """순수 조회: 최근 audit 이벤트에서 멈춤 의심 구간(간격 >= threshold)을 센다.
+
+    auto_maintain 계측용 — 관측/기록만 하고 어떤 자동 개입도 하지 않는다.
+    audit.jsonl 이 없으면 {events: 0, stalls: 0}. 렌더링(render_timeline_html)의
+    stall 판정과 같은 기준(DEFAULT_STALL_GAP)을 쓴다.
+    """
+    events = load_events(audit_path, limit=limit)
+    stalls = 0
+    longest = 0.0
+    prev: Optional[datetime] = None
+    for e in events:
+        dt = _parse_ts(str(e.get("ts") or e.get("timestamp") or ""))
+        if prev and dt:
+            gap = (dt - prev).total_seconds()
+            if gap >= threshold_seconds:
+                stalls += 1
+            if gap > longest:
+                longest = gap
+        prev = dt or prev
+    return {"events": len(events), "stalls": stalls,
+            "longest_gap_seconds": round(longest, 1),
+            "threshold_seconds": threshold_seconds}
+
+
 def _fmt_gap(seconds: float) -> str:
     if seconds >= 3600:
         return f"{seconds/3600:.1f}시간"
