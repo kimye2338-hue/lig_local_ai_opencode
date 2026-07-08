@@ -20,6 +20,22 @@ python agent_ops\agentops.py doctor
 - **think strip은 필수 도입.** think-on 라우트가 API에 존재하므로, strip이 있으면 무거운 추론용으로 think-on을 안전하게 옵션 사용 가능(사고 텍스트 누출 차단). 게이트웨이 URL/키/라우트/모델명 값 자체는 불변.
 - **split-brain 유의:** python work 명령 기본 provider는 `lig-coding`(EXAONE). TUI(Qwen)와 다름 → WS-INT에서 단일화 검토(값 불변, 소스만).
 
+### 모델/템플릿 (사용자 제공 모델목록 2026-07-08 반영)
+
+내부망 가용: EXAONE-4.5-33B / Qwen3.6-27B / Gemma 4 31B. 각 `{vibe_coding|default}×{think_on|think_off}` 템플릿.
+**tool calling 확인된 것은 3개뿐**: EXAONE vibe_think_off ✅, EXAONE default_think_off ✅, Qwen vibe_think_off ✅. 나머지(think_on·Qwen default·Gemma)는 미확인 → 기본값 부적합(에이전트 루프 tool call 의존).
+
+핵심 가설: 이 비서 작업은 대부분 비(非)코딩(문서·대화·공학Q&A)인데 현재 두 provider 다 `vibe_coding`(코딩최적화) → 산문에서 딱딱/단답 = "똑똑하지 못한 느낌(B)"의 한 원인 가능. `default`(대화용) 템플릿이 비서 느낌에 더 유리할 가능성.
+
+조치(사내망 검증 불가 상태 → 미검증 기본값 변경 금지): opencode.json을 **additive 확장**해 tool-confirmed 3종 + think_on 옵션을 TUI 전환 가능하게 노출. 기본값은 회귀 0을 위해 `Qwen vibe_think_off` 유지.
+- `lig-gateway-qwen` = Qwen 코딩 (기본, tool✅)
+- `lig-exaone-chat` = EXAONE 대화용 (**A/B 1순위 추천**, 한국어·tool✅)
+- `lig-gateway` = EXAONE 코딩 (tool✅)
+- `lig-qwen-chat` = Qwen 대화용 (tool 미확인)
+- `lig-exaone-think` = EXAONE 추론on (사고 strip됨, tool 미확인)
+
+**사용자 A/B 절차(사내망)**: TUI에서 모델 전환(우상단/모델피커) → `lig-exaone-chat` 먼저 체감 비교 → 제일 나은 걸 알려주면 그걸 `model` 기본값으로 고정 + python side(lig-api.env) 단일화. **think strip(WS-A) 덕에 think_on도 안전하나 tool calling 미확인이라 무거운 추론 단발용으로만.**
+
 ## 워크스트림 (파일 소유권 기준 — 에이전트 간 파일 충돌 0)
 
 ### WS-A · 지능 하네스: 파서/런타임  [착수됨]

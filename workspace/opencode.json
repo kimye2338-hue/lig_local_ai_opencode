@@ -7,29 +7,68 @@
   },
   "model": "lig-gateway-qwen/Qwen3.6-27B",
   "provider": {
-    "lig-gateway": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "LIG 사내 게이트웨이 (EXAONE)",
-      "options": {
-        "baseURL": "http://ais.ligdefenseaerospace.com/ai_infra/llm_api/gateway/EXAONE-4.5-33B-vibe_coding_think_off/v1",
-        "apiKey": "ai_infra_llm_api_2024_06"
-      },
-      "models": {
-        "EXAONE-4.5-33B": {
-          "name": "EXAONE 4.5 33B (사내·코딩)"
-        }
-      }
-    },
     "lig-gateway-qwen": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "LIG 사내 게이트웨이 (Qwen 폴백)",
+      "name": "Qwen 코딩(기본)",
       "options": {
         "baseURL": "http://ais.ligdefenseaerospace.com/ai_infra/llm_api/gateway/Qwen3.6-27B-vibe_coding_think_off/v1",
         "apiKey": "ai_infra_llm_api_2024_06"
       },
       "models": {
         "Qwen3.6-27B": {
-          "name": "Qwen3.6 27B (사내·폴백)"
+          "name": "Qwen3.6 27B · 코딩·추론off (기본·tool✅)"
+        }
+      }
+    },
+    "lig-exaone-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "EXAONE 대화(추천: 비서 느낌)",
+      "options": {
+        "baseURL": "http://ais.ligdefenseaerospace.com/ai_infra/llm_api/gateway/EXAONE-4.5-33B-default_think_off/v1",
+        "apiKey": "ai_infra_llm_api_2024_06"
+      },
+      "models": {
+        "EXAONE-4.5-33B": {
+          "name": "EXAONE 4.5 33B · 대화용·추론off (한국어·tool✅)"
+        }
+      }
+    },
+    "lig-gateway": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "EXAONE 코딩",
+      "options": {
+        "baseURL": "http://ais.ligdefenseaerospace.com/ai_infra/llm_api/gateway/EXAONE-4.5-33B-vibe_coding_think_off/v1",
+        "apiKey": "ai_infra_llm_api_2024_06"
+      },
+      "models": {
+        "EXAONE-4.5-33B": {
+          "name": "EXAONE 4.5 33B · 코딩·추론off (tool✅)"
+        }
+      }
+    },
+    "lig-qwen-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Qwen 대화 (tool 미확인)",
+      "options": {
+        "baseURL": "http://ais.ligdefenseaerospace.com/ai_infra/llm_api/gateway/Qwen3.6-27B-default_think_off/v1",
+        "apiKey": "ai_infra_llm_api_2024_06"
+      },
+      "models": {
+        "Qwen3.6-27B": {
+          "name": "Qwen3.6 27B · 대화용·추론off (tool 미확인)"
+        }
+      }
+    },
+    "lig-exaone-think": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "EXAONE 추론on (무거운 추론용·tool 미확인)",
+      "options": {
+        "baseURL": "http://ais.ligdefenseaerospace.com/ai_infra/llm_api/gateway/EXAONE-4.5-33B-default_think_on/v1",
+        "apiKey": "ai_infra_llm_api_2024_06"
+      },
+      "models": {
+        "EXAONE-4.5-33B": {
+          "name": "EXAONE 4.5 33B · 대화용·추론on (사고 strip됨·tool 미확인)"
         }
       }
     }
