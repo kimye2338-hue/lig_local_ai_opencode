@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .lig_providers import DIAG_DIR, build_providers, decide_fallback, get_profile, load_lig_env, parse_timeout, record_fallback, route_reason, select_route
-from .toolcall_parser import parse_tool_calls
+from .toolcall_parser import parse_tool_calls, strip_reasoning
 
 Transport = Callable[[str, Dict[str, Any], Dict[str, str], int], Dict[str, Any]]
 
@@ -57,10 +57,14 @@ def _message_content_text(message: Dict[str, Any], fallback: str = "") -> str:
     Some gateways return multipart content lists even for chat completions.
     The tool-call parser already tolerates that shape; the runtime must use
     the same normalization before checking `.strip()` or writing diagnostics.
+
+    reasoning_content 키는 content로 취급하지 않고 무시한다. 최종 텍스트는
+    strip_reasoning을 통과시켜 <think> 블록이 답변으로 새지 않게 한다
+    (라우트가 think_off라 평상시엔 no-op — 방어용).
     """
     raw = message.get("content")
     if isinstance(raw, str):
-        return raw
+        return strip_reasoning(raw)
     if isinstance(raw, list):
         parts: List[str] = []
         for item in raw:
@@ -68,10 +72,10 @@ def _message_content_text(message: Dict[str, Any], fallback: str = "") -> str:
                 parts.append(str(item.get("text", "")))
             else:
                 parts.append(str(item))
-        return "\n".join(parts)
+        return strip_reasoning("\n".join(parts))
     if raw is None:
         return fallback
-    return str(raw)
+    return strip_reasoning(str(raw))
 
 
 def default_transport(url: str, payload: Dict[str, Any], headers: Dict[str, str], timeout: int) -> Dict[str, Any]:

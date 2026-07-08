@@ -24,6 +24,24 @@ _FENCE_RE = re.compile(r"```(?:json|tool|tool_call)?\s*(.*?)```", re.DOTALL)
 _TRAILING_COMMA_RE = re.compile(r",\s*([}\]])")
 # Signals that the text is *trying* to call a tool even if JSON is broken.
 _INTENT_RE = re.compile(r'"?(?:tool_calls?|function_call|tool_name|name)"?\s*[:=]', re.IGNORECASE)
+_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def strip_reasoning(s: str) -> str:
+    """<think>...</think> reasoning 블록 제거 — 방어용 안전장치.
+
+    게이트웨이 라우트가 이미 *_think_off 라서 평상시엔 순수 no-op:
+    입력에 <think 가 없으면 원본을 그대로 반환한다. think가 흘러들어온
+    경우에만 닫힌 블록을 제거하고, 닫는 태그 없이 열린 <think>는 그
+    지점부터 끝까지 reasoning으로 간주해 잘라낸다(잘린 출력 대응).
+    """
+    if not s or "<think" not in s:
+        return s
+    out = _THINK_BLOCK_RE.sub("", s)
+    idx = out.find("<think>")
+    if idx != -1:
+        out = out[:idx]
+    return out
 
 
 def _repair_json_text(text: str) -> Optional[Any]:
@@ -184,6 +202,10 @@ def parse_tool_calls(response: Any, available_tools: Optional[List[str]] = None)
             errors.append("tool_calls field present but empty/invalid")
     else:
         content = str(response or "")
+
+    # 방어용: think가 흘러들어와도 <think> 블록은 스캔/발췌 대상에서 제외 —
+    # think 안에서 '언급'된 도구 JSON이 실제 툴콜로 승격되는 것을 막는다.
+    content = strip_reasoning(content)
 
     status = "ok" if structured else "none"
     calls = structured
