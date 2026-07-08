@@ -98,9 +98,8 @@ rem 끄고 싶으면 이 창 실행 전에 set LIG_AUTO_WIKI=0.
 if "%LIG_AUTO_WIKI%"=="0" goto :wiki_done
 if not exist "%OPENCODE_USERDATA%\memory\wiki" mkdir "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1
 py -3.11 -m agent_ops.wiki_vault "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1 || python -m agent_ops.wiki_vault "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1
-tasklist /FI "IMAGENAME eq Obsidian.exe" 2>nul | find /I "Obsidian.exe" >nul
-if not errorlevel 1 goto :wiki_done
 rem Obsidian 실행파일을 여러 위치에서 찾는다(workspace\tools / 루트\tools / 표준 설치 / Programs).
+rem 이미 실행 중이어도 start 하면 Obsidian이 단일 인스턴스라 기존 창을 앞으로 가져온다(포커스).
 set "OBSEXE="
 for %%P in ("%AGENTOPS_HOME%\tools\Obsidian\Obsidian.exe" "%OC_ROOT%\tools\Obsidian\Obsidian.exe" "%LOCALAPPDATA%\Obsidian\Obsidian.exe" "%LOCALAPPDATA%\Programs\Obsidian\Obsidian.exe" "%PROGRAMFILES%\Obsidian\Obsidian.exe") do if not defined OBSEXE if exist "%%~P" set "OBSEXE=%%~P"
 rem 그래도 못 찾으면 OpenCodeLIG 아래를 재귀 검색(어느 하위폴더에 넣어도 잡히게).
