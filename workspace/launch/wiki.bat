@@ -22,20 +22,17 @@ call "%HERE%_py.bat" || goto :openonly
 cd /d "%APP%"
 %PY% -m agent_ops.wiki_vault "%VAULT%"
 
-rem 2) Obsidian 실행: tools\Obsidian(포터블) > 설치본 > 탐색기 폴백
+rem 2) Obsidian 실행: 여러 위치에서 찾기(workspace\tools 포함) > 재귀검색 > 탐색기 폴백
 :openonly
-set "OBS_PORTABLE=%ROOT%\tools\Obsidian\Obsidian.exe"
-set "OBS_INSTALLED=%LOCALAPPDATA%\Obsidian\Obsidian.exe"
-if exist "%OBS_PORTABLE%" (
-  start "" "%OBS_PORTABLE%" "%VAULT%"
-  goto :done
-)
-if exist "%OBS_INSTALLED%" (
-  start "" "%OBS_INSTALLED%" "%VAULT%"
+set "OBSEXE="
+for %%P in ("%APP%\tools\Obsidian\Obsidian.exe" "%ROOT%\tools\Obsidian\Obsidian.exe" "%LOCALAPPDATA%\Obsidian\Obsidian.exe" "%LOCALAPPDATA%\Programs\Obsidian\Obsidian.exe" "%PROGRAMFILES%\Obsidian\Obsidian.exe") do if not defined OBSEXE if exist "%%~P" set "OBSEXE=%%~P"
+if not defined OBSEXE for /f "delims=" %%F in ('dir /b /s "%ROOT%\Obsidian.exe" 2^>nul') do if not defined OBSEXE set "OBSEXE=%%F"
+if defined OBSEXE (
+  start "" "%OBSEXE%" "%VAULT%"
   goto :done
 )
 echo [안내] Obsidian을 찾지 못했습니다. 탐색기로 위키 폴더만 엽니다.
-echo         tools\Obsidian\Obsidian.exe 로 포터블을 넣거나 Obsidian을 설치하세요.
+echo         workspace\tools\Obsidian\Obsidian.exe 로 포터블을 넣거나 Obsidian을 설치하세요.
 start "" explorer "%VAULT%"
 :done
 exit /b 0

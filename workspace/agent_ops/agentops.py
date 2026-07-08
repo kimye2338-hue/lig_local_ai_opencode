@@ -480,11 +480,22 @@ def cmd_deps(args):
             "pip install windows-use (wheel 반입)")
     except Exception:
         add("임의 Windows 앱 조작", False, "wheel 반입 필요")
-    # 반입 바이너리(설치 파일)
+    # 반입 바이너리(설치 파일). Obsidian.exe 를 여러 위치에서 찾는다(workspace\tools 포함).
     home = _P.home() / "OpenCodeLIG"
-    obs = (home / "tools" / "Obsidian" / "Obsidian.exe").exists() or \
-          (_P(os.environ.get("LOCALAPPDATA", "")) / "Obsidian" / "Obsidian.exe").exists()
-    add("Obsidian(위키 열람, 선택)", obs, "설치본을 tools\\Obsidian\\Obsidian.exe 로 반입(무설치 포터블 가능)")
+    la = _P(os.environ.get("LOCALAPPDATA", ""))
+    _obs_paths = [
+        home / "workspace" / "tools" / "Obsidian" / "Obsidian.exe",
+        home / "tools" / "Obsidian" / "Obsidian.exe",
+        la / "Obsidian" / "Obsidian.exe",
+        la / "Programs" / "Obsidian" / "Obsidian.exe",
+    ]
+    obs = any(p.exists() for p in _obs_paths)
+    if not obs:  # 그래도 못 찾으면 OpenCodeLIG 아래 재귀 검색
+        try:
+            obs = next(home.rglob("Obsidian.exe"), None) is not None
+        except Exception:
+            pass
+    add("Obsidian(위키 열람, 선택)", obs, "설치본을 workspace\\tools\\Obsidian\\Obsidian.exe 로 반입(무설치 포터블 가능)")
 
     print("선택 기능 반입 상태 (핵심 대화/업무는 이것들 없이도 동작):\n")
     for name, ready, hint in rows:
