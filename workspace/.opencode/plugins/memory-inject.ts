@@ -108,14 +108,14 @@ function compactSummary(input, output) {
   return ""
 }
 
-function rememberCompaction(base, input, output) {
+function logCompactionActivity(base, input, output) {
+  // Compaction summaries are session logs, not user rules: store them as a
+  // low-priority activity (never `remember`, which is preference/high/user).
+  // The fixed title lets add_activity's same-day/same-title cap dedupe to at
+  // most one entry per day.
   const summary = compactSummary(input, output)
   if (!summary) return
-  const text = [
-    "OpenCode TUI session compaction summary:",
-    summary,
-  ].join(" ")
-  runAgentOps(base, ["remember", text, "--title", "OpenCode TUI session"])
+  runAgentOps(base, ["log-activity", summary, "--title", "OpenCode TUI 세션 요약"])
 }
 
 export const MemoryInject = async (ctx) => {
@@ -127,7 +127,7 @@ export const MemoryInject = async (ctx) => {
     "experimental.session.compacting": async (input, output) => {
       const freshBlock = pinnedRecallBlock(base)
       pushContext(output, freshBlock)
-      rememberCompaction(base, input, output)
+      logCompactionActivity(base, input, output)
     },
     event: async ({ event }) => {
       const t = String((event && event.type) || "")

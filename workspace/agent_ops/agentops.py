@@ -862,6 +862,21 @@ def cmd_remember(args):
     rebuild_quietly()   # 기억이 쌓일 때마다 지식책도 최신으로
     return 0
 
+def cmd_log_activity(args):
+    """저우선순위 활동 1건 적재 — TUI 플러그인(compaction 요약 등) 자동 적재용.
+
+    remember(사용자 규칙, preference/high/user)와 달리 activity/low/agent 로 적재해
+    장기기억(사용자 규칙 회상)을 오염시키지 않는다. add_activity 의
+    '같은 날 같은 제목 1회' 캡 덕분에 title 을 고정하면 일 단위 중복억제가 걸린다.
+    """
+    text = " ".join(args.text).strip()
+    if not text:
+        print("No activity text provided.", file=sys.stderr)
+        return 2
+    hook = _complete_activity(args.title or "세션 활동", outcome=text, ok=True)
+    print(json.dumps(hook, ensure_ascii=False, indent=2))
+    return 0
+
 def cmd_recall(args):
     if getattr(args, "pinned", False):
         # 세션 시작 컨텍스트용(TUI 플러그인이 주입): 키워드 없이도 '항상 보여야 할'
@@ -1437,6 +1452,7 @@ def main(argv=None):
     p = sub.add_parser("log-failure"); p.add_argument("text", nargs="*"); p.set_defaults(func=cmd_log_failure)
     sub.add_parser("memorycheck").set_defaults(func=cmd_memorycheck)
     p = sub.add_parser("remember"); p.add_argument("text", nargs="*"); p.add_argument("--title", default="User instruction"); p.set_defaults(func=cmd_remember)
+    p = sub.add_parser("log-activity"); p.add_argument("text", nargs="*"); p.add_argument("--title", default="세션 활동"); p.set_defaults(func=cmd_log_activity)
     p = sub.add_parser("recall"); p.add_argument("keywords", nargs="*"); p.add_argument("--kind", default=""); p.add_argument("--limit", type=int, default=6); p.add_argument("--pinned", action="store_true", help="키워드 없이 core memory+고정 기억+최근 활동을 출력(세션 시작 주입용)"); p.set_defaults(func=cmd_recall)
     p = sub.add_parser("enqueue"); p.add_argument("title"); p.add_argument("--kind", default="manual"); p.add_argument("--owner", default="agent"); p.add_argument("--priority", type=int, default=5); p.add_argument("--risk", default="safe"); p.add_argument("--payload", default=""); p.add_argument("--touches", nargs="*", default=[]); p.set_defaults(func=cmd_enqueue)
     sub.add_parser("continue-once").set_defaults(func=cmd_continue)
