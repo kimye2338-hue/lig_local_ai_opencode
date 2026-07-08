@@ -20,6 +20,7 @@ real EXAONE/Qwen behavior remains company validation pending.
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -282,8 +283,8 @@ REGISTRY: Dict[str, Dict[str, Any]] = {
     "remember":        {"fn": tool_remember,      "required": ["note"],         "optional": ["title"],             "description": "Save a lesson to global memory"},
     # --- 앱 어댑터 직접 호출(전체 노출). 앱/COM 미설치 시 우아하게 실패. 스키마는
     # 약한 모델 정확도 위해 타이트하게 — 미선언 옵션도 런타임은 통과시킨다. ---
-    "excel_app":       {"fn": _action_adapter_tool("office", _load_excel),       "required": ["action"], "optional": ["path", "range", "bas_path"], "description": "Excel/Word/PPT: open_copy/read_range/write_range/run_macro_file/save/close/md_to_docx/spec_to_pptx"},
-    "outlook_app":     {"fn": _action_adapter_tool("outlook", _load_outlook),    "required": ["action"], "optional": ["days"], "description": "Outlook: read_calendar/sync_calendar/read_inbox"},
+    "excel_app":       {"fn": _action_adapter_tool("office", _load_excel),       "required": ["action"], "optional": ["path", "range", "bas_path", "sheet", "values", "out_path", "spec", "macro"], "description": "Excel/Word/PPT. read_range:path,range/write_range:path,range,values/run_macro_file:path,bas_path/md_to_docx:path,out_path/spec_to_pptx:path,spec/open_copy:path/save/close"},
+    "outlook_app":     {"fn": _action_adapter_tool("outlook", _load_outlook),    "required": ["action"], "optional": ["days", "count", "folder"], "description": "Outlook: read_calendar/sync_calendar/read_inbox"},
     "hwp_app":         {"fn": _action_adapter_tool("hwp", _load_hwp),            "required": ["action"], "optional": ["path", "out_path"], "description": "한글(HWP): md_to_hwp"},
     "solidworks_app":  {"fn": _action_adapter_tool("solidworks", _load_solidworks), "required": ["action"], "optional": ["path"], "description": "SolidWorks: run_macro"},
     "ocr_screen":      {"fn": _action_adapter_tool("ocr_screen", _load_ocr),      "required": ["action"], "optional": ["region", "path"], "description": "화면/이미지 OCR: read_screen/read_image/capabilities"},
@@ -300,35 +301,34 @@ _PARAM_DESCRIPTIONS = {
     "note": "text to remember",
     "old": "exact text to replace",
     "new": "replacement text",
-    "count": "max replacements",
+    "count": "max replacements or items",
     "query": "search text",
     "pattern": "glob, e.g. **/*.md",
-    "action": "browser action name",
+    "action": "action name (browser or adapter)",
     "url": "URL",
-    "tab": "tab index or title/url substring",
+    "tab": "tab index or title",
     "selector": "CSS selector",
     "text": "visible text substring",
     "index": "clickable or tab index",
     "timeout": "seconds",
     "max_length": "max text length",
     "max_text_length": "max text length",
-    "max_html_length": "max html length; 0 disables html",
+    "max_html_length": "max html length",
     "limit": "maximum item count",
     "filename": "output filename",
-    "wait_seconds": "seconds to wait after click",
+    "wait_seconds": "seconds to wait",
     "load_timeout": "page load timeout seconds",
     "output_dir": "output directory",
     "max_clicks": "maximum clicks to explore",
     "include_clickables": "true/false",
-    "action": "adapter action name",
     "out_path": "output file path",
     "sheet": "worksheet name",
     "range": "cell range, e.g. A1:C10",
     "values": "values to write",
     "bas_path": "macro .bas path",
     "days": "days ahead",
-    "count": "max items",
     "folder": "mail folder",
+    "spec": "pptx spec",
     "macro": "macro name",
     "region": "screen region [x,y,w,h]",
     "lang": "OCR language, e.g. kor+eng",
@@ -358,7 +358,7 @@ _TOOL_GROUPS = (
     (("solidworks", "솔리드웍스", "파트", "어셈블리", "sldworks"), {"solidworks_app"}),
     (("화면", "ocr", "스크린샷 읽", "글자 읽", "screen"), {"ocr_screen"}),
     (("데스크톱", "gui 앱", "windows-use", "uia"), {"desktop_ui"}),
-    (("matlab", "매트랩", ".m ", "simulink"), {"matlab_run"}),
+    (("matlab", "매트랩", "simulink"), {"matlab_run"}),
     (("fluent", "플루언트", "ansys", "cfd", "저널", "journal"), {"fluent_run"}),
     (("autocad", "오토캐드", "dwg", ".scr", "도면", "accoreconsole"), {"autocad_run"}),
 )
@@ -371,6 +371,9 @@ def _tools_for_prompt(prompt: str) -> List[str]:
     for kws, group in _TOOL_GROUPS:
         if any(k in low for k in kws):
             names |= group
+    # ".m " 문자열 매칭은 문장 끝 "analysis.m"을 놓친다 — 정규식으로 끝/공백 모두 허용.
+    if re.search(r"\.m(\s|$)", low):
+        names |= {"matlab_run"}
     return [n for n in REGISTRY if n in names]
 
 
@@ -378,6 +381,11 @@ def tool_definitions(prompt: Optional[str] = None) -> List[Dict[str, Any]]:
     """OpenAI-style function definitions. prompt 주면 작업 관련 서브셋만(약한 모델
     정확도↑). prompt 없으면 전체(하위호환)."""
     names = _tools_for_prompt(prompt) if prompt else list(REGISTRY)
+    return _definitions_for(names)
+
+
+def _definitions_for(names: List[str]) -> List[Dict[str, Any]]:
+    """이름 목록 → function definition 목록 (동적 도구 확장에서도 재사용)."""
     defs = []
     for name in names:
         spec = REGISTRY[name]
@@ -395,6 +403,36 @@ def tool_definitions(prompt: Optional[str] = None) -> List[Dict[str, Any]]:
             },
         })
     return defs
+
+
+def _group_for_tool(name: str) -> set:
+    """도구 이름 → 함께 노출할 그룹(같은 앱/영역 도구). 그룹 밖이면 그 도구만."""
+    expanded = {name}
+    for _kws, group in _TOOL_GROUPS:
+        if name in group:
+            expanded |= group
+    return expanded
+
+
+# tool 결과를 대화 이력에 넣을 때 긴 텍스트 필드 절단 상한(문자).
+# read_file/search_files 대형 결과가 이후 턴의 컨텍스트를 다 먹지 않게 한다.
+_TOOL_RESULT_TEXT_LIMIT = 6000
+
+# 시스템 주입 블록(기억/위키/프로필/API/KB/디자인/도메인/스킬) 합산 전역 예산(문자).
+_INSERT_BUDGET = 6000
+
+
+def _truncate_for_history(value: Any, limit: int = _TOOL_RESULT_TEXT_LIMIT) -> Any:
+    """이력 주입용 사본: 긴 문자열 필드만 절단(원본 tool_results는 그대로 유지)."""
+    if isinstance(value, str):
+        if len(value) > limit:
+            return value[:limit] + f"...(truncated, 원본 {len(value)}자)"
+        return value
+    if isinstance(value, dict):
+        return {k: _truncate_for_history(v, limit) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_truncate_for_history(v, limit) for v in value]
+    return value
 
 
 def _call_signature(call: Dict[str, Any]) -> str:
@@ -537,7 +575,10 @@ def run_agent_loop(
     # 복리 기억의 쐐기돌: 축적된 규칙/교훈을 '기계적으로' 주입한다.
     # 페르소나가 recall을 잊어도 같은 실수를 반복하지 않도록 — 선의가 아닌 구조.
     # 주입 순서(제품 문서 §6.3): 전역 기억 → 폴더 프로필(기억/페르소나/규칙) → 작업.
-    inserts: List[Dict[str, Any]] = []
+    # 각 (priority, message) — priority 낮을수록 중요. 전역 예산 초과 시
+    # 낮은 우선순위(큰 숫자)부터 드랍한다: memory(0) > project(1) > api/kb(2)
+    # > skill(3) > design(4) > domain(5) > wiki(6).
+    inserts: List[Any] = []
     try:
         from .memory_manager import core_memory, extract_keywords, format_recall_for_prompt, recall
         keywords = extract_keywords(prompt)
@@ -549,24 +590,24 @@ def run_agent_loop(
         seen_ids = {r.get("id") for r in pinned}
         mem = pinned + [r for r in matched if r.get("id") not in seen_ids]
         if mem:
-            inserts.append({"role": "system",
-                            "content": "이전에 축적된 사용자 규칙/교훈 — 반드시 반영:\n"
-                                       + format_recall_for_prompt(mem[:8])})
+            inserts.append((0, {"role": "system",
+                                "content": "이전에 축적된 사용자 규칙/교훈 — 반드시 반영:\n"
+                                           + format_recall_for_prompt(mem[:8])}))
         # 복리 recall: 개별 사건보다 '주제 페이지'(증류된 지식)가 강하다.
         # 기록이 쌓일수록 같은 주제 발췌가 저절로 풍부해진다 (LLM Wiki 층).
         from .wiki_manager import recall_pages
         pages = recall_pages(keywords, limit=1)
         for page in pages:
-            inserts.append({"role": "system",
-                            "content": f"축적된 주제 지식(위키 '{page['topic']}') — 참고:\n"
-                                       + page["excerpt"]})
+            inserts.append((6, {"role": "system",
+                                "content": f"축적된 주제 지식(위키 '{page['topic']}') — 참고:\n"
+                                           + page["excerpt"]}))
     except Exception:  # noqa: BLE001 - 기억 주입 실패가 작업을 막으면 안 된다
         pass
     try:
         from .project_profile import format_context_for_prompt, load_project_context
         project = format_context_for_prompt(load_project_context())
         if project:
-            inserts.append({"role": "system", "content": project})
+            inserts.append((1, {"role": "system", "content": project}))
     except Exception:  # noqa: BLE001 - 프로필 주입 실패도 작업을 막으면 안 된다
         pass
     try:
@@ -575,7 +616,7 @@ def run_agent_loop(
         from .api_reference import context_for_prompt as _api_ctx
         api_ref = _api_ctx(prompt)
         if api_ref:
-            inserts.append({"role": "system", "content": api_ref})
+            inserts.append((2, {"role": "system", "content": api_ref}))
     except Exception:  # noqa: BLE001 - API 참조 주입 실패도 작업을 막으면 안 된다
         pass
     try:
@@ -584,7 +625,7 @@ def run_agent_loop(
         from .knowledge_base import context_for_prompt as _kb_ctx
         kb_ref = _kb_ctx(prompt)
         if kb_ref:
-            inserts.append({"role": "system", "content": kb_ref})
+            inserts.append((2, {"role": "system", "content": kb_ref}))
     except Exception:  # noqa: BLE001 - 지식베이스 주입 실패도 작업을 막으면 안 된다
         pass
     try:
@@ -593,7 +634,7 @@ def run_agent_loop(
         from .design_guidance import context_for_prompt as _design_ctx
         design_ref = _design_ctx(prompt)
         if design_ref:
-            inserts.append({"role": "system", "content": design_ref})
+            inserts.append((4, {"role": "system", "content": design_ref}))
     except Exception:  # noqa: BLE001 - 디자인 가이드 주입 실패도 작업을 막으면 안 된다
         pass
     try:
@@ -601,7 +642,7 @@ def run_agent_loop(
         from .domain_context import context_for_prompt as _domain_ctx
         domain_ref = _domain_ctx(prompt)
         if domain_ref:
-            inserts.append({"role": "system", "content": domain_ref})
+            inserts.append((5, {"role": "system", "content": domain_ref}))
     except Exception:  # noqa: BLE001 - 도메인 맥락 주입 실패도 작업을 막으면 안 된다
         pass
     try:
@@ -609,10 +650,24 @@ def run_agent_loop(
         from .skill_router import context_for_prompt as _skill_ctx
         skill_ref = _skill_ctx(prompt)
         if skill_ref:
-            inserts.append({"role": "system", "content": skill_ref})
+            inserts.append((3, {"role": "system", "content": skill_ref}))
     except Exception:  # noqa: BLE001 - 스킬 주입 실패도 작업을 막으면 안 된다
         pass
-    for offset, msg in enumerate(inserts):
+    # 전역 주입 예산: injector별 개별 예산 합(최악 ~12K자)이 약한 모델 컨텍스트를
+    # 다 먹지 않게 총 6000자로 제한. 초과 시 우선순위 낮은(숫자 큰) 블록부터,
+    # 같은 우선순위면 뒤 블록부터 드랍. memory(0)는 안전망이므로 드랍하지 않는다.
+    total_chars = sum(len(m["content"]) for _p, m in inserts)
+    if total_chars > _INSERT_BUDGET:
+        drop_order = sorted(range(len(inserts)),
+                            key=lambda i: (-inserts[i][0], -i))
+        dropped = set()
+        for idx in drop_order:
+            if total_chars <= _INSERT_BUDGET or inserts[idx][0] == 0:
+                continue
+            total_chars -= len(inserts[idx][1]["content"])
+            dropped.add(idx)
+        inserts = [x for i, x in enumerate(inserts) if i not in dropped]
+    for offset, (_prio, msg) in enumerate(inserts):
         messages.insert(1 + offset, msg)
     # 비서펫(오버레이) 라이브 상태 — 실패해도 작업을 막지 않는다.
     try:
@@ -626,11 +681,33 @@ def run_agent_loop(
     turns = 0
     llm_outcome = ""
     fallback_trigger = ""
+    exposed = {t["function"]["name"] for t in tools}
+    warned_signatures: set = set()  # 반복 실패에 교정 기회(경고 1회)를 준 서명
+    last_assistant_content = ""     # max_turns 소진 시 빈 결과 대신 돌려줄 마지막 응답
 
     for _ in range(max_turns):
         turns += 1
         llm = call_llm(messages, tools=tools, env=env, transport=transport,
                        diag_dir=diag_dir, capability_ids=capability_ids)
+        calls = llm.get("tool_calls") or []
+        # 동적 도구 확장: 미노출 이름이라도 REGISTRY에 실존하면 해당 그룹을 노출에
+        # 추가하고 같은 턴을 재시도한다(디스패치 없이). call_llm은 미노출 도구
+        # 호출을 unavailable_tool_repeat로 실패 처리하므로 ok 여부보다 먼저 검사.
+        # REGISTRY에도 없으면 기존 폴백 유지(llm_failed 또는 unknown_tool 피드백).
+        hidden = [c.get("name") for c in calls
+                  if c.get("name") not in exposed and c.get("name") in REGISTRY]
+        if hidden:
+            add: set = set()
+            for n in hidden:
+                add |= _group_for_tool(n)
+            add -= exposed
+            if add:
+                exposed |= add
+                tools = tools + _definitions_for([n for n in REGISTRY if n in add])
+                messages.append({"role": "system",
+                                 "content": "도구 %d개가 추가되었다: %s. 이제 이 도구들을 호출할 수 있다."
+                                            % (len(add), ", ".join(sorted(add)))})
+                continue
         if not llm["ok"]:
             outcome = "llm_failed"
             # call_llm 계층의 세부 outcome(local_fallback/stop)을 보존해
@@ -639,7 +716,8 @@ def run_agent_loop(
             fallback_trigger = llm.get("fallback_trigger", "")
             final_content = llm.get("content", "")
             break
-        calls = llm.get("tool_calls") or []
+        if llm.get("content"):
+            last_assistant_content = llm.get("content", "")
         if not calls:
             outcome = "completed"
             final_content = llm.get("content", "")
@@ -653,6 +731,17 @@ def run_agent_loop(
         cutoff = False
         for i, call in enumerate(calls):
             if dispatcher.repeated_failure(call):
+                sig = _call_signature(call)
+                if sig not in warned_signatures:
+                    # 교정 기회 1회: 즉시 중단하지 않고 경고를 주입해 인자/접근을 바꾸게 한다.
+                    warned_signatures.add(sig)
+                    warn = {"ok": False, "tool": call.get("name", ""),
+                            "error": "동일 인자 호출이 2회 실패했다. 인자를 바꾸거나 "
+                                     "다른 도구/접근을 써라. 반복하면 중단된다."}
+                    messages.append({"role": "tool", "tool_call_id": call_ids[i],
+                                     "name": call.get("name", ""),
+                                     "content": json.dumps(warn, ensure_ascii=False)})
+                    continue
                 outcome = "tool_loop_cutoff"
                 final_content = (f"Aborted: tool call {call.get('name')} failed repeatedly "
                                  "with identical arguments.")
@@ -660,11 +749,22 @@ def run_agent_loop(
                 break
             result = dispatcher.dispatch(call)
             tool_results.append(result)
+            # 이력에는 절단본만: 대형 read_file/search_files 결과가 이후 턴을 잠식하지
+            # 않게. 전체 원본은 tool_results 에 남는다(진단/반환용).
             messages.append({"role": "tool", "tool_call_id": call_ids[i],
                              "name": call.get("name", ""),
-                             "content": json.dumps(result, ensure_ascii=False)})
+                             "content": json.dumps(_truncate_for_history(result), ensure_ascii=False)})
         if cutoff:
             break
+
+    # max_turns 소진 시 빈 결과 금지: 마지막 assistant 응답 또는 도구 실행 요약을 반환.
+    if outcome == "max_turns_exceeded" and not final_content:
+        if last_assistant_content:
+            final_content = last_assistant_content
+        else:
+            used = [r.get("tool", "?") for r in tool_results]
+            final_content = ("최대 턴 초과 — 실행한 도구 %d개: %s"
+                             % (len(used), ", ".join(used) if used else "(없음)"))
 
     result = {
         "ok": outcome == "completed",
