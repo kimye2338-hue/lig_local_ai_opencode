@@ -805,3 +805,19 @@
     artifact_quality/user_friction/learning_value/safety_margin 채점, diagnostics/evaluations/*.jsonl append. **평가는 정책의
     보조 신호일 뿐 안전을 못 덮고, 단일 성공을 장기 선호로 과잉 승격하지 않는다.** 첫 파일: `workspace/agent_ops/evaluation_loop.py`(신규),
     `workspace/tests/test_evaluation_loop.py`.
+- WS-8 완료 기록(2026-07-08, 커밋 afe7f59):
+  - 변경 요약: 신규 `evaluation_loop.py` — `score_run(trace, outcome)`가 route_confidence/tool_success/artifact_quality/
+    user_friction/learning_value/safety_margin(각 0~1, 순수·결정적, 시계 비의존)을 채점. `append_evaluation`은
+    `DIAG_DIR/evaluations.jsonl`에 append-only(best-effort, USERDATA 미접촉). `route_preferences(min_samples=3)`는 표본 3 미만
+    route를 선호로 안 올림(단일 성공 과잉승격 금지, 읽기전용 — auto_policy 미변경). `growth_report` 요약. cmd_auto는 **기존
+    코드 무수정**, 헬퍼 `_append_auto_evaluation`을 dry_run 반환 직전·정상 outcome 확정 후 2지점에만 삽입(WS-3 후크·WS-7 정책·
+    trace 필드 보존). intelligence_map에 `maintenance:evaluation_loop` 등록(166).
+  - 철학 종료 체크: (성장) 실행마다 채점 근거가 diagnostics에 쌓여 다음 정책의 보조 신호가 된다. (겸손한 평가) min_samples=3로
+    단일 성공을 장기 선호로 만들지 않고, route_preferences는 신호만 노출하며 정책·안전을 바꾸지 않는다. (안전) append-only +
+    tmp 격리, auto_policy/memory_manager 미접촉. (남긴 trace) trace["evaluation"] 점수 + evaluations.jsonl.
+  - 검증: `test_evaluation_loop`(29), `test_auto_command`(27), `test_auto_policy`(23), `test_auto_learning_hooks`(18),
+    `test_intelligence_map`(166), `pytest test_work_command`(4) 통과.
+  - 미검증: 실 누적 평가에서 route_preferences/growth_report의 유효성(사내망 장기 관측).
+  - 다음 작업: WS-9 기억 품질 관리(`memory_quality.py`) — user_rule/preference/project_fact/activity/error_pattern/candidate
+    등급 분리 + dedupe/decay/promote 규칙. **user_rule/manual wiki는 자동 감쇠·삭제 금지, 원본 로그 비파괴.** 첫 파일:
+    `workspace/agent_ops/memory_quality.py`(신규), `workspace/tests/test_memory_quality.py`. **memory.jsonl append 최적화는 여전히 신중히(계측 후).**
