@@ -5,6 +5,10 @@
 
 이 문서는 로컬 작업 기준이다. GitHub push는 별도 지시 전까지 하지 않는다.
 
+구현을 시작하기 전과 각 워크스트림을 끝낸 뒤에는
+`workspace/docs/운영/BUILD_PHILOSOPHY_20260708.md`를 읽고, 시작 전/종료 후 체크 질문에 답을 남긴다.
+이 철학 문서는 코딩 규칙이 아니라 제품이 가야 할 방향을 잊지 않기 위한 기준이다.
+
 ---
 
 ## 1. 현재 결론
@@ -158,6 +162,7 @@
 - 수정: `workspace/docs/운영/AUTO_ORCHESTRATION_PLAN_20260708.md`
 
 **작업**
+0. `BUILD_PHILOSOPHY_20260708.md`의 시작 전 체크를 읽고, 이 작업이 줄이는 사용자 부담과 연결되는 지능층을 기록한다.
 1. `intelligence_map.py`에 command/capability/tool/adapter/plugin/knowledge/memory/wiki/maintain 항목을 선언한다.
 2. 각 항목은 다음 필드를 가진다.
    - `id`: 안정적인 식별자
@@ -175,6 +180,7 @@
    - `status`가 비어 있거나 `pending`인데 사유가 없는 항목
 4. `INTELLIGENCE_COVERAGE_REPORT.md`는 자동/고급/보류/폐기 목록과 미연결 0개 여부를 사람이 읽기 좋게 남긴다.
 5. 이후 모든 WS는 새 기능을 추가하거나 상태를 바꾸면 이 지도를 함께 갱신한다.
+6. 작업 종료 후 `BUILD_PHILOSOPHY_20260708.md`의 종료 후 체크를 기록한다.
 
 **검증**
 - `py -3.11 tests\test_intelligence_map.py`
@@ -198,6 +204,7 @@
 - 생성/수정: `workspace/tests/test_auto_command.py`
 
 **작업**
+0. `BUILD_PHILOSOPHY_20260708.md`의 시작 전 체크를 읽고, 사용자가 더 이상 골라야 하지 않아도 되는 부분을 명시한다.
 1. `cmd_auto(args)` 추가.
 2. `capabilities.plan_task()` 결과에 따라 실행 경로 선택:
    - `schedule_management` 단독 고신뢰 → `cmd_schedule add` 경로로 위임
@@ -206,6 +213,7 @@
    - 애매하면 안전한 `plan` + 사용자 확인 보고
 3. 라우팅 trace를 `diagnostics/auto-route-last.json`에 저장.
 4. OpenCode 기본 레시피는 `/auto`를 1순위로 안내하고, 세부 명령은 고급/직접 실행용으로 남긴다.
+5. 작업 종료 후 `BUILD_PHILOSOPHY_20260708.md`의 종료 후 체크를 기록한다.
 
 **검증**
 - `py -3.11 tests\test_auto_command.py`
@@ -229,10 +237,12 @@
 - 생성: `workspace/tests/test_routing_alignment.py`
 
 **작업**
+0. `BUILD_PHILOSOPHY_20260708.md`의 시작 전 체크를 읽고, 서로 갈라져 있던 판단 근거를 어디서 하나로 묶을지 기록한다.
 1. capability id 기준으로 tool group/skill hint를 연결하는 작은 메타데이터를 추가한다.
 2. `tool_dispatch`는 prompt 키워드만 보지 않고, 가능하면 `capability_ids`를 우선 사용한다.
 3. `skill_router`도 capability 기반 우선순위를 받도록 옵션을 둔다.
 4. 키워드 중복을 당장 완전 제거하지는 말고, 테스트로 drift를 먼저 막는다.
+5. 작업 종료 후 `BUILD_PHILOSOPHY_20260708.md`의 종료 후 체크를 기록한다.
 
 **검증**
 - `py -3.11 tests\test_routing_alignment.py`
@@ -258,11 +268,13 @@
 - 생성: `workspace/tests/test_auto_learning_hooks.py`
 
 **작업**
+0. `BUILD_PHILOSOPHY_20260708.md`의 시작 전 체크를 읽고, 결과가 기억/평가/위키/유지보수 중 어디로 돌아가야 하는지 기록한다.
 1. `agentops.py`에 `_complete_activity(task, outcome, kind, files, route)` 같은 공통 후크 추가.
 2. `work`, `agent`, `report-html`, `report-xlsx`, `office-doc`, `doc-template`, `routine run`, `briefing` 성공 경로가 공통 후크를 사용하게 정리.
 3. 실패는 `record_self_error()`로 들어가되, 같은 날/같은 원인 중복 억제.
 4. `memory-inject.ts` compaction summary는 `remember`가 아니라 low priority activity 또는 별도 CLI 경로를 사용하도록 낮은 등급화한다. 최소한 hash/day 중복 억제를 넣는다.
 5. `recall --pinned`의 최근 activity 개수/길이를 제한해 세션 시작 컨텍스트 오염을 줄인다.
+6. 작업 종료 후 `BUILD_PHILOSOPHY_20260708.md`의 종료 후 체크를 기록한다.
 
 **검증**
 - `py -3.11 tests\test_auto_learning_hooks.py`
@@ -288,9 +300,11 @@
 - 생성/수정: `workspace/tests/test_wiki_manager.py`
 
 **작업**
+0. `BUILD_PHILOSOPHY_20260708.md`의 시작 전 체크를 읽고, 사람이 쓴 노트와 자동 기억의 경계를 기록한다.
 1. `wiki/manual/*.md`를 `recall_pages()` 후보에 포함하되, 자동 페이지와 구분되는 source를 표시한다.
 2. manual 노트는 원장으로 역동기화하지 않는다. 사람이 쓴 노트는 원본을 보존하고 recall에서만 사용한다.
 3. manual/auto 양쪽에서 같은 키워드가 잡히면 manual을 1개 우선 포함한다.
+4. 작업 종료 후 `BUILD_PHILOSOPHY_20260708.md`의 종료 후 체크를 기록한다.
 
 **검증**
 - `py -3.11 tests\test_wiki_manager.py`
@@ -315,6 +329,7 @@
 - 수정/생성: `workspace/tests/test_launch_bats.py`, `workspace/tests/test_opencode_command_coverage.py`
 
 **작업**
+0. `BUILD_PHILOSOPHY_20260708.md`의 시작 전 체크를 읽고, 오프라인 예측 가능성과 안전하게 멈춰야 하는 조건을 기록한다.
 1. `AGENTOPS_HOME`을 모든 명령/플러그인의 기준 경로로 확립한다.
 2. `.opencode/commands/*.md`의 `python agent_ops/...` 상대경로를 `%AGENTOPS_HOME%\agent_ops\...` 기준으로 정규화한다.
 3. `RUN_OPENCODE_LIG.bat`는 OpenCode 실행 직전 `AGENTOPS_OUTPUT_DIR`가 있으면 그 폴더로 cwd를 복원한다.
@@ -323,6 +338,7 @@
    - 1단계: 현재 값 유지, 테스트로 JSON 유효성과 provider/model 기본값을 고정
    - 2단계: 사내망에서 OpenCode env 보간 지원 확인 후 적용. 미확인이면 런처가 `opencode.generated.json`을 생성하는 방식으로 우회
 6. 모델 기본값 단일화는 사용자 A/B 확인 전에는 변경하지 않는다.
+7. 작업 종료 후 `BUILD_PHILOSOPHY_20260708.md`의 종료 후 체크를 기록한다.
 
 **검증**
 - `py -3.11 tests\test_launch_bats.py`
@@ -356,10 +372,12 @@
 - 생성/수정: `workspace/tests/test_adapter_tools_maintain.py`, `workspace/tests/test_memory_activity.py`
 
 **작업**
+0. `BUILD_PHILOSOPHY_20260708.md`의 시작 전 체크를 읽고, 유지보수가 기억을 정제하는지 오염시키는지 기준을 기록한다.
 1. 유지보수 실행 결과에 consolidate/book/lint 횟수와 skip reason을 기록한다.
 2. audit/timeline에서 반복 실패나 긴 stall을 감지해 `error_pattern`으로 승격하는 opt-in 배치를 추가한다.
 3. `remember` 1회에서 위키/책 재생성 중복 호출을 줄인다.
 4. 위험도가 큰 `memory.jsonl` append 최적화는 마지막 단계로 미룬다. 먼저 계측과 테스트를 만든 뒤 진행한다.
+5. 작업 종료 후 `BUILD_PHILOSOPHY_20260708.md`의 종료 후 체크를 기록한다.
 
 **검증**
 - `py -3.11 tests\test_adapter_tools_maintain.py`
@@ -386,6 +404,7 @@
 - 생성/수정: `workspace/tests/test_auto_command.py`
 
 **작업**
+0. `BUILD_PHILOSOPHY_20260708.md`의 시작 전 체크를 읽고, 사용자에게 묻지 않아야 할 것과 반드시 물어야 할 것을 구분한다.
 1. `auto_policy.py`에 `choose_execution_policy(request, capabilities, context, safety)`를 만든다.
 2. 정책 결과는 다음 필드를 가진다.
    - `mode`: `execute`, `plan_only`, `ask_user`, `blocked`
@@ -401,6 +420,7 @@
    - 일정/루틴처럼 command-native가 더 안정적인 요청은 해당 명령으로 위임
 4. `cmd_auto`는 capability 결과를 바로 실행하지 않고 `auto_policy`를 거쳐 실행한다.
 5. 정책 결정은 route trace에 저장하고, 사용자가 선택한 답변도 다음 평가에 쓰도록 기록한다.
+6. 작업 종료 후 `BUILD_PHILOSOPHY_20260708.md`의 종료 후 체크를 기록한다.
 
 **연동 주의**
 - `auto_policy`는 safety를 우회하지 않는다. safety 결과를 입력받아 더 보수적으로만 바꿀 수 있다.
@@ -431,6 +451,7 @@
 - 생성/수정: `workspace/docs/운영/INTELLIGENCE_COVERAGE_REPORT.md`
 
 **작업**
+0. `BUILD_PHILOSOPHY_20260708.md`의 시작 전 체크를 읽고, 이번 작업이 무엇을 평가하고 어떻게 성장으로 이어지는지 기록한다.
 1. `evaluation_loop.py`에 `score_run(trace, outcome)`을 만든다.
 2. 평가 항목:
    - `route_confidence`: 라우팅 확신도
@@ -448,6 +469,7 @@
    - 반복 실패에서 개선된 항목
    - 새로 승격된 기억/선호
    - 아직 보류 중인 기능
+7. 작업 종료 후 `BUILD_PHILOSOPHY_20260708.md`의 종료 후 체크를 기록한다.
 
 **연동 주의**
 - 평가 점수는 정책의 보조 신호다. 안전 정책을 덮어쓸 수 없다.
@@ -478,6 +500,7 @@
 - 생성: `workspace/tests/test_memory_quality.py`
 
 **작업**
+0. `BUILD_PHILOSOPHY_20260708.md`의 시작 전 체크를 읽고, 좋은 기억과 잡음의 경계를 기록한다.
 1. 기억 등급을 명확히 분리한다.
    - `user_rule`: 사용자가 명시한 규칙. 가장 높은 우선순위, 자동 삭제 금지
    - `preference`: 반복 확인된 사용자 선호
@@ -496,6 +519,7 @@
    - 최신 규칙과 충돌하는 자동 기록
 5. recall은 `user_rule`, `preference`, `project_fact`, `manual wiki`를 우선하고 activity는 제한적으로만 넣는다.
 6. Obsidian wiki는 자동 정리 페이지와 manual 페이지를 계속 분리한다.
+7. 작업 종료 후 `BUILD_PHILOSOPHY_20260708.md`의 종료 후 체크를 기록한다.
 
 **연동 주의**
 - 사용자가 직접 남긴 기억과 manual wiki는 자동 감쇠/삭제하지 않는다.
@@ -524,6 +548,7 @@
 - 필요 시 수정: 발견된 누락 테스트/문서
 
 **작업**
+0. `BUILD_PHILOSOPHY_20260708.md`의 시작 전 체크를 읽고, 최종 검토가 확인해야 할 사용자 부담 감소와 지능 연결 기준을 기록한다.
 1. `INTELLIGENCE_COVERAGE_REPORT.md`를 최신 코드 기준으로 갱신한다.
 2. `auto` route trace 샘플을 최소 8개 남긴다.
    - 문서 작성
@@ -541,6 +566,7 @@
    - USERDATA 위험 변경 0개
    - GitHub push 없음
    - 사내망 실기기 필요 항목은 별도 체크리스트로 분리
+5. 작업 종료 후 `BUILD_PHILOSOPHY_20260708.md`의 종료 후 체크를 기록한다.
 
 **검증**
 - `py -3.11 tests\test_intelligence_map.py`
@@ -622,6 +648,7 @@
 - 전체 설계 검토, 데이터 손상 가능성, 최종 브랜치 리뷰는 `gpt-5.5`.
 - 각 서브에이전트는 GitHub push 금지, USERDATA 삭제 금지, 다른 작업자 변경 되돌리기 금지.
 - 각 작업은 완료 후 다음을 남긴다:
+  - `BUILD_PHILOSOPHY_20260708.md` 시작 전/종료 후 체크 답변
   - 변경 요약
   - 방향성/설계 판단
   - 검증 명령과 결과
