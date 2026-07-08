@@ -10,6 +10,9 @@
       대표 항목만 priority=high + '반복확인됨' 태그(원본 비파괴, 태그/우선순위 갱신만)
   2c) stall 계측 — audit.jsonl 기반 멈춤 의심 구간을 세어 summary에 기록(관측만,
       자동 개입 없음)
+  2d) 기억 품질 정제(WS-9, memory_quality.apply_quality) — 등급 분류 후
+      tags/priority/status 만 갱신. 행 삭제 없음, 사용자 기억(user/manual·
+      preference·project_fact)은 비감쇠
   3) 지식책 재생성(원장·위키가 책보다 새것일 때만; 최신이면 skipped: fresh)
 
 모든 단계는 best-effort — 실패해도 기억 저장/작업을 막지 않는다.
@@ -190,6 +193,16 @@ def maybe_maintain(force: bool = False, interval_hours: float = DEFAULT_INTERVAL
     except Exception as exc:  # noqa: BLE001
         summary["stalls"] = 0
         summary["stalls_error"] = repr(exc)[:120]
+    # 2d) 기억 품질 정제(WS-9) — 등급 판정 후 tags/priority/status 만 갱신.
+    #     행 삭제 없음, user_rule/preference/project_fact/source=user/manual 비감쇠.
+    #     2b(반복 실패 승격) 뒤에 실행 — error_pattern 승격은 2b 소관이라 중복 없음.
+    try:
+        from .memory_quality import apply_quality
+        q = apply_quality()
+        summary["quality"] = {k: q.get(k, 0) for k in
+                              ("promoted", "decayed", "superseded", "protected_untouched")}
+    except Exception as exc:  # noqa: BLE001
+        summary["quality_error"] = repr(exc)[:120]
     # 3) 지식책 재생성(위키는 방금 통합했으니 재통합 생략).
     #    원장(memory.jsonl)·위키(WIKI.md)가 책보다 새것일 때만 다시 그린다 —
     #    변화가 없으면 skipped: fresh 로 사유를 남긴다(관측 후 최적화).

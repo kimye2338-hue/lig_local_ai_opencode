@@ -287,6 +287,9 @@ MEMORY_ITEMS = [
           "auto", "memory_wiki", "Obsidian vault seeding/opening helper.", "no overwrite of manual notes"),
     _item("memory", "knowledge_book", ["workspace/agent_ops/knowledge_book.py"],
           "auto", "memory_wiki", "Generated knowledge book from memory/wiki/audit.", "generated output"),
+    _item("memory", "memory_quality", ["workspace/agent_ops/memory_quality.py"],
+          "auto", "maintenance", "WS-9 memory grading and long-term promotion/decay applied via auto_maintain.",
+          "user_rule/manual 비감쇠, 삭제 없음, 등급 정제만(tags/priority/status)"),
 ]
 
 

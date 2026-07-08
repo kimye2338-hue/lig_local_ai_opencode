@@ -242,7 +242,7 @@ def recall(task_kind: str = "", keywords: List[str] | None = None, limit: int = 
         # limit(6)를 점유해 진짜 관련 기억을 밀어낸다 — 상시 노출은 pinned_recall 담당.
         if score <= 0:
             continue
-        if row.get("kind") in {"lesson", "error_pattern", "preference"}:
+        if row.get("kind") in {"lesson", "error_pattern", "preference", "project_fact", "user_rule"}:
             score += 1
         if row.get("source") == "user":
             score += 3
@@ -255,6 +255,12 @@ def recall(task_kind: str = "", keywords: List[str] | None = None, limit: int = 
         rel += float(row.get("importance", 0.4)) * 2.0
         if str(row.get("created_at", ""))[:10] >= _days_ago(30):
             rel += 0.5
+        # WS-9 등급 가중: 일회성 활동 로그는 회상에서 제한적으로만 —
+        # 사용자 규칙/선호/사실(user_rule·preference·project_fact)이 항상 위로
+        # 오도록 activity 는 가중을 절반으로 깎는다(제외는 아님 — 관련되면 나온다).
+        # 시그니처/반환형 불변, core_memory·pinned_recall 의 상시 주입도 불변.
+        if row.get("kind") == "activity" and row.get("source") != "user":
+            rel *= 0.5
         scored.append((rel, row))
     scored.sort(key=lambda x: (-x[0], str(x[1].get("created_at", ""))))
     return [r for _, r in scored[:limit]]
