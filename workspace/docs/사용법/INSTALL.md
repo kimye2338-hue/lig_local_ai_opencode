@@ -5,22 +5,26 @@
 
 ## 설치
 
-1. 배포 zip을 풉니다.
-2. `INSTALL_OFFLINE_LIG_OPENCODE.bat.txt`를 `INSTALL_OFFLINE_LIG_OPENCODE.bat`로 이름 변경합니다.
-3. `.bat`를 더블클릭합니다.
-4. 설치 후 실행:
+1. 배포 폴더(또는 zip을 푼 폴더)를 엽니다.
+2. `INSTALL_OFFLINE_LIG_OPENCODE.bat`를 더블클릭합니다.
+   (전송 과정에서 파일이 `INSTALL_OFFLINE_LIG_OPENCODE.bat.txt`로 보이면 확장자를 `.bat`로
+   바꾼 뒤 실행하세요.)
+3. 설치 후 실행:
 
 ```text
 %USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat
 ```
 
-## 첫 설정
+## 첫 설정 (기본은 자동 — 보통 건드릴 필요 없음)
 
-아래 파일에 사내 LLM 게이트웨이 주소와 키를 넣습니다.
+게이트웨이 주소·키·라우트·모델은 배포 패키지에 이미 채워져 있습니다. 설치기가 아래 파일로
+시드하므로 **따로 설정하지 않아도** 실행하면 바로 사내 게이트웨이에 연결됩니다.
 
 ```text
 %USERPROFILE%\OpenCodeLIG_USERDATA\secrets\lig-api.env
 ```
+
+게이트웨이 주소가 바뀐 경우에만 위 파일의 두 값을 수정하세요(그 외에는 그대로 둡니다).
 
 ```env
 LIG_GATEWAY_BASE_URL=http://사내게이트웨이주소

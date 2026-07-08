@@ -4,8 +4,19 @@
 const PROSE_MARKERS = [
   "the content contains", "let's write", "let's create", "better to use",
   "actually the content", "json error", "manual formatting",
-  "use echo for each part", "생략", "하려고", "설명", "대안", "생각",
+  "use echo for each part",
 ]
+
+// Common Korean words that show up legitimately inside quoted arguments
+// (commit messages, file names, echoed text — e.g. `git commit -m "설명 추가"`).
+// A single hit inside quotes is not enough evidence of prose leaking into the
+// command, so these only block when they appear outside quotes or two+ show up
+// together (a stronger dumped-prose signal). Mirrors command_guard.py.
+const WEAK_PROSE_MARKERS = ["생략", "하려고", "설명", "대안", "생각"]
+
+function stripQuoted(text: string): string {
+  return text.replace(/"[^"]*"/g, "").replace(/'[^']*'/g, "")
+}
 
 const FAKE_TOOL_MARKERS = [
   'bash {"command"', "functions.bash(", "<tool_call>", '"name":"bash"', '"name": "bash"',
@@ -48,6 +59,11 @@ function reasonsFor(cmd: string): string[] {
   const lower = cmd.toLowerCase()
   const reasons: string[] = []
   for (const m of PROSE_MARKERS) if (lower.includes(m)) reasons.push(`prose/reasoning in command: ${m}`)
+  const outsideQuotesLower = stripQuoted(cmd).toLowerCase()
+  const weakHits = WEAK_PROSE_MARKERS.filter(m => lower.includes(m))
+  for (const m of weakHits) {
+    if (outsideQuotesLower.includes(m) || weakHits.length >= 2) reasons.push(`prose/reasoning in command: ${m}`)
+  }
   for (const m of FAKE_TOOL_MARKERS) if (lower.includes(m.toLowerCase())) reasons.push(`fake tool-call text: ${m}`)
   for (const re of WRITE_CODE) if (re.test(cmd)) reasons.push("heredoc/cat/echo/printf/python -c writes a file; use write/apply_patch/safe_file_writer")
   for (const re of DANGEROUS) if (re.test(cmd)) reasons.push("dangerous destructive shell pattern")

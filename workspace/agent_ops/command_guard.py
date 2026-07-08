@@ -29,6 +29,14 @@ PROSE_MARKERS = [
     "JSON error",
     "manual formatting",
     "Use echo for each part",
+]
+
+# Common Korean words that show up legitimately inside commit messages, file
+# names, or echoed text (e.g. `git commit -m "설명 추가"`). A single hit inside
+# a quoted argument is not enough evidence of prose/reasoning leaking into the
+# command, so these only escalate to BLOCK when they appear outside quotes or
+# when two or more of them show up together (a stronger sign of dumped prose).
+WEAK_PROSE_MARKERS = [
     "생략",
     "하려고",
     "설명",
@@ -115,7 +123,10 @@ def _safe_prefix_writes_output(cmd: str) -> bool:
     """Detect file-writing flags on commands that are otherwise read-only."""
     if not re.match(r"^git\s+(diff|log)(?:\s|$)", cmd, re.I):
         return False
-    return bool(re.search(r"(?:^|\s)(?:--output(?:=|\s+)|-o(?:\s+|=))\S+", cmd, re.I))
+    # --output / -o in any form (=FILE, space-separated, quoted flag, glued),
+    # but NOT display flags like --output-indicator-new (next char must be a
+    # separator/quote/end, never another word char).
+    return bool(re.search(r"""(?:^|[\s"'])(?:--output|-o)(?=[=\s"']|$)""", cmd, re.I))
 
 def now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
@@ -149,6 +160,12 @@ def _detect_heredoc_issue(text: str) -> List[str]:
         reasons.append("escaped newlines inside one-line command; high risk of broken file content")
     return reasons
 
+def _strip_quoted(text: str) -> str:
+    """Remove single- and double-quoted spans so weak markers found only
+    inside quoted arguments (commit messages, file names, echoed text) don't
+    read as prose leaking into the command itself."""
+    return re.sub(r"'[^']*'", "", re.sub(r'"[^"]*"', "", text))
+
 def analyze(text: str) -> Dict[str, Any]:
     command = text or ""
     lower = command.lower()
@@ -161,6 +178,14 @@ def analyze(text: str) -> Dict[str, Any]:
     for marker in PROSE_MARKERS:
         if marker.lower() in lower:
             reasons.append(f"prose/reasoning marker in command: {marker}")
+
+    outside_quotes_lower = _strip_quoted(command).lower()
+    weak_hits = [m for m in WEAK_PROSE_MARKERS if m.lower() in lower]
+    for marker in weak_hits:
+        if marker.lower() in outside_quotes_lower or len(weak_hits) >= 2:
+            reasons.append(f"prose/reasoning marker in command: {marker}")
+        else:
+            warnings.append(f"weak prose marker '{marker}' found only inside quoted text; not blocking")
 
     for marker in FAKE_TOOL_MARKERS:
         if marker.lower() in lower:

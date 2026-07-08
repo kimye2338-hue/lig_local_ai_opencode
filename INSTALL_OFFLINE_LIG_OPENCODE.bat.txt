@@ -67,9 +67,11 @@ if errorlevel 1 (
 )
 rem /PURGE mirrors the workspace to exactly match this package so stale files
 rem from a previous install (runtime output folders, results, snapshots)
-rem never linger. /XD tools keeps user-imported offline binaries
-rem (Obsidian/OCR/wheels) intact across reinstalls.
-robocopy "%~dp0workspace" "%WS%" /E /PURGE /XD "%WS%\tools" "%WS%\tests" "%WS%\docs\archive" /NFL /NDL /NJH /NJS /NP >nul
+rem never linger. /XD must name SOURCE-side paths (robocopy matches the dir
+rem being scanned, not the destination) so tools\ is neither re-copied from
+rem the package nor purged from an existing install - keeping user-imported
+rem offline binaries (Obsidian/OCR/wheels) intact across reinstalls.
+robocopy "%~dp0workspace" "%WS%" /E /PURGE /XD "%~dp0workspace\tools" "%~dp0workspace\tests" "%~dp0workspace\docs\archive" /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 (
   echo [ERROR] Workspace copy failed
   pause
@@ -77,6 +79,13 @@ if errorlevel 8 (
 )
 rem Ensure tools\ exists (its README ships in the package but /XD skipped it).
 if not exist "%WS%\tools" mkdir "%WS%\tools"
+rem The package's own wheelhouse is not user data (unlike Obsidian/OCR the
+rem user brings in later), so copy it into the installed tree too: this is
+rem what makes launch\install-tools.bat retryable from the installed
+rem workspace instead of only from the install package.
+if exist "%~dp0workspace\tools\wheelhouse" (
+  robocopy "%~dp0workspace\tools\wheelhouse" "%WS%\tools\wheelhouse" /E /NFL /NDL /NJH /NJS /NP >nul
+)
 
 rem Expose `ocd` as a global command: copy the launcher into bin and add bin
 rem to the USER PATH safely (PowerShell SetEnvironmentVariable - no setx 1024-char

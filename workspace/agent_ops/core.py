@@ -61,10 +61,14 @@ def read_text(path: Path) -> str:
 def atomic_write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     text = str(content).replace("\r\n", "\n")
+    # 프로젝트 불변 규칙: .bat/.cmd(.txt 포함)는 항상 CRLF. LF-only로 쓰면 안 된다.
+    name_lower = path.name.lower()
+    is_bat_cmd = path.suffix.lower() in {".bat", ".cmd"} or name_lower.endswith(".bat.txt") or name_lower.endswith(".cmd.txt")
+    newline = "\r\n" if is_bat_cmd else "\n"
     fd, tmp = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
     tmp_path = Path(tmp)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8", errors="replace", newline="\n") as f:
+        with os.fdopen(fd, "w", encoding="utf-8", errors="replace", newline=newline) as f:
             f.write(text)
         os.replace(str(tmp_path), str(path))
     finally:

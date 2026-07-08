@@ -1,7 +1,0 @@
-# 반입 바이너리는 저장소에 커밋하지 않는다(용량·라이선스). README만 추적.
-wheelhouse/
-Obsidian/
-ocr/
-*.exe
-*.whl
-*.gz

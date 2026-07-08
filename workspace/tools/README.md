@@ -27,7 +27,9 @@ pip install --no-index --find-links tools\wheelhouse openpyxl python-docx python
 - 설치본 1개(약 295MB)라 이 패키지엔 미포함. 인터넷 PC에서 직접 받아 회사 PC로 반입:
   `https://github.com/obsidianmd/obsidian-releases/releases/latest` → `Obsidian-x.x.x.exe`
 - 회사 PC에서 그 exe를 1회 실행(오프라인 설치 가능) → `launch\wiki.bat` 가
-  `%LOCALAPPDATA%\Obsidian\Obsidian.exe` 로 자동 인식. 포터블로 두려면 `tools\Obsidian\Obsidian.exe`.
+  `%LOCALAPPDATA%\Obsidian\Obsidian.exe` 로 자동 인식. 포터블로 두려면
+  `%USERPROFILE%\OpenCodeLIG\tools\Obsidian\Obsidian.exe`(이 workspace 폴더가 아니라
+  설치 루트 바로 아래 `tools\`).
 - 없어도 위키(.md)는 정상 — 그래프/의미검색 UI만 없을 뿐. 상세: `docs\기능\OBSIDIAN_WIKI.md`.
 
 ## 3. OCR 엔진 (화면 읽기, 선택) — wheel은 포함됨

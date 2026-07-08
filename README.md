@@ -3,14 +3,17 @@
 사내 망분리 윈도우 PC용 한국어 AI 업무비서. 자세한 사용법은
 **`workspace/docs/사용법/GUIDE.md` 하나면 됩니다.** 새 세션(AI)으로 이어작업할 땐 `CLAUDE.md`.
 
-## 회사에 반입할 파일 (3개)
+## 회사에 반입할 파일
 
-| zip | 내용 | 필수 |
+프로그램 본체는 **이 배포 패키지 1개**면 끝입니다(라이브러리·wheel 모두 포함). 나머지 3개는
+사용자가 별도로 반입/설치하는 사전 준비물입니다.
+
+| 파일 | 내용 | 구분 |
 |---|---|---|
-| **LIG_OPENCODE_배포패키지** | 프로그램 본체(opencode.exe·설정·런타임·wheelhouse). 압축 풀고 `INSTALL_OFFLINE_LIG_OPENCODE.bat` 실행 | 필수 |
-| **Windows Terminal** | 한글 입력을 매끄럽게 쓰기 위한 터미널 | 사용자가 별도 설치 |
-| **Python 3.11** | 런타임 실행 및 wheel 설치용 | 사용자가 별도 설치 |
+| **LIG_OPENCODE 배포 패키지** | 프로그램 본체(opencode.exe·설정·런타임·wheelhouse 전부 포함). 폴더 안 `INSTALL_OFFLINE_LIG_OPENCODE.bat` 한 번 실행 | 이 패키지(필수) |
+| **Python 3.11.3** | 런타임 실행 및 wheel 설치용 | 사용자가 별도 설치 |
 | **Obsidian** | 기억 위키를 그래프/백링크로 보기 | 사용자가 별도 설치 |
+| **Windows Terminal** | 한글 입력을 매끄럽게 쓰기 위한 터미널(권장) | 사용자가 별도 설치 |
 
 ## 설치 순서 (2번만 열면 끝)
 

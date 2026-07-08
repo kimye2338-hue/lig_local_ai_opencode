@@ -120,6 +120,19 @@ def run_macro(doc_path: str, bas_path: str, options: Dict[str, Any] | None = Non
         result: Dict[str, Any] = {"ok": ok, "copy_path": str(copy_doc), "saved": False}
         if not ok:
             result["error"] = "SolidWorks RunMacro2 failed"
+        else:
+            saved = False
+            try:
+                # swSaveAsOptions_Silent(1) — 대화상자 없이 사본 문서 저장
+                saved = bool(model.Save3(1, 0, 0))
+            except Exception:
+                saved = False
+            result["saved"] = saved
+            if not saved:
+                result["warning"] = (
+                    "매크로 실행 후 사본 저장 실패 — 매크로가 자체적으로 저장하지 않았다면 "
+                    "변경 사항이 소실되었을 수 있습니다."
+                )
         return result
     except Exception as exc:
         return {"ok": False, "copy_path": str(copy_doc), "error": f"SolidWorks run_macro failed: {exc.__class__.__name__}"}

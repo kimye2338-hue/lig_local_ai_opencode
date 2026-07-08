@@ -21,7 +21,7 @@ python agent_ops\agentops.py doctor
 | OpenCode가 안 뜸 | 설치 파일, payload 해시 | `python agent_ops\agentops.py verify` 실행. 설치본에 `VERIFY_OFFLINE_INSTALL.bat`가 있으면 함께 확인 |
 | 한글이 깨짐/밀림 | 실행 경로, 터미널 | `RUN_OPENCODE_LIG.bat` 또는 `launch\*.bat`로 실행. Windows Terminal 권장 |
 | 문서 읽기/Office 생성 기능이 안 됨 | 선택 wheel 반입 상태 | `python agent_ops\agentops.py deps` 확인 후 필요한 wheel 반입 |
-| Obsidian이 안 열림 | `tools\Obsidian\Obsidian.exe` | 없으면 탐색기로 위키 폴더만 열리는 것이 정상. 포터블 Obsidian을 해당 위치에 배치 |
+| Obsidian이 안 열림 | `%USERPROFILE%\OpenCodeLIG\tools\Obsidian\Obsidian.exe` (workspace 밖, 상위 폴더) | 없으면 탐색기로 위키 폴더만 열리는 것이 정상. 포터블 Obsidian을 해당 위치에 배치 |
 | 작업이 멈춘 듯함 | `watch`, audit, results | `python agent_ops\agentops.py watch` → 멈춤이면 `doctor` → 더 작은 요청으로 재시도 |
 | 일정이 이상함 | schedule 저장 폴더와 `.bak` | `python agent_ops\agentops.py schedule list --when all` 후 백업 복구 |
 | 앱 프로세스가 남음 | Excel/HWP/CAD 프로세스 | 작업관리자에서 잔류 프로세스 종료. 원본 대신 사본/산출물 사용 여부 확인 |

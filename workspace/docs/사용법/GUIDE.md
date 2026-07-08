@@ -24,10 +24,10 @@ OpenCodeLIG는 세 층으로 동작합니다.
 
 ## 2. 설치와 첫 실행
 
-1. 배포 zip을 풉니다.
-2. `INSTALL_OFFLINE_LIG_OPENCODE.bat.txt` 파일명을 `INSTALL_OFFLINE_LIG_OPENCODE.bat`로 바꿉니다.
-3. `.bat` 파일을 더블클릭합니다.
-4. 설치가 끝나면 아래 위치에 프로그램이 놓입니다.
+1. 배포 폴더(또는 zip을 푼 폴더)를 엽니다.
+2. `INSTALL_OFFLINE_LIG_OPENCODE.bat`를 더블클릭합니다.
+   (전송 과정에서 `INSTALL_OFFLINE_LIG_OPENCODE.bat.txt`로 보이면 확장자를 `.bat`로 바꾼 뒤 실행하세요.)
+3. 설치가 끝나면 아래 위치에 프로그램이 놓입니다.
 
 ```text
 %USERPROFILE%\OpenCodeLIG\workspace
@@ -39,8 +39,8 @@ OpenCodeLIG는 세 층으로 동작합니다.
 %USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat
 ```
 
-처음 실행하면 게이트웨이 설정 파일이 만들어지고 메모장이 열릴 수 있습니다. 아래 두 줄만 채우면 됩니다.
-라우트와 모델명은 배포 설정을 그대로 두는 것이 기본입니다.
+게이트웨이 주소·키·라우트·모델은 배포 설정에 이미 채워져 있어 **보통은 그대로 두면 바로 연결**됩니다.
+값이 비어 있거나 플레이스홀더일 때만 실행 중 메모장이 열리며, 그 경우에만 아래 두 줄을 채웁니다.
 
 ```env
 LIG_GATEWAY_BASE_URL=http://사내게이트웨이주소
