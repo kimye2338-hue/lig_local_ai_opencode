@@ -799,9 +799,8 @@ class HamsterPetOverlay:
         self._draw_status_header(status, label)
 
         image = self.sprites.get(status, self.frame_index)
-        # 햄스터를 상태글자 바로 아래(상단 앵커)에 붙여 프레임 높이와 무관하게 간격을 일정하게
-        # 좁힌다. (X 닫기버튼 제거 — 닫기는 우클릭)
-        c.create_image(122, 44, image=image, anchor="n")
+        # 햄스터를 상태글자 아래에 배치(상단 앵커). 글자 배경 버블과 겹치지 않게 간격을 둔다.
+        c.create_image(122, 60, image=image, anchor="n")
         c.image_ref = image
 
     def _draw_status_header(self, status: str, label: str) -> None:
