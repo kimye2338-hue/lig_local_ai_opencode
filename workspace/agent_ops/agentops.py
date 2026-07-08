@@ -301,11 +301,26 @@ def cmd_report_html(args):
     if not src.exists():
         print(f"[report-html] 입력 파일 없음: {src}")
         return 1
-    out_dir = RESULTS / "reports"
+    out_dir = _artifact_dir(RESULTS / "reports")
     path = report_from_csv(src, out_dir, title=(args.title or None))
     print(f"HTML 리포트 생성: {path}")
     print("브라우저로 열면 표/차트가 보입니다 (오프라인, 외부 리소스 없음).")
     return 0
+
+
+def _artifact_dir(default):
+    """산출물 기본 출력 폴더. ocd 로 프로젝트 폴더에서 실행하면 AGENTOPS_OUTPUT_DIR(그 폴더)에
+    저장하고, 아니면 설치본의 results/reports 를 쓴다. (--out 을 명시하면 항상 그 경로 우선.)"""
+    d = os.environ.get("AGENTOPS_OUTPUT_DIR")
+    if not d:
+        return default
+    from pathlib import Path as _P
+    p = _P(d)
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    return p
 
 
 def cmd_report_xlsx(args):
@@ -318,7 +333,7 @@ def cmd_report_xlsx(args):
         print(f"[report-xlsx] 입력 파일 없음: {src}")
         return 1
     headers, rows, _ = build_from_csv(src)
-    out = _P(args.out) if args.out else (RESULTS / "reports" / f"{src.stem}.xlsx")
+    out = _P(args.out) if args.out else (_artifact_dir(RESULTS / "reports") / f"{src.stem}.xlsx")
     r = write_xlsx(out, headers, rows)
     if not r.get("ok"):
         print(f"[report-xlsx] 실패: {r.get('error')}\n  {r.get('hint','')}")
@@ -344,7 +359,7 @@ def cmd_office_doc(args):
         print(f"[office-doc] 스펙 JSON 파싱 실패: {exc!r}")
         return 1
     title = str(spec.get("title") or "문서")
-    out = _P(args.out) if args.out else (RESULTS / "reports" / f"{title}.{args.kind}")
+    out = _P(args.out) if args.out else (_artifact_dir(RESULTS / "reports") / f"{title}.{args.kind}")
     if args.kind == "docx":
         from agent_ops.office_writer import write_docx
         r = write_docx(out, title, spec.get("sections", []) or [])
@@ -419,7 +434,7 @@ def cmd_doc_template(args):
     if args.kind not in TEMPLATES:
         print(f"[doc-template] 종류: {' | '.join(TEMPLATES)}")
         return 2
-    out_dir = _P(args.out) if args.out else (RESULTS / "reports")
+    out_dir = _P(args.out) if args.out else _artifact_dir(RESULTS / "reports")
     res = generate(args.kind, out_dir, input_csv=(args.input or None),
                    title=(args.title or None), as_html=args.html, note=args.note)
     if not res.get("ok"):
@@ -807,7 +822,7 @@ def cmd_work(args):
         except Exception:  # noqa: BLE001
             pass
         artifact_result = generate_artifacts(task, plan["artifact_kinds"],
-                                             out_dir=RESULTS / "artifacts" / run_id,
+                                             out_dir=_artifact_dir(RESULTS / "artifacts") / run_id,
                                              context=ctx,
                                              enrich=llm_client is not None,
                                              llm_client=llm_client,
