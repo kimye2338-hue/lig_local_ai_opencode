@@ -671,9 +671,34 @@ class HamsterPetOverlay:
                     pass
         self._draw()
 
+    def _reassert_topmost(self) -> None:
+        # 평상시(idle/working)에도 다른 창에 가리지 않도록 매 폴링마다 최상위를 재고정한다.
+        # 포커스를 훔치지 않게 SWP_NOACTIVATE 사용(깜빡임/포커스 이동 없음).
+        try:
+            self.root.attributes("-topmost", True)
+        except Exception:
+            pass
+        if platform.system().lower() != "windows":
+            return
+        try:
+            user32 = ctypes.windll.user32
+            hwnd = self.root.winfo_id()
+            parent = user32.GetParent(hwnd)
+            top = parent if parent else hwnd
+            HWND_TOPMOST = -1
+            SWP_NOSIZE = 0x0001
+            SWP_NOMOVE = 0x0002
+            SWP_NOACTIVATE = 0x0010
+            user32.SetWindowPos(top, HWND_TOPMOST, 0, 0, 0, 0,
+                                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+        except Exception:
+            pass
+
     def _poll(self) -> None:
         try:
             self.refresh_once()
+            if getattr(self, "_visible", True):
+                self._reassert_topmost()
         except Exception:
             pass
         finally:

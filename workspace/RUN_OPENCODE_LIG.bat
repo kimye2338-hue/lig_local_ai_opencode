@@ -87,6 +87,16 @@ cd /d "%AGENTOPS_HOME%"
 rem 구 모드/primary 정리 (best-effort) — 패치 후에도 primary=agent 하나 강제.
 py -3.11 -m agent_ops.clean_stale >nul 2>&1 || python -m agent_ops.clean_stale >nul 2>&1
 
+rem 첫 실행 1회 안내: 기억 위키(Obsidian) 사용법. 마커가 있으면 다시 안 보여준다.
+if not exist "%OPENCODE_USERDATA%\.wiki_tip_shown" (
+  echo.
+  echo [팁] 기억 위키를 Obsidian으로 보려면: launch\wiki.bat 실행
+  echo      Obsidian은 tools\Obsidian\Obsidian.exe 포터블 또는 일반 설치^(없어도 위키는 동작^).
+  echo      자세히: docs\사용법\GUIDE.md 의 "6. 기억, 지식책, LLM Wiki"
+  echo.
+  >"%OPENCODE_USERDATA%\.wiki_tip_shown" echo shown
+)
+
 "%OCODE_EXE%" %*
 
 exit /b %errorlevel%
