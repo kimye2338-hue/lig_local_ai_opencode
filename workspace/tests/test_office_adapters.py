@@ -154,6 +154,74 @@ def main() -> None:
                or "SolidWorks 실행/접속 실패" in sw_absent.get("error", "")),
           str(sw_absent))
 
+    class FakeModel:
+        def GetTitle(self):
+            return "part.SLDPRT"
+
+    class FakeSolidWorksApp:
+        def __init__(self):
+            self.open_args = None
+            self.run_args = None
+            self.closed = []
+            self.Visible = False
+
+        def OpenDoc6(self, *args):
+            self.open_args = args
+            return FakeModel()
+
+        def RunMacro2(self, *args):
+            self.run_args = args
+            return True
+
+        def CloseDoc(self, title):
+            self.closed.append(title)
+
+    class FakeSolidWorksPythoncom:
+        def CoInitialize(self):
+            return None
+
+        def CoUninitialize(self):
+            return None
+
+    class FakeSolidWorksClient:
+        def __init__(self, app):
+            self.app = app
+
+        def GetActiveObject(self, _name):
+            return self.app
+
+        def Dispatch(self, _name):
+            return self.app
+
+    class FakeSolidWorksWin32:
+        def __init__(self, app):
+            self.client = FakeSolidWorksClient(app)
+
+    original_sw_error = solidworks_com._PYWIN32_ERROR
+    original_sw_pythoncom = solidworks_com.pythoncom
+    original_sw_win32com = solidworks_com.win32com
+    fake_app = FakeSolidWorksApp()
+    try:
+        solidworks_com._PYWIN32_ERROR = ""
+        solidworks_com.pythoncom = FakeSolidWorksPythoncom()
+        solidworks_com.win32com = FakeSolidWorksWin32(fake_app)
+        sw_ok = solidworks_com.execute("run_macro", {
+            "doc_path": str(sw_doc),
+            "bas_path": str(sw_swp),
+            "module": "Module1",
+            "procedure": "main",
+        })
+        check("solidworks swp macro can run through fake COM", sw_ok["ok"] is True, str(sw_ok))
+        check("solidworks OpenDoc6 uses part document type",
+              fake_app.open_args is not None and fake_app.open_args[1] == 1, str(fake_app.open_args))
+        check("solidworks RunMacro2 passes module and procedure",
+              fake_app.run_args is not None and fake_app.run_args[1:3] == ("Module1", "main"),
+              str(fake_app.run_args))
+    finally:
+        solidworks_com._PYWIN32_ERROR = original_sw_error
+        solidworks_com.pythoncom = original_sw_pythoncom
+        solidworks_com.win32com = original_sw_win32com
+
     bas = tmp_root / "macro.bas"
     bas.write_text("Sub Smoke()\nRange(\"A1\").Value = 42\nEnd Sub\n", encoding="utf-8")
 

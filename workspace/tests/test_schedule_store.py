@@ -107,6 +107,12 @@ def main() -> None:
                          cwd=str(Path(__file__).resolve().parents[1]), env=cli_env,
                          capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
     check("CLI add exits 0", add.returncode == 0 and "등록됨:" in add.stdout, add.stdout + add.stderr)
+    add_due = subprocess.run(cmd + ["add", "구동 점검 일정", "--due", "내일 오후 3시"],
+                             cwd=str(Path(__file__).resolve().parents[1]), env=cli_env,
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    check("CLI add accepts --due option",
+          add_due.returncode == 0 and "구동 점검 일정" in add_due.stdout and "15:00" in add_due.stdout,
+          add_due.stdout + add_due.stderr)
     today_cli = subprocess.run(cmd + ["today"], cwd=str(Path(__file__).resolve().parents[1]), env=cli_env,
                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
     check("CLI today shows fixed columns and item",

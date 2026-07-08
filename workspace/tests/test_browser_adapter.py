@@ -81,6 +81,42 @@ def main() -> None:
     bad = disp.dispatch({"name": "read_web_page", "arguments": {}})
     check("read_web_page requires url or tab", bad["ok"] is False and "url 또는 tab" in bad["error"], str(bad))
 
+    original_json_get = browser_cdp._json_get
+    original_urlopen = browser_cdp.urllib.request.urlopen
+    try:
+        def fake_json_get(path, method="GET"):
+            if path == "/json":
+                return [{
+                    "type": "page",
+                    "id": "tab-1",
+                    "title": "Target Tab",
+                    "url": "file:///target.html",
+                    "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/tab-1",
+                }]
+            return original_json_get(path, method=method)
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return None
+
+            def read(self):
+                return b"Target activated"
+
+        def fake_urlopen(request, timeout=2):
+            return FakeResponse()
+
+        browser_cdp._json_get = fake_json_get
+        browser_cdp.urllib.request.urlopen = fake_urlopen
+        selected = browser_cdp.execute("select_tab", {"tab": 0})
+        check("select_tab accepts Chrome activate plain-text response",
+              selected["ok"] is True and selected["data"]["selected"]["id"] == "tab-1", str(selected))
+    finally:
+        browser_cdp._json_get = original_json_get
+        browser_cdp.urllib.request.urlopen = original_urlopen
+
     if not chrome_9222_available():
         result = browser_cdp.execute("get_title", {})
         check("missing chrome returns ok false", result["ok"] is False)

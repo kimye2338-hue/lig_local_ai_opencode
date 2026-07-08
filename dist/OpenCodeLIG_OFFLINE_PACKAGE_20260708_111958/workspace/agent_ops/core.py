@@ -1,0 +1,306 @@
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+import json
+import os
+import platform
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional
+
+# AGENTOPS_ROOT overrides the workspace root (used by tests and relocated installs).
+ROOT = Path(os.environ.get("AGENTOPS_ROOT") or Path(__file__).resolve().parents[1])
+AGENT_OPS = ROOT / "agent_ops"
+STATE = AGENT_OPS / "state"
+LOGS = AGENT_OPS / "logs"
+REPORTS = AGENT_OPS / "reports"
+RESULTS = AGENT_OPS / "results"
+CONTROL = AGENT_OPS / "control"
+POLICIES = AGENT_OPS / "policies"
+CONFIG = AGENT_OPS / "config"
+ARCHIVE = AGENT_OPS / "archive"
+LOCKS = AGENT_OPS / "locks"
+# 기억은 '전역'이다 — 어느 폴더에서 작업하든 같은 기억을 공유해 점점 똑똑해진다.
+# 우선순위: AGENTOPS_MEMORY_DIR(명시) > AGENTOPS_ROOT/.agent-memory(테스트 격리)
+#           > %USERPROFILE%\OpenCodeLIG_USERDATA\memory (기본: 전역)
+MEMORY = Path(
+    os.environ.get("AGENTOPS_MEMORY_DIR")
+    or (Path(os.environ["AGENTOPS_ROOT"]) / ".agent-memory"
+        if os.environ.get("AGENTOPS_ROOT") else
+        Path.home() / "OpenCodeLIG_USERDATA" / "memory")
+)
+PORTAL = ROOT / "portal_research"
+
+def now() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+def ensure_dirs() -> None:
+    for path in [
+        AGENT_OPS, STATE, LOGS, REPORTS, RESULTS, CONTROL, POLICIES, CONFIG, ARCHIVE, LOCKS,
+        MEMORY, MEMORY / "archive",
+        PORTAL / "reports", PORTAL / "results", PORTAL / "logs",
+        PORTAL / "screenshots", PORTAL / "html_snapshots",
+        RESULTS / "llm_responses",
+    ]:
+        path.mkdir(parents=True, exist_ok=True)
+
+def read_text(path: Path) -> str:
+    try:
+        if path.exists():
+            return path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+    return ""
+
+def atomic_write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = str(content).replace("\r\n", "\n")
+    fd, tmp = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
+    tmp_path = Path(tmp)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", errors="replace", newline="\n") as f:
+            f.write(text)
+        os.replace(str(tmp_path), str(path))
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+
+def read_json(path: Path, default: Any) -> Any:
+    try:
+        if path.exists():
+            return json.loads(read_text(path))
+    except Exception:
+        return default
+    return default
+
+def atomic_write_json(path: Path, data: Any) -> None:
+    atomic_write_text(path, json.dumps(data, ensure_ascii=False, indent=2))
+
+def append_jsonl(path: Path, data: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", errors="replace") as f:
+        f.write(json.dumps(data, ensure_ascii=False) + "\n")
+
+def read_jsonl(path: Path) -> List[Any]:
+    out: List[Any] = []
+    if not path.exists():
+        return out
+    for line in read_text(path).splitlines():
+        if not line.strip():
+            continue
+        try:
+            out.append(json.loads(line))
+        except Exception:
+            out.append({"raw": line, "parse_error": True})
+    return out
+
+def write_jsonl(path: Path, rows: Iterable[Dict[str, Any]]) -> None:
+    rows = list(rows)
+    text = "\n".join(json.dumps(row, ensure_ascii=False) for row in rows)
+    if text:
+        text += "\n"
+    atomic_write_text(path, text)
+
+def tail_jsonl(path: Path, n: int) -> List[Any]:
+    return read_jsonl(path)[-n:]
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        # Windows: query the process list. Unknown -> assume alive (safe).
+        try:
+            import ctypes
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            STILL_ACTIVE = 259
+            kernel32 = ctypes.windll.kernel32
+            handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if not handle:
+                # Could be access-denied (alive) or gone. Fall back to tasklist.
+                try:
+                    out = subprocess.run(
+                        ["tasklist", "/FI", f"PID eq {pid}", "/NH", "/FO", "CSV"],
+                        capture_output=True, text=True, timeout=5,
+                    )
+                    # CSV의 PID 컬럼(2번째)을 정확히 대조 — 이미지명/메모리 사용량에
+                    # PID 숫자가 우연히 포함돼도 오탐하지 않는다.
+                    import csv as _csv
+                    import io as _io
+                    for parts in _csv.reader(_io.StringIO(out.stdout or "")):
+                        if len(parts) >= 2 and parts[1].strip() == str(pid):
+                            return True
+                    return False
+                except Exception:
+                    return True  # unknown -> assume alive (do not delete a maybe-live lock)
+            try:
+                exit_code = ctypes.c_ulong()
+                if kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                    return exit_code.value == STILL_ACTIVE
+                return True
+            finally:
+                kernel32.CloseHandle(handle)
+        except Exception:
+            return True  # unknown -> assume alive
+    # POSIX
+    try:
+        os.kill(pid, 0)
+        return True
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    except Exception:
+        return False
+
+def _lock_is_stale(lock_path: Path, max_age_seconds: int = 900) -> bool:
+    try:
+        text = read_text(lock_path).strip()
+        parts = text.split()
+        pid = int(parts[0]) if parts and parts[0].lstrip("-").isdigit() else -1
+        timestamp = parts[1] if len(parts) > 1 else ""
+        # Provably-dead PID -> stale immediately.
+        if pid > 0 and not _pid_alive(pid):
+            return True
+        # Otherwise decide by age only.
+        if timestamp:
+            t = datetime.fromisoformat(timestamp)
+            age = (datetime.now(t.tzinfo) - t).total_seconds()
+            return age > max_age_seconds
+        # No timestamp and PID alive/unknown -> not stale yet.
+        return False
+    except Exception:
+        # Unreadable/malformed lock: only treat as stale if it is also old on disk.
+        try:
+            age = time.time() - lock_path.stat().st_mtime
+            return age > max_age_seconds
+        except Exception:
+            return False
+
+@contextmanager
+def file_lock(name: str, timeout: float = 10.0, stale_after_seconds: int = 900):
+    ensure_dirs()
+    lock_path = LOCKS / (name + ".lock")
+    start = time.time()
+    fd = None
+    while True:
+        try:
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, f"{os.getpid()} {now()}".encode("utf-8", errors="replace"))
+            break
+        except FileExistsError:
+            if time.time() - start > timeout:
+                if _lock_is_stale(lock_path, stale_after_seconds):
+                    try:
+                        lock_path.unlink()
+                        start = time.time()
+                        continue
+                    except Exception:
+                        pass
+                raise TimeoutError(f"lock timeout: {lock_path}")
+            time.sleep(0.1)
+    try:
+        yield
+    finally:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+        try:
+            lock_path.unlink()
+        except Exception:
+            pass
+
+def run_cmd(args: List[str], timeout: int = 30) -> Dict[str, Any]:
+    # 바이트로 받아 UTF-8→CP949 폴백 디코드 — 한국어 Windows에서 자식 출력이
+    # 어느 코드페이지든 mojibake 없이 읽힌다 (encoding_ops.decode_console_bytes).
+    from .encoding_ops import decode_console_bytes
+    try:
+        cp = subprocess.run(
+            args,
+            cwd=str(ROOT),
+            capture_output=True,
+            timeout=timeout,
+        )
+        return {
+            "ok": cp.returncode == 0,
+            "returncode": cp.returncode,
+            "stdout": decode_console_bytes(cp.stdout or b"")[-5000:],
+            "stderr": decode_console_bytes(cp.stderr or b"")[-5000:],
+            "args": args,
+        }
+    except subprocess.TimeoutExpired as exc:
+        def _tail(stream: Any) -> str:
+            if isinstance(stream, bytes):
+                return decode_console_bytes(stream)[-2000:]
+            return str(stream or "")[-2000:]
+        return {"ok": False, "error": "TIMEOUT", "args": args, "timeout": timeout, "stdout": _tail(exc.stdout), "stderr": _tail(exc.stderr)}
+    except Exception as exc:
+        return {"ok": False, "error": repr(exc), "args": args}
+
+def backup_file(path: Path) -> Optional[Path]:
+    if not path.exists():
+        return None
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    try:
+        rel = path.relative_to(ROOT)
+    except Exception:
+        rel = Path(path.name)
+    backup = ARCHIVE / "backups" / stamp / rel
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(str(path), str(backup))
+    return backup
+
+def validate_written_file(path: Path) -> Dict[str, Any]:
+    info: Dict[str, Any] = {"path": str(path), "exists": path.exists(), "ok": True, "errors": []}
+    if not path.exists():
+        info["ok"] = False
+        info["errors"].append("missing")
+        return info
+    try:
+        text = path.read_text(encoding="utf-8")
+        info["chars"] = len(text)
+    except Exception as exc:
+        info["ok"] = False
+        info["errors"].append("utf8_read_failed:" + repr(exc))
+        return info
+    if path.suffix.lower() == ".json":
+        try:
+            json.loads(text)
+        except Exception as exc:
+            info["ok"] = False
+            info["errors"].append("json_parse_failed:" + repr(exc))
+    if path.suffix.lower() == ".py":
+        r = run_cmd([sys.executable, "-m", "py_compile", str(path)], timeout=30)
+        if not r.get("ok"):
+            info["ok"] = False
+            info["errors"].append("py_compile_failed")
+            info["py_compile"] = r
+    name_lower = path.name.lower()
+    if path.suffix.lower() in {".bat", ".cmd"} or name_lower.endswith(".bat.txt") or name_lower.endswith(".cmd.txt"):
+        try:
+            path.read_text(encoding="ascii")
+        except Exception:
+            info["ok"] = False
+            info["errors"].append("bat_cmd_must_be_ascii")
+    return info
+
+def is_stop_requested() -> bool:
+    return (CONTROL / "STOP").exists()
+
+def platform_info() -> Dict[str, Any]:
+    return {
+        "python": sys.version,
+        "platform": platform.platform(),
+        "cwd": str(ROOT),
+        "python_executable": sys.executable,
+    }

@@ -10,6 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import agent_ops.ui.hamster_overlay as hamster_overlay  # noqa: E402
 from agent_ops.ui.hamster_overlay import load_snapshot, read_recent_events  # noqa: E402
 
 PASS = 0
@@ -104,6 +105,9 @@ def main() -> None:
     snap = load_snapshot(state, diag)
     check("pet snapshot reflects agent completion", snap.status == "done", str(snap))
     os.environ.pop("LIG_STATE_DIR")
+
+    check("overlay geometry restore has regex module available",
+          hasattr(hamster_overlay, "re"), "hamster_overlay imports re for _onscreen")
 
     print(f"\nALL {PASS} CHECKS PASSED (hamster overlay state)")
 

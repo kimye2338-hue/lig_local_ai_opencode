@@ -153,4 +153,27 @@ with tempfile.TemporaryDirectory() as td:
     check("diag records route", data["route_selected"] == "lig-coding" and data["route_reason"] == "default" and data["profile"] == "company_gateway", str(data))
     check("no secret in diag", "FAKE_SECRET_9999" not in blob and "10.9.9.9" not in blob, "secret leaked")
 
+    # 16. Multipart content from OpenAI-compatible gateways is normalized before
+    # `.strip()` checks and diagnostics; this used to crash when no tool call was
+    # required and content was a list.
+    t = scripted(resp([{"type": "text", "text": "멀티파트 답변"}]))
+    r = call_llm(MSGS, env=ENV, transport=t, diag_dir=diag)
+    check("multipart text content normalized",
+          r["ok"] and r["content"] == "멀티파트 답변" and r["parse_status"] == "none", str(r))
+
+    # 17. Emergency local fallback must not relax the tool-call contract.
+    env_emergency = dict(ENV)
+    env_emergency["LIG_EMERGENCY_LOCAL_BASE_URL"] = "http://127.0.0.1:11434/v1"
+    t = scripted(TransportError("http_4xx", "HTTP 401"), resp("텍스트만 응답"))
+    r = call_llm(MSGS, tools=TOOLS, require_tool_call=True, env=env_emergency,
+                 transport=t, diag_dir=diag)
+    check("emergency local rejects text when tool required",
+          not r["ok"] and any(x.get("event") == "rejected" for x in r["trail"]), str(r))
+    t = scripted(TransportError("http_4xx", "HTTP 401"),
+                 resp("", [{"function": {"name": "rm_rf", "arguments": "{}"}}]))
+    r = call_llm(MSGS, tools=TOOLS, require_tool_call=True, env=env_emergency,
+                 transport=t, diag_dir=diag)
+    check("emergency local rejects unavailable tool",
+          not r["ok"] and any(x.get("unavailable_tools") == ["rm_rf"] for x in r["trail"]), str(r))
+
 print(f"\n{PASS} checks passed")

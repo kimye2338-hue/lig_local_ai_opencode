@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from agent_ops import tool_dispatch  # noqa: E402
 from agent_ops.approval import classify_risk, request_approval  # noqa: E402
 from agent_ops.audit import record  # noqa: E402
+from agent_ops.command_guard import ASK, analyze  # noqa: E402
 from agent_ops.tool_dispatch import ToolDispatcher  # noqa: E402
 
 PASS = 0
@@ -133,6 +134,14 @@ def main() -> None:
             os.environ["AGENTOPS_ROOT"] = old_root
     check("operations reports shipped runbook even with relocated data root",
           ops.get("runbook") is True, str(ops))
+
+    # --- command guard: safe git readers must not auto-allow file-writing options ---
+    guarded = analyze("git diff --output=agent_ops/core.py")
+    check("git diff --output is not auto-allowed",
+          guarded["decision"] == ASK and guarded["safe_prefix"] is False, str(guarded))
+    guarded = analyze("git log --output=agent_ops/core.py")
+    check("git log --output is not auto-allowed",
+          guarded["decision"] == ASK and guarded["safe_prefix"] is False, str(guarded))
 
     # --- dispatch hook records audit ---
     dispatch_audit = tmp / "dispatch_audit"

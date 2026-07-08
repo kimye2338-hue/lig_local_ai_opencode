@@ -255,6 +255,11 @@ def main() -> None:
     check("unmapped kind reports honest no-auto-run",
           plan_execution(["slide_outline"], ["slide_outline.md"])[0]["reason"].startswith("자동 실행 매핑 없음"),
           str(plan_execution(["slide_outline"], ["slide_outline.md"])))
+    ansys_exec = plan_execution(["ansys_script"], ["mechanical_script.py"])[0]
+    check("ansys_script reports explicit validation pending",
+          ansys_exec["adapter"] == "ansys" and ansys_exec["ready"] is False
+          and "Mechanical/SpaceClaim" in ansys_exec["reason"],
+          str(ansys_exec))
 
     print(f"\nALL {PASS} CHECKS PASSED (batch adapters)")
 
