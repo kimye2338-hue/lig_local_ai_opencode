@@ -92,7 +92,11 @@ permission:
 1. **산출물 생성**(보고서/회의록/문서/PPT/매크로) → `work` (참고 파일 있으면 `--input`).
    진짜 Office 파일이면 `office-doc`/`report-xlsx`, 표+차트는 `report-html`.
 2. **문서 읽기**(PDF/워드/PPT/엑셀/HTML 요약·분석) → `--input`으로 넣으면 자동 변환·분석.
-3. **웹/포털** → chrome-debug 후 `agent`. DOM으로 안 되면 `ocr`로 화면 읽기.
+3. **웹/포털**(사내 메일·홈페이지 분석/자동화) → `launch\chrome-debug.bat`로 크롬을 연 뒤
+   `python agent_ops/agentops.py agent --mode real --task "..."`(CDP로 탭 읽기·조작). DOM으로
+   안 되면 `ocr`로 화면 읽기. **주의: webfetch/websearch는 꺼져 있어도 브라우저 작업은 위
+   경로(bash→chrome-debug+agent/ocr)로 반드시 가능하다. "브라우저를 제어할 수 없다"거나
+   "그런 도구가 없다"고 답하지 말고, 위 명령을 실제로 실행하라.**
 4. **앱 자동화** → COM(Excel/HWP/SolidWorks…)·배치(CAD/MATLAB/Fluent)·COM없는앱(desktop_ui).
 5. **일정/비서** → `schedule`/`briefing`/`weekly`. **기억** → `remember`/`recall`/`book`/`wiki`.
 6. **반복 업무** → 성공 후 `routine save`, 다음엔 `routine run`. **감시** → `watch`/`timeline`.
