@@ -100,8 +100,12 @@ if not exist "%OPENCODE_USERDATA%\memory\wiki" mkdir "%OPENCODE_USERDATA%\memory
 py -3.11 -m agent_ops.wiki_vault "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1 || python -m agent_ops.wiki_vault "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1
 tasklist /FI "IMAGENAME eq Obsidian.exe" 2>nul | find /I "Obsidian.exe" >nul
 if not errorlevel 1 goto :wiki_done
-if exist "%OC_ROOT%\tools\Obsidian\Obsidian.exe" start "" "%OC_ROOT%\tools\Obsidian\Obsidian.exe" "%OPENCODE_USERDATA%\memory\wiki"
-if not exist "%OC_ROOT%\tools\Obsidian\Obsidian.exe" if exist "%LOCALAPPDATA%\Obsidian\Obsidian.exe" start "" "%LOCALAPPDATA%\Obsidian\Obsidian.exe" "%OPENCODE_USERDATA%\memory\wiki"
+rem Obsidian 실행파일을 여러 위치에서 찾는다(workspace\tools / 루트\tools / 표준 설치 / Programs).
+set "OBSEXE="
+for %%P in ("%AGENTOPS_HOME%\tools\Obsidian\Obsidian.exe" "%OC_ROOT%\tools\Obsidian\Obsidian.exe" "%LOCALAPPDATA%\Obsidian\Obsidian.exe" "%LOCALAPPDATA%\Programs\Obsidian\Obsidian.exe" "%PROGRAMFILES%\Obsidian\Obsidian.exe") do if not defined OBSEXE if exist "%%~P" set "OBSEXE=%%~P"
+rem 그래도 못 찾으면 OpenCodeLIG 아래를 재귀 검색(어느 하위폴더에 넣어도 잡히게).
+if not defined OBSEXE for /f "delims=" %%F in ('dir /b /s "%OC_ROOT%\Obsidian.exe" 2^>nul') do if not defined OBSEXE set "OBSEXE=%%F"
+if defined OBSEXE start "" "%OBSEXE%" "%OPENCODE_USERDATA%\memory\wiki"
 :wiki_done
 
 "%OCODE_EXE%" %*
