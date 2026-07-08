@@ -252,3 +252,32 @@ python agent_ops\agentops.py doctor
 4. 이후 WS-4 Obsidian manual recall → WS-INT 순서로 간다.
 5. 여력 되면 5절 선택/저순위. **#8-4는 데이터 위험 크니 tmp 격리 테스트 충분히.**
 6. 사용자에게: 모델 A/B 절차(4절)와 사내망 검증 필요 항목 목록을 정리해 전달.
+
+---
+
+## 9. 2026-07-09 사용자 배포 패키지/원샷 점검 파일
+
+### 완료한 변경
+- `agent_ops/pending_check.py` 추가: 설치/모델/자동지능/오프라인 의존성/실앱 연동/문서/패키지 상태를 한 번에 검사하고
+  Markdown+JSON 리포트를 만든다. URL/API key는 출력하지 않는다.
+- `점검용_전체확인.bat`를 루트와 `workspace/`에 추가: 설치 전 패키지 폴더, 설치 후 workspace 어디서 실행해도
+  `%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\pending_checks\pending-check-last.md`를 만든다.
+- 사용자 문서 `README_OFFLINE_INSTALL.md`, `docs/사용법/GUIDE.md`, `docs/사용법/INSTALL.md`에 설치 후 점검 절차와 결과 파일 위치를 반영했다.
+- `docs/운영/INTELLIGENCE_COVERAGE_REPORT.md`의 현재 집계(145개)와 WS-10 상태를 코드 기준으로 갱신했다.
+- `INSTALL_OFFLINE_LIG_OPENCODE.bat.txt`의 마지막 안내에 설치 후 점검 BAT 경로를 추가했다.
+
+### 설계 판단
+- 사용자가 여러 번 왕복하지 않도록, 보류 가능성이 있는 항목을 `FAIL`이 아니라 `PENDING`으로 분리했다.
+  `FAIL`은 구조상 즉시 고쳐야 하는 항목, `PENDING`은 대상 PC의 실앱/망/선택 의존성 상태 확인 항목이다.
+- 점검 스크립트는 USERDATA를 읽고 리포트만 추가 생성하며, 기억/위키/일정 원본을 삭제하거나 재작성하지 않는다.
+- 패키지는 실사용에 불필요한 `workspace/tests`, `.pytest_cache`, `agent_ops/results`, `docs/archive`를 제외한다.
+
+### 사용자에게 받을 결과
+- 대상 PC에서 `점검용_전체확인.bat` 한 번 실행.
+- 아래 파일 하나만 전달받으면 된다:
+  `%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\pending_checks\pending-check-last.md`
+
+### 다음 사람이 바로 볼 파일
+- 점검 로직: `workspace/agent_ops/pending_check.py`
+- 사용자 설치 문서: `README_OFFLINE_INSTALL.md`, `workspace/docs/사용법/GUIDE.md`
+- 패키지 산출물: `dist/OpenCodeLIG_USER_PACKAGE_YYYYMMDD_HHMMSS/` 및 같은 이름 `.zip`

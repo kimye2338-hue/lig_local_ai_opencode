@@ -53,6 +53,18 @@ python agent_ops\agentops.py verify
 %USERPROFILE%\OpenCodeLIG\workspace\VERIFY_OFFLINE_INSTALL.bat
 ```
 
+남은 pending 항목까지 한 번에 확인하려면 아래 파일을 실행합니다.
+
+```text
+%USERPROFILE%\OpenCodeLIG\workspace\점검용_전체확인.bat
+```
+
+결과 보고서:
+
+```text
+%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\pending_checks\pending-check-last.md
+```
+
 ## 오프라인 제약
 
 설치기는 인터넷 다운로드, GitHub clone, npm/bun 설치, PowerShell `ExecutionPolicy Bypass`를 하지

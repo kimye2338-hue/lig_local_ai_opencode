@@ -157,6 +157,8 @@ echo Run:
 echo   %WS%\RUN_OPENCODE_LIG.bat
 echo Verify:
 echo   %WS%\VERIFY_OFFLINE_INSTALL.bat
+echo Pending check:
+echo   %WS%\점검용_전체확인.bat
 echo Docs:
 echo   %WS%\docs\사용법\GUIDE.md
 echo.

@@ -18,6 +18,8 @@ OpenCodeLIG는 세 층으로 동작합니다.
 중요한 원칙은 간단합니다.
 
 - 한국어로 그냥 시키면 적절한 도구를 자동 선택합니다.
+- `/auto`와 기본 대화 경로가 문서 생성, 도구 에이전트, 일정, 기억/위키, 계획 전용 경로 중 하나를 자동 선택합니다.
+- 실행 결과는 route trace, 평가 기록, 활동/실패 기억, Obsidian 위키 정리로 이어져 다음 작업의 맥락이 됩니다.
 - 게이트웨이 주소와 API 키는 사용자 PC의 USERDATA에만 저장합니다.
 - 기억과 일정은 프로그램을 재설치해도 지워지지 않습니다.
 - 위험 명령 차단은 승인 모드가 바뀌어도 유지됩니다.
@@ -37,6 +39,18 @@ OpenCodeLIG는 세 층으로 동작합니다.
 
 ```text
 %USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat
+```
+
+설치 후 사내 앱, Obsidian, 브라우저, OCR, Fluent, SolidWorks 등 현장 확인이 필요한 항목을 한 번에 점검하려면 아래 파일을 실행합니다.
+
+```text
+%USERPROFILE%\OpenCodeLIG\workspace\점검용_전체확인.bat
+```
+
+보고서는 아래에 저장됩니다. 최종 보완 요청 시 이 파일 하나를 전달하면 됩니다.
+
+```text
+%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\pending_checks\pending-check-last.md
 ```
 
 게이트웨이 주소·키·라우트·모델은 배포 설정에 이미 채워져 있어 **보통은 그대로 두면 바로 연결**됩니다.
@@ -76,6 +90,7 @@ LIG_API_KEY=발급받은키
 
 사용자가 `office-doc`, `report-html`, `wiki` 같은 도구 이름을 외울 필요는 없습니다.
 요청 의도에 따라 런타임이 문서 생성, 데이터 리포트, 일정, 기억, 앱 자동화 등을 고릅니다.
+삭제, 외부 전송, 실제 저장, 모델/게이트웨이 기본값 변경처럼 되돌리기 어려운 요청은 자동으로 멈추고 확인을 요구합니다.
 
 ### 보조: 번호 메뉴
 
@@ -271,6 +286,7 @@ launch\menu.bat → 상태 진단
 | Obsidian이 안 열림 | `tools\Obsidian\Obsidian.exe` 위치 확인. 없으면 탐색기로 열리는 것이 정상 |
 | 작업이 멈춘 듯함 | `python agent_ops\agentops.py watch`, 이후 `doctor` |
 | 설치 검증 필요 | `python agent_ops\agentops.py verify` 실행. 설치본에 `VERIFY_OFFLINE_INSTALL.bat`가 있으면 그것도 사용 가능 |
+| 남은 pending 전체 점검 | `점검용_전체확인.bat` 실행 후 `%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\pending_checks\pending-check-last.md` 확인 |
 
 진단 파일은 아래에 남습니다.
 

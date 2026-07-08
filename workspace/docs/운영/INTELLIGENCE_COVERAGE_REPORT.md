@@ -23,18 +23,18 @@
 
 ## 현재 집계
 
-총 141개 지능 항목을 지도에 등록했다. WS-1에서 `/auto` command가 추가되어 command auto 항목이 1개 늘었다.
+총 145개 지능 항목을 지도에 등록했다. WS-10 기준으로 `auto_policy`, `evaluation_loop`, `memory_quality`, `log-activity`까지 지도에 반영되어 고아 기능 0개를 테스트로 검증한다.
 
 | kind | auto | advanced | pending | deprecated |
 | --- | ---: | ---: | ---: | ---: |
-| command | 16 | 27 | 0 | 0 |
+| command | 16 | 28 | 0 | 0 |
 | capability | 13 | 0 | 0 | 0 |
 | artifact | 8 | 1 | 1 | 0 |
 | tool | 29 | 0 | 0 | 0 |
 | adapter | 6 | 0 | 4 | 0 |
-| context | 13 | 0 | 0 | 0 |
-| memory | 4 | 0 | 0 | 0 |
-| maintenance | 6 | 3 | 0 | 0 |
+| context | 14 | 0 | 0 | 0 |
+| memory | 5 | 0 | 0 | 0 |
+| maintenance | 7 | 3 | 0 | 0 |
 | safety | 4 | 1 | 0 | 0 |
 | packaging | 0 | 4 | 1 | 0 |
 
