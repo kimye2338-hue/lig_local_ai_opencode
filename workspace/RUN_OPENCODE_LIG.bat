@@ -77,6 +77,11 @@ for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%LIG_API_ENV_FILE%") do (
 rem First-run convenience: keep a copy of workspace config under userdata config.
 if exist "%AGENTOPS_HOME%\config" xcopy /D /E /I /Y "%AGENTOPS_HOME%\config\*" "%XDG_CONFIG_HOME%\" >nul
 
+rem 햄스터 시작 전 상태 리셋 — 지난 세션의 '완료/작업중'이 시작부터 뜨지 않게 대기중으로.
+>"%LIG_STATE_DIR%\current_status.json" echo {"status":"idle","task":"idle"}
+del /q "%LIG_DIAG_DIR%\agent-loop-last.json" >nul 2>&1
+del /q "%LIG_DIAG_DIR%\tool-dispatch-last.json" >nul 2>&1
+
 rem Start hamster hidden (single-instance overlay; duplicates auto-exit)
 if exist "%AGENTOPS_HOME%\launch\hamster_hidden.vbs" (
   wscript "%AGENTOPS_HOME%\launch\hamster_hidden.vbs"
