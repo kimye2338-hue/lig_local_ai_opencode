@@ -6,8 +6,8 @@ set PYTHONIOENCODING=utf-8
 set "HERE=%~dp0"
 for %%I in ("%HERE%..") do set "WS=%%~fI"
 for %%I in ("%WS%\..") do set "ROOT=%%~fI"
-if not defined LIG_STATE_DIR set "LIG_STATE_DIR=%ROOT%\userdata\state"
-if not defined LIG_DIAG_DIR set "LIG_DIAG_DIR=%ROOT%\userdata\diagnostics"
+if not defined LIG_STATE_DIR set "LIG_STATE_DIR=%USERPROFILE%\OpenCodeLIG_USERDATA\state"
+if not defined LIG_DIAG_DIR set "LIG_DIAG_DIR=%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics"
 if not exist "%LIG_STATE_DIR%" mkdir "%LIG_STATE_DIR%" >nul 2>&1
 if not exist "%LIG_DIAG_DIR%" mkdir "%LIG_DIAG_DIR%" >nul 2>&1
 if /I "%~1"=="--hidden" goto :hidden

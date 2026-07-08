@@ -33,8 +33,10 @@ from queue import SimpleQueue, Empty
 from typing import Any, Dict, List, Optional
 
 APP_NAME = "OpenCodeLIG Hamster Pet"
-INSTALL_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_USERDATA = INSTALL_ROOT / "userdata"
+# 상태를 쓰는 쪽(status_writer.py / lig_providers.py)과 같은 기본값을 봐야 한다.
+# 둘 다 Path.home()(Windows에선 USERPROFILE) 기준 OpenCodeLIG_USERDATA를 쓰므로
+# 여기서도 동일 규칙 — env(LIG_STATE_DIR/LIG_DIAG_DIR)가 있으면 그게 우선.
+DEFAULT_USERDATA = Path.home() / "OpenCodeLIG_USERDATA"
 DEFAULT_STATE_DIR = Path(os.environ.get("LIG_STATE_DIR") or (DEFAULT_USERDATA / "state"))
 DEFAULT_DIAG_DIR = Path(os.environ.get("LIG_DIAG_DIR") or (DEFAULT_USERDATA / "diagnostics"))
 STALE_SECONDS = int(os.environ.get("LIG_HAMSTER_STALE_SECONDS") or "900")
