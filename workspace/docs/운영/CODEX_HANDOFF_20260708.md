@@ -281,3 +281,35 @@ python agent_ops\agentops.py doctor
 - 점검 로직: `workspace/agent_ops/pending_check.py`
 - 사용자 설치 문서: `README_OFFLINE_INSTALL.md`, `workspace/docs/사용법/GUIDE.md`
 - 패키지 산출물: `dist/OpenCodeLIG_USER_PACKAGE_YYYYMMDD_HHMMSS/` 및 같은 이름 `.zip`
+
+---
+
+## 10. 2026-07-09 OpenCode permission mode 표시 교체
+
+### 완료한 변경
+- GitHub `anomalyco/opencode` 최신 소스(`0abbcdd`) 기준으로 TUI permission 모드를 `ask/auto/full` 3단계로 재패치했다.
+- 기존 좌측 하단 agent 이름 오른쪽의 `auto` 전용 표시를 `ASK/AUTO/FULL` 상시 표시로 변경했다.
+- `Shift+Tab`은 `ASK → AUTO → FULL` 순환, 기존 reverse agent cycle은 `Shift+F3`로 이동.
+- `/permission`, `/perm` 명령을 추가해 `status/cycle/ask/auto/full`을 즉시 처리한다.
+- `AUTO`는 permission request에 `once`, `FULL`은 `always`로 응답한다. core deny는 prompt로 올라오기 전 차단되는 구조를 유지한다.
+- 새 Windows x64 바이너리를 빌드해 `payload/opencode.exe`와 설치본 `%USERPROFILE%\OpenCodeLIG\bin\opencode.exe`를 교체했다.
+
+### 빌드/산출물
+- 빌드 소스: `C:\oc_build\opencode`
+- 빌드 도구: `bun@1.3.14`
+- 빌드 명령: `bun run --cwd packages/opencode build --single`
+- 새 바이너리 버전: `0.0.0-dev-202607090018`
+- 새 SHA256: `73d8e83355e5988fa5693627fd23dff0294262e4bef63e2f7a0e91d9d0d77381`
+- 이전 payload/설치본은 `dist/backups/`에 보관.
+
+### 검증
+- `py -3.11 tests\test_opencode_permission_badge_patch.py` → 4 checks passed
+- `py -3.11 tests\test_opencode_config.py` → 27 checks passed
+- `py -3.11 tests\test_launch_bats.py` → 101 checks passed
+- Web UI 포함 빌드 성공, 빌드 스크립트 smoke test(`dist/opencode-windows-x64/bin/opencode --version`) 통과
+- `payload\opencode.exe --version`, `--help`, `run --help` 실행 성공
+- `py -3.11 agent_ops\pending_check.py --out-dir ..\dist\_pending_check_after_opencode_replace` → FAIL 0
+
+### 주의
+- 빌드 시 한글 사용자 TEMP 경로에서 Bun compile ENOENT가 발생했다. `C:\oc_build`처럼 ASCII 경로와 `TEMP/TMP/BUN_TMPDIR`를 쓰면 통과한다.
+- Web UI까지 embed한 빌드로 교체했다. 단, 실제 브라우저에서 `opencode web`을 띄우는 상호작용 검증은 별도 수동 확인 대상이다.

@@ -1,18 +1,108 @@
+diff --git a/packages/tui/src/app.tsx b/packages/tui/src/app.tsx
+index 57f372e..090aa80 100644
+--- a/packages/tui/src/app.tsx
++++ b/packages/tui/src/app.tsx
+@@ -113,6 +113,7 @@ const appBindingCommands = [
+   "agent.list",
+   "mcp.list",
+   "agent.cycle",
++  "permission.mode",
+   "agent.cycle.reverse",
+   "variant.cycle",
+   "variant.list",
+@@ -945,11 +946,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
+       },
+       {
+         name: "permission.mode",
+-        title:
+-          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
++        title: `Permission approval: ${local.permission.mode.toUpperCase()} (cycle ASK/AUTO/FULL)`,
+         category: "System",
++        slashName: "permission",
+         run: () => {
+-          local.permission.toggle()
++          local.permission.cycle()
+           dialog.clear()
+         },
+       },
+diff --git a/packages/tui/src/component/prompt/index.tsx b/packages/tui/src/component/prompt/index.tsx
+index 115c102..db3f532 100644
+--- a/packages/tui/src/component/prompt/index.tsx
++++ b/packages/tui/src/component/prompt/index.tsx
+@@ -1053,6 +1053,38 @@ export function Prompt(props: PromptProps) {
+           ]
+         : []
+ 
++    const permissionCommand = inputText.trim().match(/^\/(?:permission|perm)(?:\s+(\S+))?\s*$/i)
++    if (permissionCommand) {
++      const action = (permissionCommand[1] ?? "status").toLowerCase()
++      const validPolicies = ["ask", "auto", "full"] as const
++      if (action === "cycle") {
++        local.permission.cycle()
++        toast.show({ message: `Permission approval: ${local.permission.mode.toUpperCase()}`, variant: "info" })
++      } else if (action === "status") {
++        toast.show({ message: `Permission approval: ${local.permission.mode.toUpperCase()}`, variant: "info" })
++      } else if (validPolicies.includes(action as (typeof validPolicies)[number])) {
++        local.permission.set(action as (typeof validPolicies)[number])
++        toast.show({ message: `Permission approval: ${local.permission.mode.toUpperCase()}`, variant: "info" })
++      } else {
++        toast.show({
++          title: "Unknown permission action",
++          message: "Use /permission status, cycle, ask, auto, full, or /perm aliases.",
++          variant: "warning",
++        })
++      }
++      history.append({
++        ...store.prompt,
++        mode: currentMode,
++      })
++      input.extmarks.clear()
++      setStore("prompt", { input: "", parts: [] })
++      setStore("extmarkToPartIndex", new Map())
++      props.onSubmit?.()
++      input.clear()
++      if (finishMoveProgress) move.finishSubmit()
++      return true
++    }
++
+     if (store.mode === "shell") {
+       move.startSubmit()
+       void sdk.client.session.shell({
+@@ -1444,8 +1476,17 @@ export function Prompt(props: PromptProps) {
+                       <text fg={fadeColor(highlight(), agentMetaAlpha())}>
+                         {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
+                       </text>
+-                      <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
+-                        <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
++                      <Show when={store.mode === "normal"}>
++                        <text
++                          fg={fadeColor(
++                            local.permission.mode === "ask" ? theme.textMuted
++                              : local.permission.mode === "auto" ? theme.warning
++                              : theme.error,
++                            agentMetaAlpha(),
++                          )}
++                        >
++                          {local.permission.mode.toUpperCase()}
++                        </text>
+                       </Show>
+                       <Show when={store.mode === "normal"}>
+                         <box flexDirection="row" gap={1}>
 diff --git a/packages/tui/src/config/keybind.ts b/packages/tui/src/config/keybind.ts
+index 5dd7e4b..c0b4a43 100644
 --- a/packages/tui/src/config/keybind.ts
 +++ b/packages/tui/src/config/keybind.ts
-@@ -128,8 +128,9 @@ export const Definitions = {
+@@ -128,7 +128,8 @@ export const Definitions = {
    console_org_switch: keybind("none", "Switch console organization"),
    agent_list: keybind("<leader>a", "List agents"),
    agent_cycle: keybind("tab", "Next agent"),
 -  agent_cycle_reverse: keybind("shift+tab", "Previous agent"),
 +  agent_cycle_reverse: keybind("shift+f3", "Previous agent"),
-   variant_cycle: keybind("ctrl+t", "Cycle model variants"),
 +  permission_mode_cycle: keybind("shift+tab", "Cycle permission approval policy (ASK/AUTO/FULL)"),
+   variant_cycle: keybind("ctrl+t", "Cycle model variants"),
    variant_list: keybind("none", "List model variants"),
  
-   messages_page_up: keybind("pageup,ctrl+alt+b", "Scroll messages up by one page"),
-@@ -338,6 +339,7 @@ export const CommandMap = {
+@@ -335,6 +336,7 @@ export const CommandMap = {
    agent_list: "agent.list",
    agent_cycle: "agent.cycle",
    agent_cycle_reverse: "agent.cycle.reverse",
@@ -21,23 +111,17 @@ diff --git a/packages/tui/src/config/keybind.ts b/packages/tui/src/config/keybin
    variant_list: "variant.list",
    messages_page_up: "session.page.up",
 diff --git a/packages/tui/src/context/permission.tsx b/packages/tui/src/context/permission.tsx
+index 13a6ba8..c5afb24 100644
 --- a/packages/tui/src/context/permission.tsx
 +++ b/packages/tui/src/context/permission.tsx
-@@ -1,26 +1,48 @@
- import { createStore } from "solid-js/store"
+@@ -2,24 +2,40 @@ import { createStore } from "solid-js/store"
  import { useArgs } from "./args"
  import { createSimpleContext } from "./helper"
  
 -export type PermissionMode = "auto" | "normal"
 +// Permission approval policy. This is independent of the active agent/persona,
-+// the current workflow, and the current model - it only decides how incoming
-+// "permission.asked" events are handled by the TUI.
-+//   ASK  = show permission requests to the user (default OpenCode behavior).
-+//   AUTO = auto-approve (reply "once") the requests that reach the TUI.
-+//   FULL = complete auto: reply "always" so the same permission is remembered
-+//          for the rest of the session (fewest interruptions).
-+// Explicit "deny" decisions are resolved in opencode core before a request is
-+// ever surfaced as "permission.asked", so AUTO/FULL can never bypass a deny.
++// current workflow, and model. It only decides how permission prompts surfaced
++// to the TUI are handled.
 +export type PermissionMode = "ask" | "auto" | "full"
 +
 +const PermissionModeOrder: PermissionMode[] = ["ask", "auto", "full"]
@@ -77,250 +161,20 @@ diff --git a/packages/tui/src/context/permission.tsx b/packages/tui/src/context/
        },
      }
    },
- })
-diff --git a/packages/tui/src/app.tsx b/packages/tui/src/app.tsx
---- a/packages/tui/src/app.tsx
-+++ b/packages/tui/src/app.tsx
-@@ -112,6 +112,7 @@ const appBindingCommands = [
-   "agent.list",
-   "mcp.list",
-   "agent.cycle",
-+  "permission.mode",
-   "agent.cycle.reverse",
-   "variant.cycle",
-   "variant.list",
-@@ -708,7 +709,18 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugin
-         run: () => {
-           local.agent.move(-1)
-         },
-       },
-+      {
-+        name: "permission.mode",
-+        title: `Permission approval: ${local.permission.mode.toUpperCase()} (cycle ASK/AUTO/FULL)`,
-+        category: "System",
-+        slashName: "permission",
-+        slashAliases: ["perm"],
-+        run: () => {
-+          local.permission.cycle()
-+          dialog.clear()
-+        },
-+      },
-       {
-         name: "provider.connect",
-         title: "Connect provider",
-diff --git a/packages/tui/src/component/prompt/index.tsx b/packages/tui/src/component/prompt/index.tsx
---- a/packages/tui/src/component/prompt/index.tsx
-+++ b/packages/tui/src/component/prompt/index.tsx
-@@ -1049,5 +1049,37 @@ export function Prompt(props: PromptProps) {
-         : []
+diff --git a/packages/tui/src/context/sync.tsx b/packages/tui/src/context/sync.tsx
+index d0511c5..25eea4f 100644
+--- a/packages/tui/src/context/sync.tsx
++++ b/packages/tui/src/context/sync.tsx
+@@ -189,10 +189,10 @@ export const {
  
-+    const permissionCommand = inputText.trim().match(/^\/(?:permission|perm)(?:\s+(\S+))?\s*$/i)
-+    if (permissionCommand) {
-+      const action = (permissionCommand[1] ?? "status").toLowerCase()
-+      const validPolicies = ["ask", "auto", "full"] as const
-+      if (action === "cycle") {
-+        local.permission.cycle()
-+        toast.show({ message: `Permission approval: ${local.permission.mode.toUpperCase()}`, variant: "info" })
-+      } else if (action === "status") {
-+        toast.show({ message: `Permission approval: ${local.permission.mode.toUpperCase()}`, variant: "info" })
-+      } else if (validPolicies.includes(action as (typeof validPolicies)[number])) {
-+        local.permission.set(action as (typeof validPolicies)[number])
-+        toast.show({ message: `Permission approval: ${local.permission.mode.toUpperCase()}`, variant: "info" })
-+      } else {
-+        toast.show({
-+          title: "Unknown permission action",
-+          message: "Use /permission status, cycle, ask, auto, full, or /perm aliases.",
-+          variant: "warning",
-+        })
-+      }
-+      history.append({
-+        ...store.prompt,
-+        mode: currentMode,
-+      })
-+      input.extmarks.clear()
-+      setStore("prompt", { input: "", parts: [] })
-+      setStore("extmarkToPartIndex", new Map())
-+      props.onSubmit?.()
-+      input.clear()
-+      if (finishMoveProgress) move.finishSubmit()
-+      return true
-+    }
-+
-     if (store.mode === "shell") {
-       move.startSubmit()
-       void sdk.client.session.shell({
-diff --git a/packages/tui/src/routes/session/index.tsx b/packages/tui/src/routes/session/index.tsx
---- a/packages/tui/src/routes/session/index.tsx
-+++ b/packages/tui/src/routes/session/index.tsx
-@@ -136,6 +136,7 @@ const sessionBindingCommands = [
-   "session.copy",
-   "session.export",
-   "session.child.first",
-+  "permission.mode",
-   "session.parent",
-   "session.child.next",
-   "session.child.previous",
-@@ -1297,7 +1298,12 @@ export function Session() {
-                         toBottom()
-                       }}
-                       sessionID={route.sessionID}
--                      right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
-+                      right={
-+                        <box flexDirection="row" gap={1} alignItems="center">
-+                          <PermissionModeBadge />
-+                          <pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />
-+                        </box>
-+                      }
-                     />
-                   </pluginRuntime.Slot>
-                 </Show>
-@@ -1330,6 +1336,17 @@ export function Session() {
-   )
- }
- 
-+function PermissionModeBadge() {
-+  const local = useLocal()
-+  const { theme } = useTheme()
-+  const shortcut = useCommandShortcut("permission.mode")
-+  const label = createMemo(() => local.permission.mode.toUpperCase())
-+  const color = createMemo(() =>
-+    local.permission.mode === "full" ? theme.error : local.permission.mode === "auto" ? theme.warning : theme.textMuted,
-+  )
-+  return <text fg={color()}>{`[PERM:${label()} ${shortcut()}]`}</text>
-+}
-+
- function UserMessage(props: {
-   message: UserMessage
-   parts: Part[]
-diff --git a/packages/tui/src/routes/session/permission.tsx b/packages/tui/src/routes/session/permission.tsx
---- a/packages/tui/src/routes/session/permission.tsx
-+++ b/packages/tui/src/routes/session/permission.tsx
-@@ -1,6 +1,6 @@
- import { createStore } from "solid-js/store"
- import { dirname } from "node:path"
--import { createMemo, For, Match, Show, Switch } from "solid-js"
-+import { createEffect, createMemo, For, Match, Show, Switch } from "solid-js"
- import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
- import type { TextareaRenderable } from "@opentui/core"
- import { useTheme, selectedForeground } from "../../context/theme"
-@@ -15,5 +15,6 @@ import { useTuiConfig } from "../../config"
- import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
- import { usePathFormatter } from "../../context/path-format"
-+import { useLocal } from "../../context/local"
- 
- type PermissionStage = "permission" | "always" | "reject"
- 
-@@ -131,6 +132,33 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?:
-   })
- 
-   const { theme } = useTheme()
-+  const local = useLocal()
-+  let autoRepliedRequestID: string | undefined
-+
-+  function replyAuto(kind: "once" | "always") {
-+    void sdk.client.permission.reply({
-+      reply: kind,
-+      requestID: props.request.id,
-+      directory: props.directory,
-+      workspace: project.workspace.current(),
-+    })
-+  }
-+
-+  function replyOnce() {
-+    replyAuto("once")
-+  }
-+
-+  createEffect(() => {
-+    if (store.stage !== "permission") return
-+    const mode = local.permission.mode
-+    if (mode !== "auto" && mode !== "full") return
-+    const requestID = props.request.id
-+    if (autoRepliedRequestID === requestID) return
-+    autoRepliedRequestID = requestID
-+    // FULL remembers the approval ("always") for the session; AUTO approves
-+    // one request at a time ("once"). Core "deny" never reaches this prompt.
-+    replyAuto(mode === "full" ? "always" : "once")
-+  })
- 
-   return (
-     <Switch>
-@@ -390,12 +413,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?:
-                   })
-                   return
-                 }
--                void sdk.client.permission.reply({
--                  reply: "once",
--                  requestID: props.request.id,
--                  directory: props.directory,
--                  workspace: project.workspace.current(),
--                })
-+                replyOnce()
-               }}
-             />
-           )
-diff --git a/packages/tui/src/component/spinner.tsx b/packages/tui/src/component/spinner.tsx
---- a/packages/tui/src/component/spinner.tsx
-+++ b/packages/tui/src/component/spinner.tsx
-@@ -1,24 +1,11 @@
--import { Show } from "solid-js"
- import { useTheme } from "../context/theme"
--import { useKV } from "../context/kv"
- import type { JSX } from "@opentui/solid"
- import type { RGBA } from "@opentui/core"
--import "opentui-spinner/solid"
- 
- export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
- 
- export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
-   const { theme } = useTheme()
--  const kv = useKV()
-   const color = () => props.color ?? theme.textMuted
--  return (
--    <Show when={kv.get("animations_enabled", true)} fallback={<text fg={color()}>⋯ {props.children}</text>}>
--      <box flexDirection="row" gap={1}>
--        <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
--        <Show when={props.children}>
--          <text fg={color()}>{props.children}</text>
--        </Show>
--      </box>
--    </Show>
--  )
-+  return <text fg={color()}>⋯ {props.children}</text>
- }
-diff --git a/packages/opencode/src/cli/cmd/run/footer.subagent.tsx b/packages/opencode/src/cli/cmd/run/footer.subagent.tsx
---- a/packages/opencode/src/cli/cmd/run/footer.subagent.tsx
-+++ b/packages/opencode/src/cli/cmd/run/footer.subagent.tsx
-@@ -126,15 +126,9 @@ export function RunFooterSubagentBody(props: {
-         <Show when={tab()}>
-           {(current) => (
-             <box width="100%" flexDirection="row" gap={1} paddingBottom={1} flexShrink={0}>
--              {current().status === "running" ? (
--                <box flexShrink={0}>
--                  <spinner frames={SPINNER_FRAMES} interval={80} color={statusColor(footer(), current().status)} />
--                </box>
--              ) : (
--                <text fg={statusColor(footer(), current().status)} wrapMode="none" truncate flexShrink={0}>
--                  {statusIcon(current().status)}
--                </text>
--              )}
-+              <text fg={statusColor(footer(), current().status)} wrapMode="none" truncate flexShrink={0}>
-+                {statusIcon(current().status)}
-+              </text>
-               <text fg={footer().text} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
-                 {title()}
-                 <Show when={subtitle().length > 0}>
-diff --git a/packages/opencode/src/cli/cmd/run/footer.view.tsx b/packages/opencode/src/cli/cmd/run/footer.view.tsx
---- a/packages/opencode/src/cli/cmd/run/footer.view.tsx
-+++ b/packages/opencode/src/cli/cmd/run/footer.view.tsx
-@@ -832,11 +832,5 @@ export function RunFooterView(props: RunFooterViewProps) {
-                   backgroundColor="transparent"
-                 >
--                  <Show when={busy() && !exiting()}>
--                    <box flexShrink={0}>
--                      <spinner color={spin().color} frames={spin().frames} interval={40} />
--                    </box>
--                  </Show>
--
-                   <text fg={statusColor()} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
-                     <Show when={busy() && !exiting()} fallback={statusText()}>
-                       <Show when={interruptLabel()}>
+         case "permission.asked": {
+           const request = event.properties
+-          if (permission.mode === "auto") {
++          if (permission.mode === "auto" || permission.mode === "full") {
+             void sdk.client.permission.reply({
+               requestID: request.id,
+-              reply: "once",
++              reply: permission.mode === "full" ? "always" : "once",
+               directory,
+               workspace,
+             })
