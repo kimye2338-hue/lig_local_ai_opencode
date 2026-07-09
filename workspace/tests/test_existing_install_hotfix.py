@@ -100,6 +100,36 @@ def test_final_patch_bat_is_self_contained_and_embeds_compilable_payload(tmp_pat
     assert any(name.endswith("/METADATA") and name.startswith("mss-") for name in names)
 
 
+def test_final_patch_bat_extracts_and_runs_against_min_install(tmp_path: Path) -> None:
+    root = _copy_min_install(tmp_path)
+    fake_lib = tmp_path / "fake_lib"
+    fake_lib.mkdir()
+    (fake_lib / "mss.py").write_text("# fake existing mss for hotfix skip test\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["OPENCODELIG_ROOT"] = str(root)
+    env["USERPROFILE"] = str(tmp_path)
+    env["LIG_SKIP_PENDING_CHECK_AFTER_HOTFIX"] = "1"
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONPATH"] = str(fake_lib)
+
+    result = subprocess.run(
+        ["cmd", "/c", "call 최종_패치파일.bat <nul"],
+        cwd=str(REPO),
+        env=env,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        timeout=120,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Failed to extract embedded hotfix payload" not in result.stdout + result.stderr
+    assert "Existing install hotfix complete" in result.stdout
+    assert (root / "bin" / "ocd.bat").exists()
+
+
 def test_hotfix_preserves_user_working_directory_and_detaches_obsidian(tmp_path: Path) -> None:
     root = _copy_min_install(tmp_path)
 
