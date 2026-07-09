@@ -175,6 +175,39 @@ def test_hotfix_preserves_user_working_directory_and_detaches_obsidian(tmp_path:
         assert b"\n" not in raw.replace(b"\r\n", b""), str(bat)
 
 
+def test_hotfix_replaces_legacy_launcher_without_wiki_block(tmp_path: Path) -> None:
+    root = _copy_min_install(tmp_path)
+    launcher = root / "workspace" / "RUN_OPENCODE_LIG.bat"
+    launcher.write_text(
+        "@echo off\r\n"
+        "chcp 65001 >nul\r\n"
+        "setlocal EnableExtensions\r\n"
+        "for %%I in (\"%~dp0.\") do set \"AGENTOPS_HOME=%%~fI\"\r\n"
+        "for %%I in (\"%AGENTOPS_HOME%\\..\") do set \"OC_ROOT=%%~fI\"\r\n"
+        "set \"OPENCODE_USERDATA=%OC_ROOT%\\userdata\"\r\n"
+        "set \"OPENCODE_PURE=1\"\r\n"
+        "cd /d \"%AGENTOPS_HOME%\"\r\n"
+        "\"%OC_ROOT%\\bin\\opencode.exe\" %*\r\n",
+        encoding="utf-8",
+        newline="",
+    )
+
+    result = _run_hotfix(root, tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    text = launcher.read_text(encoding="utf-8")
+    assert "OPENCODE_PURE=1" not in text
+    assert "%OC_ROOT%\\userdata" not in text
+    assert "%USERPROFILE%\\OpenCodeLIG_USERDATA" in text
+    assert "obsidian_detached.vbs" in text
+    assert "LIG_HAMSTER_START_GRACE_SECONDS=300" in text
+    assert ".opencode\\plugins\\*.ts" in text
+    assert "probe_gateway.py" not in text.lower()
+    assert "launch\\probe-gateway.bat" not in text.lower()
+    raw = launcher.read_bytes()
+    assert b"\n" not in raw.replace(b"\r\n", b"")
+
+
 def test_hotfix_skips_current_files_and_existing_mss(tmp_path: Path) -> None:
     root = _copy_min_install(tmp_path)
     fake_lib = tmp_path / "fake_lib"

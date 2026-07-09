@@ -853,6 +853,96 @@ def check_docs_package(checks: list[Check]) -> None:
         "ASK/AUTO/FULL 어느 모드에서도 위험 명령 가드는 유지되어야 합니다.")
 
 
+def check_plugin_runtime(checks: list[Check]) -> None:
+    ws = workspace_root()
+    launcher = ws / "RUN_OPENCODE_LIG.bat"
+    launcher_text = launcher.read_text(encoding="utf-8", errors="replace") if launcher.exists() else ""
+    launcher_raw = launcher.read_bytes() if launcher.exists() else b""
+    crlf_ok = bool(launcher_raw) and b"\n" not in launcher_raw.replace(b"\r\n", b"")
+    pure_disabled = "OPENCODE_PURE=1" not in launcher_text and "--pure" not in launcher_text.lower()
+    sync_all_plugins = ".opencode\\plugins\\*.ts" in launcher_text and "copy /Y" in launcher_text
+    add(checks, "OpenCode 플러그인 런타임", "OpenCode plugin runtime enabled",
+        "PASS" if launcher.exists() and crlf_ok and pure_disabled and sync_all_plugins else "FAIL",
+        f"launcher={launcher}; crlf={crlf_ok}; OPENCODE_PURE_disabled={pure_disabled}; sync_all_plugins={sync_all_plugins}",
+        "OPENCODE_PURE=1이면 햄스터/자동기억/명령가드 플러그인이 파일만 있고 실행되지 않습니다.")
+
+    fast_markers = [
+        "OPENCODE_FAST_BASE=%OPENCODE_USERDATA%\\opencode_fast_runtime",
+        "OPENCODE_CONFIG_DIR=%OPENCODE_FAST_CONFIG%",
+        "XDG_CONFIG_HOME=%OPENCODE_FAST_CONFIG%",
+        "XDG_DATA_HOME=%OPENCODE_FAST_DATA%",
+        "XDG_CACHE_HOME=%OPENCODE_FAST_CACHE%",
+        "OPENCODE_DISABLE_MODELS_FETCH=1",
+        "OPENCODE_DISABLE_AUTOUPDATE=1",
+        "OPENCODE_DISABLE_LSP_DOWNLOAD=1",
+        "OPENCODE_MODELS_URL=http://127.0.0.1:9/api.json",
+        "NPM_CONFIG_REGISTRY=http://127.0.0.1:9/",
+        "BUN_CONFIG_REGISTRY=http://127.0.0.1:9/",
+        "NO_PROXY=*",
+    ]
+    fast_ok = all(marker in launcher_text for marker in fast_markers)
+    run_idx = launcher_text.find("\"%OCODE_EXE%\" %*")
+    fast_before_run = run_idx >= 0 and all(launcher_text.find(marker) >= 0 and launcher_text.find(marker) < run_idx for marker in fast_markers)
+    pure_empty = 'set "OPENCODE_PURE="' in launcher_text
+    add(checks, "OpenCode 플러그인 런타임", "OpenCode fast runtime isolation",
+        "PASS" if launcher.exists() and fast_ok and fast_before_run and pure_empty else "FAIL",
+        f"markers={{{', '.join(f'{m}:{m in launcher_text}' for m in fast_markers)}}}; before_run={fast_before_run}; pure_empty={pure_empty}",
+        "플러그인은 유지하되 OpenCode 실행 직전에 깨끗한 fast runtime/config/cache와 외부 fetch 차단 환경변수가 잡혀야 합니다.")
+
+    hamster_ui_path = "agent_ops\\ui\\hamster_overlay.py" in launcher_text
+    hamster_log = "hamster_overlay_start.log" in launcher_text
+    hamster_start = "start \"OpenCodeLIG Hamster\"" in launcher_text
+    hamster_no_vbs = "hamster_hidden.vbs" not in launcher_text
+    direct_hamster_ok = (
+        hamster_ui_path
+        and hamster_log
+        and hamster_start
+        and hamster_no_vbs
+    )
+    add(checks, "OpenCode 플러그인 런타임", "direct hamster launcher",
+        "PASS" if launcher.exists() and direct_hamster_ok else "FAIL",
+        f"ui_path={hamster_ui_path}; log={hamster_log}; start={hamster_start}; no_vbs={hamster_no_vbs}",
+        "RUN/ocd 모두에서 햄스터가 뜨도록 VBS 의존 대신 설치 workspace의 ui\\hamster_overlay.py를 직접 실행해야 합니다.")
+
+    plugins = ws / ".opencode" / "plugins"
+    required = [
+        "session-autosave.ts",
+        "memory-inject.ts",
+        "command-guard.ts",
+        "hamster-status.ts",
+        "compaction-handoff.ts",
+    ]
+    missing = [name for name in required if not (plugins / name).exists()]
+    add(checks, "OpenCode 플러그인 런타임", "required plugin files",
+        "PASS" if not missing else "FAIL",
+        f"plugins={plugins}; missing={missing}",
+        "필수 플러그인은 프로젝트 폴더로도 자동 동기화되어야 합니다.")
+
+    hamster = (plugins / "hamster-status.ts").read_text(encoding="utf-8", errors="replace") if (plugins / "hamster-status.ts").exists() else ""
+    hamster_markers = ["session.status", "session.next.text.delta", "session.next.step.ended", "session.next.step.failed", "session.next.tool.called"]
+    hamster_ok = all(m in hamster for m in hamster_markers) and "writeAtomic" in hamster
+    add(checks, "OpenCode 플러그인 런타임", "hamster OpenCode event bridge",
+        "PASS" if hamster_ok else "FAIL",
+        f"markers={{{', '.join(f'{m}:{m in hamster}' for m in hamster_markers)}}}; atomic={'writeAtomic' in hamster}",
+        "햄스터가 최신 OpenCode 이벤트(session.status/session.next.*)를 읽어 current_status.json에 반영해야 합니다.")
+
+    autosave = (plugins / "session-autosave.ts").read_text(encoding="utf-8", errors="replace") if (plugins / "session-autosave.ts").exists() else ""
+    autosave_markers = ['"properties"', '"delta"', '"input"', '"output"', "session.status", "session.next.step.ended", "session.next.step.failed"]
+    autosave_ok = all(m in autosave for m in autosave_markers) and "Object.entries(value)" in autosave
+    add(checks, "OpenCode 플러그인 런타임", "Obsidian autosave event extraction",
+        "PASS" if autosave_ok else "FAIL",
+        f"markers={{{', '.join(f'{m}:{m in autosave}' for m in autosave_markers)}}}; recursive={'Object.entries(value)' in autosave}",
+        "창을 닫아도 대화/작업 이벤트가 wiki\\sessions에 남도록 event.properties 내부 텍스트까지 저장해야 합니다.")
+
+    memory = (plugins / "memory-inject.ts").read_text(encoding="utf-8", errors="replace") if (plugins / "memory-inject.ts").exists() else ""
+    handoff = (plugins / "compaction-handoff.ts").read_text(encoding="utf-8", errors="replace") if (plugins / "compaction-handoff.ts").exists() else ""
+    base_ok = "process.env.LIG_AGENTOPS_HOME" in memory and "process.env.LIG_AGENTOPS_HOME" in handoff
+    add(checks, "OpenCode 플러그인 런타임", "installed AgentOps home precedence",
+        "PASS" if base_ok else "FAIL",
+        f"memory_lig_home={'process.env.LIG_AGENTOPS_HOME' in memory}; handoff_lig_home={'process.env.LIG_AGENTOPS_HOME' in handoff}",
+        "cd 작업폴더 && ocd에서도 기억/인계는 설치본 agent_ops를 우선 사용해야 합니다.")
+
+
 def build_report(checks: list[Check], report_id: str) -> tuple[dict[str, Any], str]:
     counts = {s: sum(1 for c in checks if c.status == s) for s in STATUSES}
     blocking = [c for c in checks if c.status == "FAIL"]
@@ -931,6 +1021,7 @@ def main(argv: list[str] | None = None) -> int:
     check_screen_ocr(checks)
     check_obsidian_wiki(checks)
     check_command_surfaces(checks)
+    check_plugin_runtime(checks)
     check_docs_package(checks)
 
     payload, markdown = build_report(checks, report_id)
