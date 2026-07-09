@@ -686,6 +686,115 @@ def check_obsidian_wiki(checks: list[Check]) -> None:
             "격리 smoke 실패 시 memory_manager/wiki_manager 경로를 확인하세요. 실제 USERDATA는 건드리지 않았습니다.")
 
 
+def check_command_surfaces(checks: list[Check]) -> None:
+    """Smoke-test user-visible command surfaces in an isolated workspace.
+
+    This complements /auto routing: if a user asks naturally, /auto chooses the
+    route; this probe confirms the target command behind that route can at least
+    start, parse arguments, and write its expected local artifact without touching
+    real USERDATA.
+    """
+    ws = workspace_root()
+    commands_dir = ws / ".opencode" / "commands"
+    agents_dir = ws / ".opencode" / "agents"
+    plugins_dir = ws / ".opencode" / "plugins"
+    command_files = sorted(p.name for p in commands_dir.glob("*.md")) if commands_dir.exists() else []
+    add(checks, "명령/산출물 smoke", ".opencode command docs",
+        "PASS" if len(command_files) >= 30 else "WARN",
+        f"count={len(command_files)}, sample={command_files[:8]}",
+        "OpenCode slash command 문서가 누락되면 TUI에서 명령 안내가 약해집니다.")
+    agent_files = sorted(p.name for p in agents_dir.glob("*.md")) if agents_dir.exists() else []
+    plugin_files = sorted(p.name for p in plugins_dir.glob("*.ts")) if plugins_dir.exists() else []
+    add(checks, "명령/산출물 smoke", ".opencode agents/plugins",
+        "PASS" if agent_files and plugin_files else "FAIL",
+        f"agents={len(agent_files)}, plugins={plugin_files}",
+        "에이전트/플러그인 파일이 없으면 기억 주입, command guard, 상태 연동이 빠집니다.")
+
+    with tempfile.TemporaryDirectory(prefix="agentops_cmd_probe_") as td:
+        td_path = Path(td)
+        out_dir = td_path / "out"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        csv = td_path / "probe.csv"
+        csv.write_text("name,value\nalpha,10\nbeta,20\n", encoding="utf-8")
+        doc_spec = td_path / "doc.json"
+        doc_spec.write_text(json.dumps({
+            "title": "pending-check-doc",
+            "sections": [{"heading": "요약", "paragraphs": ["점검 문서"], "bullets": ["A", "B"]}],
+        }, ensure_ascii=False), encoding="utf-8")
+        ppt_spec = td_path / "ppt.json"
+        ppt_spec.write_text(json.dumps({
+            "title": "pending-check-ppt",
+            "slides": [{"title": "핵심", "points": ["점검", "완료"]}],
+        }, ensure_ascii=False), encoding="utf-8")
+        task_file = td_path / "work-task.txt"
+        task_file.write_text("간단한 점검 산출물 만들어줘", encoding="utf-8")
+        isolated_root = td_path / "workspace"
+        isolated_root.mkdir(parents=True, exist_ok=True)
+        safe_probe_dir = ws / "agent_ops" / "results" / "pending_check"
+        safe_probe_dir.mkdir(parents=True, exist_ok=True)
+        safe_content = safe_probe_dir / "safe_write_content.txt"
+        safe_content.write_text("safe-write probe", encoding="utf-8")
+
+        env = dict(os.environ)
+        env.update({
+            "PYTHONUTF8": "1",
+            "PYTHONIOENCODING": "utf-8",
+            "AGENTOPS_ROOT": str(isolated_root),
+            "AGENTOPS_MEMORY_DIR": str(td_path / "memory"),
+            "LIG_DIAG_DIR": str(td_path / "diag"),
+            "AGENTOPS_OUTPUT_DIR": str(out_dir),
+        })
+        agentops = str(ws / "agent_ops" / "agentops.py")
+        probes: list[tuple[str, list[str], set[int], str]] = [
+            ("doctor", [agentops, "doctor"], {0}, "상태 진단"),
+            ("deps", [agentops, "deps"], {0}, "선택 의존성 표시"),
+            ("status", [agentops, "status"], {0}, "상태 JSON"),
+            ("report", [agentops, "report"], {0}, "운영 보고서"),
+            ("memorycheck", [agentops, "memorycheck"], {0}, "기억 상태"),
+            ("recall-pinned", [agentops, "recall", "--pinned"], {0}, "세션 시작 기억 주입"),
+            ("routine-list", [agentops, "routine", "list"], {0}, "루틴 목록"),
+            ("schedule-list", [agentops, "schedule", "list", "--when", "all"], {0}, "일정 목록"),
+            ("schedule-today", [agentops, "schedule", "today"], {0}, "오늘 일정"),
+            ("timeline", [agentops, "timeline", "--gap", "1"], {0}, "활동 타임라인"),
+            ("briefing", [agentops, "briefing"], {0}, "브리핑"),
+            ("weekly", [agentops, "weekly"], {0}, "주간 보고"),
+            ("book", [agentops, "book"], {0}, "지식책"),
+            ("watch", [agentops, "watch", "--max-age", "999999"], {0, 3, 4}, "무한대기 감시 판정"),
+            ("checkpoint", [agentops, "checkpoint", "--note", "pending-check"], {0}, "체크포인트"),
+            ("continue-once", [agentops, "continue-once"], {0}, "이어가기 상태"),
+            ("enqueue", [agentops, "enqueue", "pending-check task", "--kind", "doctor"], {0}, "큐 등록"),
+            ("safety-check", [agentops, "safety-check", "Remove-Item -Recurse C:\\"], {0}, "위험 명령 분류"),
+            ("report-html", [agentops, "report-html", "--input", str(csv), "--title", "probe"], {0}, "HTML 리포트"),
+            ("report-xlsx", [agentops, "report-xlsx", "--input", str(csv), "--out", str(out_dir / "probe.xlsx")], {0}, "XLSX 리포트"),
+            ("office-docx", [agentops, "office-doc", "--kind", "docx", "--spec", str(doc_spec), "--out", str(out_dir / "probe.docx")], {0}, "DOCX 생성"),
+            ("office-pptx", [agentops, "office-doc", "--kind", "pptx", "--spec", str(ppt_spec), "--out", str(out_dir / "probe.pptx")], {0}, "PPTX 생성"),
+            ("doc-template", [agentops, "doc-template", "회의록", "--out", str(out_dir), "--title", "probe"], {0}, "정형문서 생성"),
+            ("safe-write", [agentops, "safe-write",
+                            "agent_ops/results/pending_check/safe_write_target.txt",
+                            "agent_ops/results/pending_check/safe_write_content.txt"], {0}, "안전 파일 생성"),
+            ("work-mock", [agentops, "work", "--task-file", str(task_file), "--mode", "mock"], {0}, "작업 산출물 mock"),
+        ]
+        rows = []
+        ok_count = 0
+        for label, cmd, accepted, purpose in probes:
+            res = run_cmd([sys.executable, *cmd], timeout=35, cwd=ws, env=env)
+            rc = res.get("returncode")
+            ok = rc in accepted
+            ok_count += 1 if ok else 0
+            rows.append(f"{label}=rc{rc}:{'ok' if ok else 'bad'}")
+            status = "PASS" if ok else "WARN"
+            add(checks, "명령/산출물 smoke", f"command:{label}", status,
+                f"{purpose}; rc={rc}; out={(res.get('stdout') or res.get('stderr') or res.get('error', ''))[:180]}",
+                "실패 시 해당 명령의 인자 파싱/의존성/격리 USERDATA 쓰기 경로를 확인하세요.")
+        generated = sorted(str(p.relative_to(out_dir)) for p in out_dir.rglob("*") if p.is_file())
+        expected_any = {"probe.xlsx", "probe.docx", "probe.pptx"}
+        generated_names = {Path(p).name for p in generated}
+        add(checks, "명령/산출물 smoke", "isolated artifact outputs",
+            "PASS" if expected_any.issubset(generated_names) else "WARN",
+            f"commands_ok={ok_count}/{len(probes)}, generated={generated[:12]}, summary={'; '.join(rows)}",
+            "문서/표/슬라이드 산출물이 없으면 Python 문서 생성 의존성 또는 output dir 정책을 확인하세요.")
+
+
 def check_docs_package(checks: list[Check]) -> None:
     ws = workspace_root()
     required_docs = [
@@ -777,6 +886,11 @@ def build_report(checks: list[Check], report_id: str) -> tuple[dict[str, Any], s
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
     parser = argparse.ArgumentParser()
     parser.add_argument("--out-dir", default="")
     args = parser.parse_args(argv)
@@ -792,6 +906,7 @@ def main(argv: list[str] | None = None) -> int:
     check_apps_and_pending(checks)
     check_screen_ocr(checks)
     check_obsidian_wiki(checks)
+    check_command_surfaces(checks)
     check_docs_package(checks)
 
     payload, markdown = build_report(checks, report_id)

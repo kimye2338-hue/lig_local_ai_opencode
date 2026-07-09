@@ -352,3 +352,23 @@ python agent_ops\agentops.py doctor
 - 패키지 폴더에서 직접 Python 점검기를 실행하면 실행 후 `__pycache__`가 생긴다. ZIP 내부는 생성 전 상태라 깨끗하다.
 - Outlook COM activation은 회사 Outlook 프로필/보안 대화상자 때문에 timeout WARN이 날 수 있다. 이 경우 registry PASS와 함께 해석한다.
 - `PENDING`은 결함 단정이 아니라 대상 PC 실앱/망/선택 wheel 확인 항목이다. `FAIL`이 0이면 기본 구조는 다음 분석 단계로 넘어갈 수 있다.
+
+---
+
+## 12. 2026-07-09 원샷 점검 범위 재검토/보강
+
+### 검토 결과
+- 기존 점검기는 설치, 모델, 주요 앱, OpenCode 패치, Obsidian/wiki, OCR, 의존성, 자동 라우팅은 충분히 확인했다.
+- 다만 `doctor/deps/status/report/memorycheck/routine/schedule/timeline/briefing/weekly/book/watch/report-html/report-xlsx/office-doc/doc-template/safe-write/work` 같은 사용자 노출 보조 명령의 직접 실행 smoke가 없어, "모든 기능 원샷 점검" 기준으로는 빈틈이 있었다.
+
+### 보강 내용
+- `pending_check.py`에 `check_command_surfaces()`를 추가했다.
+- 격리 환경에서 주요 명령 25개를 실행하고, HTML/XLSX/DOCX/PPTX/정형문서/work mock 산출물이 실제 생성되는지 확인한다.
+- `safe-write`는 실제 workspace 루트 기준 정책이므로 `agent_ops/results/pending_check/` 아래 진단 파일로만 검증한다. USERDATA는 건드리지 않는다.
+- Python 직접 실행 시에도 stdout/stderr를 UTF-8로 재설정해 CP949 콘솔 출력 실패를 막았다.
+
+### 검증
+- `py -3.11 -m py_compile workspace\agent_ops\pending_check.py` 통과.
+- `py -3.11 workspace\agent_ops\pending_check.py --out-dir dist\_pending_check_full_review4` → PASS 72 / WARN 8 / PENDING 15 / FAIL 0.
+- 명령/산출물 smoke: commands_ok=25/25.
+- 패키지 기준 점검도 PASS 73 / WARN 7 / PENDING 15 / FAIL 0, commands_ok=25/25로 확인했다.
