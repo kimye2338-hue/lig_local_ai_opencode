@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""AutoCAD accoreconsole subprocess adapter with copy-only DWG policy."""
+"""AutoCAD subprocess adapter with copy-only DWG policy.
+
+Prefer accoreconsole when present. Some company PCs expose only GUI AutoCAD
+Mechanical (`acad.exe /p LIGNEX1 /product ACADM`), so fall back to `acad.exe`
+with `/b <script>` while keeping the same copied-DWG safety policy.
+"""
 from __future__ import annotations
 
 import os
@@ -12,7 +17,9 @@ from ..audit import record as audit_record
 
 STANDARD_PATHS = (
     r"C:\AutoCAD 2019\accoreconsole.exe",
+    r"C:\AutoCAD 2019\acad.exe",
     r"C:\Program Files\Autodesk\AutoCAD 2019\accoreconsole.exe",
+    r"C:\Program Files\Autodesk\AutoCAD 2019\acad.exe",
 )
 
 
@@ -28,6 +35,31 @@ def find_accoreconsole() -> str:
         if path.exists():
             return str(path)
     return ""
+
+
+def find_acad() -> str:
+    for name in ("ACAD_EXE", "AUTOCAD_EXE"):
+        override = os.environ.get(name, "").strip()
+        if override:
+            return override
+    found = shutil.which("acad")
+    if found:
+        return found
+    for raw in STANDARD_PATHS:
+        path = Path(raw)
+        if path.name.lower() == "acad.exe" and path.exists():
+            return str(path)
+    return ""
+
+
+def find_autocad_executable() -> tuple[str, str]:
+    console = find_accoreconsole()
+    if console:
+        return console, "accoreconsole"
+    gui = find_acad()
+    if gui:
+        return gui, "acad"
+    return "", ""
 
 
 def _copy_path(src: Path) -> Path:
@@ -66,13 +98,18 @@ def execute(dwg_path: str, scr_path: str, options: Dict[str, Any] | None = None)
         return {"ok": False, "error": "DWG 파일 없음"}
     if not scr.exists():
         return {"ok": False, "error": "AutoCAD script 파일 없음"}
-    exe = find_accoreconsole()
+    exe, exe_kind = find_autocad_executable()
     if not exe:
-        return {"ok": False, "error": "accoreconsole.exe 없음 — ACCORECONSOLE_EXE 또는 AutoCAD 2019 경로 확인"}
+        return {"ok": False, "error": "AutoCAD 실행파일 없음 — ACCORECONSOLE_EXE, ACAD_EXE, AUTOCAD_EXE 또는 AutoCAD 2019 경로 확인"}
     timeout_s = int(opts.get("timeout_s") or 300)
     copy_dwg = _copy_path(dwg)
     shutil.copy2(dwg, copy_dwg)
-    cmd = [exe, "/i", str(copy_dwg), "/s", str(scr)]
+    if exe_kind == "accoreconsole":
+        cmd = [exe, "/i", str(copy_dwg), "/s", str(scr)]
+    else:
+        profile = str(opts.get("profile") or os.environ.get("AUTOCAD_PROFILE") or "LIGNEX1")
+        product = str(opts.get("product") or os.environ.get("AUTOCAD_PRODUCT") or "ACADM")
+        cmd = [exe, str(copy_dwg), "/p", profile, "/product", product, "/b", str(scr)]
     try:
         r = subprocess.run(cmd, cwd=str(scr.parent), capture_output=True, timeout=timeout_s)
         out = _decode_autocad(r.stdout or b"")
@@ -80,7 +117,7 @@ def execute(dwg_path: str, scr_path: str, options: Dict[str, Any] | None = None)
         if r.returncode == 53:
             result = {
                 "ok": False,
-                "error": "AutoCAD가 도면을 열지 못함(exit 53) — /i 사본 dwg 경로 확인",
+                "error": "AutoCAD가 도면을 열지 못함(exit 53) — 사본 dwg 경로 확인",
                 "returncode": r.returncode,
                 "copy_path": str(copy_dwg),
                 "log_tail": (out + err)[-400:],
@@ -96,10 +133,10 @@ def execute(dwg_path: str, scr_path: str, options: Dict[str, Any] | None = None)
                 "cmd": cmd,
             }
             if r.returncode != 0:
-                result["error"] = f"accoreconsole failed exit {r.returncode}"
+                result["error"] = f"AutoCAD command failed exit {r.returncode}"
     except subprocess.TimeoutExpired:
-        result = {"ok": False, "error": f"accoreconsole timeout ({timeout_s}s)", "copy_path": str(copy_dwg), "cmd": cmd}
+        result = {"ok": False, "error": f"AutoCAD command timeout ({timeout_s}s)", "copy_path": str(copy_dwg), "cmd": cmd}
     except Exception as exc:
-        result = {"ok": False, "error": f"accoreconsole failed: {exc.__class__.__name__}", "copy_path": str(copy_dwg), "cmd": cmd}
+        result = {"ok": False, "error": f"AutoCAD command failed: {exc.__class__.__name__}", "copy_path": str(copy_dwg), "cmd": cmd}
     _audit(copy_dwg, scr, result)
     return result

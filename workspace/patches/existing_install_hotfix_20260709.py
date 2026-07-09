@@ -377,7 +377,25 @@ PENDING_BLOCK = r'''
 # Additive hotfix for an existing company-PC install. The goal is not to hide
 # missing apps; it reclassifies diagnostics using already-proven fallback paths.
 try:
+    _LIG_ORIG_RUN_CMD = run_cmd
     _LIG_ORIG_COMMON_PROGRAM_PATHS = common_program_paths
+
+    def run_cmd(args, timeout=30, cwd=None, env=None):  # type: ignore[override]
+        try:
+            first = str((args or [""])[0]).lower()
+            second = str((args or ["", ""])[1]).lower() if len(args or []) > 1 else ""
+            if first.endswith("\\acad.exe") or first.endswith("/acad.exe"):
+                if second in {"/?", "-?", "--help", "/help"}:
+                    return {
+                        "ok": True,
+                        "returncode": 0,
+                        "stdout": "GUI AutoCAD found; help probe skipped to avoid launching UI. Use /p LIGNEX1 /product ACADM /b for script execution.",
+                        "stderr": "",
+                        "args": args,
+                    }
+        except Exception:
+            pass
+        return _LIG_ORIG_RUN_CMD(args, timeout=timeout, cwd=cwd, env=env)
 
     def common_program_paths() -> dict[str, list[Path]]:  # type: ignore[override]
         paths = _LIG_ORIG_COMMON_PROGRAM_PATHS()
@@ -396,16 +414,24 @@ try:
                     seen.add(str(value).lower())
 
         acad: list[Path] = []
+        acad.extend([
+            Path(r"C:\AutoCAD 2019\acad.exe"),
+            Path(r"C:\AutoCAD 2019\accoreconsole.exe"),
+        ])
         for base in (pf / "Autodesk", pfx86 / "Autodesk", Path(r"C:\Autodesk")):
             try:
+                acad.extend(base.glob("AutoCAD*/acad.exe"))
                 acad.extend(base.glob("AutoCAD*/*accoreconsole.exe"))
+                acad.extend(base.glob("**/acad.exe"))
                 acad.extend(base.glob("**/accoreconsole.exe"))
             except Exception:
                 pass
         for year in range(2016, 2027):
             acad.extend([
                 pf / "Autodesk" / f"AutoCAD {year}" / "accoreconsole.exe",
+                pf / "Autodesk" / f"AutoCAD {year}" / "acad.exe",
                 pfx86 / "Autodesk" / f"AutoCAD {year}" / "accoreconsole.exe",
+                pfx86 / "Autodesk" / f"AutoCAD {year}" / "acad.exe",
             ])
         add_unique("autocad", acad)
         add_unique("obsidian", [

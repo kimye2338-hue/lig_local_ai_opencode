@@ -174,8 +174,12 @@ def common_program_paths() -> dict[str, list[Path]]:
             pf / "MATLAB" / "R2023b" / "bin" / "matlab.exe",
         ],
         "autocad": [
+            Path(r"C:\AutoCAD 2019\acad.exe"),
+            Path(r"C:\AutoCAD 2019\accoreconsole.exe"),
             pf / "Autodesk" / "AutoCAD 2019" / "accoreconsole.exe",
+            pf / "Autodesk" / "AutoCAD 2019" / "acad.exe",
             pf / "Autodesk" / "AutoCAD 2024" / "accoreconsole.exe",
+            pf / "Autodesk" / "AutoCAD 2024" / "acad.exe",
         ],
         "fluent": [
             pf / "ANSYS Inc" / "v241" / "fluent" / "ntbin" / "win64" / "fluent.exe",
@@ -524,17 +528,17 @@ def check_apps_and_pending(checks: list[Check]) -> None:
     paths = common_program_paths()
     env_paths = {
         "matlab": os.environ.get("MATLAB_EXE", ""),
-        "autocad": os.environ.get("ACCORECONSOLE_EXE", ""),
+        "autocad": os.environ.get("ACCORECONSOLE_EXE", "") or os.environ.get("ACAD_EXE", "") or os.environ.get("AUTOCAD_EXE", ""),
         "fluent": os.environ.get("FLUENT_EXE", ""),
     }
     env_names = {
         "matlab": "MATLAB_EXE",
-        "autocad": "ACCORECONSOLE_EXE",
+        "autocad": "ACCORECONSOLE_EXE/ACAD_EXE",
         "fluent": "FLUENT_EXE",
     }
     path_names = {
         "matlab": ["matlab.exe", "matlab"],
-        "autocad": ["accoreconsole.exe", "accoreconsole"],
+        "autocad": ["accoreconsole.exe", "accoreconsole", "acad.exe", "acad"],
         "fluent": ["fluent.exe", "fluent"],
     }
     executable_hits: dict[str, list[str]] = {}
@@ -552,6 +556,11 @@ def check_apps_and_pending(checks: list[Check]) -> None:
     }
     for key, (extra, timeout) in cli_probes.items():
         if not executable_hits.get(key):
+            continue
+        if key == "autocad" and Path(executable_hits[key][0]).name.lower() == "acad.exe":
+            add(checks, "앱/도구 pending", f"{key} cli probe", "SKIP",
+                f"{executable_hits[key][0]} is GUI AutoCAD; skipped /? probe to avoid launching UI",
+                "실제 .scr 실행은 사용자 작업 요청 때 사본 DWG + /p LIGNEX1 /product ACADM /b 기준으로 수행합니다.")
             continue
         res = run_cmd([executable_hits[key][0], *extra], timeout=timeout)
         add(checks, "앱/도구 pending", f"{key} cli probe",
