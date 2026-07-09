@@ -19,6 +19,23 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+_WS_ROOT = Path(__file__).resolve().parents[1]
+if str(_WS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_WS_ROOT))
+
+from agent_ops.release_contracts import (
+    AUTOSAVE_REQUIRED_MARKERS,
+    HAMSTER_EVENT_BRIDGE_MARKERS,
+    HAMSTER_LEGACY_MARKERS,
+    LAUNCHER_DRIVE_ROOT_FALLBACK,
+    LAUNCHER_FAST_RUNTIME_MARKERS,
+    LAUNCHER_HAMSTER_MARKERS,
+    LAUNCHER_PROJECT_DIR_MARKERS,
+    MEMORY_INJECT_REQUIRED_MARKERS,
+    PLUGIN_SYNC_GLOB,
+    REQUIRED_PLUGIN_FILES,
+)
+
 
 @dataclass
 class GateCheck:
@@ -87,23 +104,8 @@ def _check_launcher(workspace: Path, checks: list[GateCheck]) -> None:
     text = _read_text(launcher)
     run_idx = text.find("\"%OCODE_EXE%\" %*")
 
-    fast_required = [
-        "OPENCODE_FAST_BASE=%OPENCODE_USERDATA%\\opencode_fast_runtime",
-        "OPENCODE_CONFIG_DIR=%OPENCODE_FAST_CONFIG%",
-        "XDG_CONFIG_HOME=%OPENCODE_FAST_CONFIG%",
-        "XDG_DATA_HOME=%OPENCODE_FAST_DATA%",
-        "XDG_CACHE_HOME=%OPENCODE_FAST_CACHE%",
-        "OPENCODE_DISABLE_MODELS_FETCH=1",
-        "OPENCODE_DISABLE_AUTOUPDATE=1",
-        "OPENCODE_DISABLE_LSP_DOWNLOAD=1",
-        "OPENCODE_MODELS_URL=http://127.0.0.1:9/api.json",
-        "NPM_CONFIG_REGISTRY=http://127.0.0.1:9/",
-        "BUN_CONFIG_REGISTRY=http://127.0.0.1:9/",
-        "NO_PROXY=*",
-        "set \"OPENCODE_PURE=\"",
-    ]
-    fast_ok, fast_evidence = _markers(text, fast_required)
-    before_run = run_idx >= 0 and all(0 <= text.find(marker) < run_idx for marker in fast_required)
+    fast_ok, fast_evidence = _markers(text, list(LAUNCHER_FAST_RUNTIME_MARKERS))
+    before_run = run_idx >= 0 and all(0 <= text.find(marker) < run_idx for marker in LAUNCHER_FAST_RUNTIME_MARKERS)
     _add(
         checks,
         "launcher_fast_runtime",
@@ -112,14 +114,7 @@ def _check_launcher(workspace: Path, checks: list[GateCheck]) -> None:
         "OpenCode 실행 직전 fast runtime/offline 환경변수를 설정하고 OPENCODE_PURE=1을 제거하세요.",
     )
 
-    hamster_required = [
-        "LIG_WORKSPACE_HOME=%USERPROFILE%\\OpenCodeLIG\\workspace",
-        "agent_ops\\ui\\hamster_overlay.py",
-        "hamster_overlay_start.log",
-        "start \"OpenCodeLIG Hamster\"",
-        "LIG_AGENTOPS_HOME=%LIG_WORKSPACE_HOME%",
-    ]
-    hamster_ok, hamster_evidence = _markers(text, hamster_required)
+    hamster_ok, hamster_evidence = _markers(text, list(LAUNCHER_HAMSTER_MARKERS))
     _add(
         checks,
         "launcher_direct_hamster",
@@ -128,36 +123,23 @@ def _check_launcher(workspace: Path, checks: list[GateCheck]) -> None:
         "햄스터는 설치 workspace의 agent_ops\\ui\\hamster_overlay.py를 직접 실행해야 합니다.",
     )
 
-    project_required = [
-        "if not defined LIG_PROJECT_DIR (",
-        "set \"LIG_PROJECT_DIR=%CD%\"",
-        "%WINDIR%\\System32",
-        "%WINDIR%\\SysWOW64",
-        "cd /d \"%LIG_PROJECT_DIR%\"",
-    ]
-    project_ok, project_evidence = _markers(text, project_required)
+    project_ok, project_evidence = _markers(text, list(LAUNCHER_PROJECT_DIR_MARKERS))
     unconditional_workspace = 'set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"' in text.splitlines()
+    drive_root_guard = LAUNCHER_DRIVE_ROOT_FALLBACK in text
     _add(
         checks,
         "launcher_ocd_project_dir",
-        launcher.exists() and project_ok and not unconditional_workspace,
-        f"{project_evidence}; unconditional_workspace={unconditional_workspace}",
+        launcher.exists() and project_ok and drive_root_guard and not unconditional_workspace,
+        f"{project_evidence}; drive_root_guard={drive_root_guard}; unconditional_workspace={unconditional_workspace}",
         "ocd/caller가 넘긴 작업폴더를 보존하고 위험한 시작 위치만 workspace로 fallback해야 합니다.",
     )
 
 
 def _check_plugins_and_memory(workspace: Path, checks: list[GateCheck]) -> None:
     plugins = workspace / ".opencode" / "plugins"
-    required_files = [
-        "command-guard.ts",
-        "compaction-handoff.ts",
-        "hamster-status.ts",
-        "memory-inject.ts",
-        "session-autosave.ts",
-    ]
-    missing = [name for name in required_files if not (plugins / name).exists()]
+    missing = [name for name in REQUIRED_PLUGIN_FILES if not (plugins / name).exists()]
     launcher = _read_text(workspace / "RUN_OPENCODE_LIG.bat")
-    sync_all_plugins = ".opencode\\plugins\\*.ts" in launcher
+    sync_all_plugins = PLUGIN_SYNC_GLOB in launcher
     pure_one = "OPENCODE_PURE=1" in launcher
     _add(
         checks,
@@ -168,22 +150,7 @@ def _check_plugins_and_memory(workspace: Path, checks: list[GateCheck]) -> None:
     )
 
     autosave = _read_text(plugins / "session-autosave.ts")
-    autosave_required = [
-        "memory\", \"wiki\", \"sessions\"",
-        "appendFileSync(sessionFile()",
-        "Object.entries(value)",
-        "log-activity",
-        "session.status",
-        "session.next.step.ended",
-        "session.next.step.failed",
-        "bufferEventText",
-        "takeBufferedText",
-        "session.next.text.delta",
-        "token",
-        "secret",
-        "credential",
-    ]
-    autosave_ok, autosave_evidence = _markers(autosave, autosave_required)
+    autosave_ok, autosave_evidence = _markers(autosave, list(AUTOSAVE_REQUIRED_MARKERS))
     _add(
         checks,
         "session_autosave_to_wiki",
@@ -193,18 +160,7 @@ def _check_plugins_and_memory(workspace: Path, checks: list[GateCheck]) -> None:
     )
 
     memory = _read_text(plugins / "memory-inject.ts")
-    memory_required = [
-        "fallbackStartupBlock",
-        "refreshStartupRecallAsync",
-        "setTimeout",
-        "process.env.LIG_AGENTOPS_HOME",
-        "session.status",
-        "STARTUP_REFRESH_COOLDOWN_MS",
-        "COMPACTION_REFRESH_COOLDOWN_MS",
-        "IDLE_REFRESH_COOLDOWN_MS",
-        "cachedRecallBlock",
-    ]
-    memory_ok, memory_evidence = _markers(memory, memory_required)
+    memory_ok, memory_evidence = _markers(memory, list(MEMORY_INJECT_REQUIRED_MARKERS))
     _add(
         checks,
         "memory_inject_nonblocking",
@@ -214,28 +170,8 @@ def _check_plugins_and_memory(workspace: Path, checks: list[GateCheck]) -> None:
     )
 
     hamster = _read_text(plugins / "hamster-status.ts")
-    hamster_required = [
-        "session.status",
-        "session.next.tool.called",
-        "session.next.tool.success",
-        "session.next.tool.failed",
-        "experimental.session.compacting",
-        'properties?.tool === "task"',
-        "opencode-event-types.log",
-        "isTaskToolCall",
-        "isTaskToolSuccess",
-        "isTaskToolFailure",
-    ]
-    hamster_ok, hamster_evidence = _markers(hamster, hamster_required)
-    hamster_legacy = any(marker in hamster for marker in [
-        'type === "task.start"',
-        'type === "task.end"',
-        'type === "session.task.started"',
-        'type === "session.next.task.started"',
-        "event?.properties?.agent_name",
-        'body.includes("subagent")',
-        'body.includes("agent_name")',
-    ])
+    hamster_ok, hamster_evidence = _markers(hamster, list(HAMSTER_EVENT_BRIDGE_MARKERS))
+    hamster_legacy = any(marker in hamster for marker in HAMSTER_LEGACY_MARKERS)
     _add(
         checks,
         "hamster_subagent_status_bridge",
@@ -415,7 +351,6 @@ def run_quality_gate(workspace: Path | str | None = None, run_commands: bool = T
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(result.to_markdown(), encoding="utf-8")
     result.report_path = report_path
-    report_path.write_text(result.to_markdown(), encoding="utf-8")
     return result
 
 

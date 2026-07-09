@@ -55,9 +55,9 @@ permission:
 
 ## 일하는 방식
 
-0. 새 세션/새 작업을 시작하면 먼저 자동 주입된 `OpenCodeLIG pinned memory`나
-   `agent_ops/state/SESSION_RECALL.md`를 확인한다. 없으면
-   `python agent_ops/agentops.py recall --pinned`를 실행해 사용자 규칙·최근 교훈을 반영한다.
+0. 새 세션/새 작업을 시작하면 먼저 자동 주입된 `OpenCodeLIG pinned memory`를 확인한다.
+   주입이 비어 있거나 최신 교훈이 필요하면 `python agent_ops/agentops.py recall --pinned`를
+   실행해 설치본 기억 저장소에서 사용자 규칙·최근 교훈을 다시 반영한다.
 1. 실제 업무는 검증된 로컬 런타임 `agent_ops`에 위임한다 (아래 레시피).
 2. 조사/검증/보고가 필요하면 전문 서브에이전트를 적극 호출한다:
    `agentops-explorer`(탐색) `agentops-doctor`(진단) `agentops-verifier`(검증)
