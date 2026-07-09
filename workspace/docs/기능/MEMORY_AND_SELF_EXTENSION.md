@@ -78,3 +78,35 @@ Required before changing memory storage format:
 The user expects the assistant to improve over time by remembering prior mistakes, environment details, tool quirks, and preferred operating style. Losing that memory during a patch would make the program regress even if the code became cleaner.
 
 Therefore, tool patches should be allowed to replace runtime code, but user memory must be treated like durable personal state.
+
+## 4. Automatic self-improvement loop
+
+OpenCodeLIG also has a pilot self-improvement layer. The user does not need to
+choose this feature during normal work.
+
+Default behavior:
+
+- enabled by default
+- records compact `self_error` events when tools, adapters, agent loops, or
+  quality checks fail
+- links a later success in the same task/run into a `self_fix`
+- promotes the fix into a short `self_lesson`
+- injects at most 3 active self lessons on the next session through the normal
+  pinned recall path
+- writes a human-readable summary under
+  `%USERPROFILE%\OpenCodeLIG_USERDATA\memory\wiki\self-improvement`
+
+The self-improvement layer stores summaries, not full chat transcripts. It must
+not expose secrets, replace user memories, or bypass approval/command guard.
+
+Manual control exists only for operation:
+
+```bat
+python agent_ops\agentops.py self-improve status
+python agent_ops\agentops.py self-improve off
+python agent_ops\agentops.py self-improve on
+python agent_ops\agentops.py self-improve report
+```
+
+Turning it off stops new self-improvement capture and injection. It does not
+delete existing records.

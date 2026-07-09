@@ -13,6 +13,8 @@ A small always-on-top desktop companion for OpenCodeLIG. It shows a beige hamste
   - `확인 필요`
   - `오류`
   - `멈춤 의심`
+- Distinguishes OpenCode model output, tool execution, and native
+  subagent/task work through the `hamster-status.ts` plugin.
 - Double-click the hamster to see recent events.
 - Right-click the hamster for details, refresh, or close.
 - Drag the hamster with the left mouse button to move it.
@@ -50,6 +52,19 @@ Keep it open while using OpenCodeLIG. It can run even when OpenCode itself is no
 No external stock image is bundled. The hamster is drawn procedurally with Tkinter canvas shapes so the offline/company bundle does not depend on copyrighted image files or remote downloads.
 
 The intended visual direction is a simple beige real-hamster companion rather than a copied photo.
+
+## OpenCode subagent/task status
+
+The overlay does not patch the OpenCode TUI. Instead, the OpenCode plugin
+`workspace\.opencode\plugins\hamster-status.ts` listens to session/tool/task
+events and writes `%LIG_STATE_DIR%\current_status.json`.
+
+For native OpenCode subagents and tasks, the plugin treats task/subagent start
+events as `working` and task/subagent end events as `done`. It also appends
+event type names to `%LIG_DIAG_DIR%\opencode-event-types.log` so future OpenCode
+event-name changes can be diagnosed without storing chat content or secrets.
+
+If `working` stays stale for too long, the overlay displays `멈춤 의심`.
 
 ## Next upgrade path
 

@@ -128,3 +128,201 @@
 py -3.11 -m pytest workspace\tests\test_existing_install_hotfix.py workspace\tests\test_autocad_gui_fallback.py -q
 py -3.11 -m py_compile workspace\agent_ops\adapters\autocad_batch.py workspace\agent_ops\pending_check.py workspace\patches\existing_install_hotfix_20260709.py
 ```
+
+## 2026-07-09 추가 보강: OpenCode 플러그인 런타임/햄스터/자동기억
+
+사용자 지적: 햄스터가 OpenCode 작업 상태를 제대로 못 잡고, 세션 중 창을 닫으면 Obsidian에 자동으로 쌓이지 않는 것으로 보였다. 이전 점검은 플러그인 파일 존재를 봤지만, OpenCode가 실제로 플러그인을 로드하는지와 최신 이벤트명을 해석하는지까지 확인하지 못했다.
+
+원인:
+
+- `RUN_OPENCODE_LIG.bat`에 `OPENCODE_PURE=1`이 남아 있으면 OpenCode 외부 플러그인이 로드되지 않는다.
+- `hamster-status.ts`가 최신 이벤트인 `session.status`, `session.next.text.delta`, `session.next.tool.*`, `session.next.step.*`를 충분히 처리하지 못했다.
+- `session-autosave.ts`가 OpenCode 이벤트 본문이 들어오는 `event.properties` 내부를 충분히 재귀 추출하지 못했다.
+- 기존 설치본 핫픽스는 런처에 마커가 있으면 건너뛰어, 잘못된 줄이 남은 PC를 다시 고치지 못할 수 있었다.
+- `pending_check.py`가 파일 존재만 확인하고 플러그인 런타임이 실제로 살아 있는지는 판정하지 못했다.
+
+조치:
+
+- `RUN_OPENCODE_LIG.bat`에서 `OPENCODE_PURE=1` 제거.
+- 프로젝트 폴더 `.opencode\plugins`에 설치본의 모든 필수 플러그인 `*.ts`를 매번 최신본으로 동기화.
+- `hamster-status.ts`가 최신 OpenCode 이벤트를 읽어 `current_status.json`에 `working/done/error/idle`을 반영하도록 보강.
+- 햄스터 상태파일 쓰기를 임시파일 후 rename 방식으로 바꿔 깨진 JSON을 줄였다.
+- `session-autosave.ts`가 `properties`, `delta`, `input`, `output`, `error` 내부까지 재귀 추출하도록 보강.
+- `memory-inject.ts`, `compaction-handoff.ts`는 `LIG_AGENTOPS_HOME`을 우선해 `cd 작업폴더 && ocd`에서도 설치본 엔진을 기준으로 동작하게 했다.
+- `pending_check.py`에 `OpenCode 플러그인 런타임` 섹션을 추가해 `OPENCODE_PURE`, CRLF, 플러그인 동기화, 햄스터 이벤트 브리지, 자동저장 추출을 확인하게 했다.
+- `workspace/patches/existing_install_hotfix_20260709.py`와 `최종_패치파일.bat`에도 같은 내용을 누적했다.
+
+검증 기준:
+
+```cmd
+py -3.11 -m pytest workspace\tests\test_opencode_lig_plugin_runtime.py -q
+py -3.11 -m pytest workspace\tests\test_existing_install_hotfix.py -q
+```
+
+주의:
+
+- 이 패치 이후에도 실사용 중 Obsidian 자동저장은 OpenCode 이벤트가 발생한 만큼 즉시 append하는 구조다. “창 닫기 직전 아직 이벤트가 전달되지 않은 토큰”까지 보장하는 것은 아니지만, 현재 구조에서 자동 축적이 실제로 동작할 수 있게 플러그인 로딩과 이벤트 해석 경로를 복구했다.
+- 이후 누군가 이어받으면 `pending-check-last.md`에서 `OpenCode 플러그인 런타임` 섹션을 먼저 확인한다.
+
+## 2026-07-09 추가 보강: LiteLLM 원격 cost map 경고 차단
+
+사용자 지적:
+
+```text
+litellm:warning:get_model_cost_map.py:264 - LiteLLM:Failed to fetch remote model cost map from https://raw.githubusercontent.com/berriai/litellm/main/model_prices_and_context_window.json:[errno 11002]getaddrinfo failed. Falling back to local backup.
+```
+
+원인:
+
+- 폐쇄망에서 LiteLLM이 import 시 GitHub의 모델 가격/컨텍스트 표를 받으려다 DNS 실패를 낸다.
+- LiteLLM은 로컬 백업으로 fallback하므로 일반 LLM 호출 자체가 막히는 오류는 아니다.
+- 다만 사용자 화면에 warning이 계속 뜨면 실제 장애처럼 보이므로, 폐쇄망 제품 기준으로는 원격 조회를 처음부터 끄는 것이 맞다.
+
+조치:
+
+- `RUN_OPENCODE_LIG.bat`, `launch\_py.bat`, `launch\_pyw.bat`, `최종_패치파일.bat`에 아래 값을 설정.
+
+```bat
+set "LITELLM_LOCAL_MODEL_COST_MAP=True"
+set "LITELLM_LOCAL_POLICY_TEMPLATES=True"
+set "LITELLM_LOCAL_BLOG_POSTS=True"
+```
+
+- `agent_ops\agentops.py`에서도 Python 직접 실행 경로를 위해 같은 값을 `os.environ.setdefault(...)`로 설정.
+- `existing_install_hotfix_20260709.py`가 기존 설치본의 런처와 `agentops.py`에도 같은 보강을 주입하도록 수정.
+
+검증:
+
+```cmd
+py -3.11 -m pytest workspace\tests\test_opencode_lig_plugin_runtime.py -q
+py -3.11 -m py_compile workspace\agent_ops\agentops.py workspace\patches\existing_install_hotfix_20260709.py
+```
+
+## 2026-07-09 추가 보강: OpenCode 빠른 시작/햄스터/ocd 최종 런처
+
+사용자 최종 확인:
+
+- `RUN_OPENCODE_LIG.bat` 직접 실행 시 OpenCode가 빠르게 뜨고 햄스터가 표시되어야 한다.
+- `cd 작업폴더` 후 `ocd`로 실행해도 OpenCode가 빠르게 뜨고 햄스터가 표시되어야 한다.
+- `.opencode\plugins`는 유지해야 하며 `OPENCODE_PURE=1`로 플러그인을 끄면 안 된다.
+- 원본 `opencode.json`은 유지해야 한다.
+- `ocd`로 연 폴더가 작업/산출물 폴더가 되어야 한다.
+
+최종 원인 판단:
+
+- 지연의 직접 조합은 기존 OpenCode runtime config/data/cache 경로, 회사망 외부 fetch/update/npm/bun/proxy 대기, 플러그인 로딩 활성 상태였다.
+- 플러그인 파일 자체나 Chrome CDP가 직접 원인은 아니었다.
+- 햄스터 파일 위치는 `agent_ops\ui\hamster_overlay.py`인데, 런처가 VBS 또는 잘못된 경로에 의존하면 `ocd` 실행에서 누락될 수 있었다.
+
+조치:
+
+- `RUN_OPENCODE_LIG.bat`에서 OpenCode 실행 직전에만 `%USERPROFILE%\OpenCodeLIG_USERDATA\opencode_fast_runtime\config\data\cache` 계열로 격리한다.
+- `OPENCODE_DISABLE_MODELS_FETCH`, `OPENCODE_DISABLE_AUTOUPDATE`, `OPENCODE_DISABLE_LSP_DOWNLOAD`, npm/bun registry timeout, proxy 비움 값을 OpenCode 실행 직전에 설정한다.
+- `OPENCODE_PURE=1`은 금지하고 `set "OPENCODE_PURE="`만 둔다.
+- `.opencode\plugins` 동기화는 유지한다.
+- 햄스터는 `hamster_hidden.vbs`에 의존하지 않고 `%USERPROFILE%\OpenCodeLIG\workspace\agent_ops\ui\hamster_overlay.py`를 우선 직접 실행한다.
+- `LIG_PROJECT_DIR`는 caller/ocd가 지정하면 유지하고, 없으면 `%CD%`를 쓰며, `%USERPROFILE%`, `System32`, `SysWOW64`에서 시작한 경우만 workspace로 fallback한다.
+- `workspace\launch\ocd.bat`와 hotfix 생성 `ocd.bat`는 인자 없이 실행될 때 현재 폴더를 `LIG_PROJECT_DIR`로 넘긴다.
+- `pending_check.py`의 `OpenCode 플러그인 런타임` 섹션에 `OpenCode fast runtime isolation`, `direct hamster launcher` 판정을 추가했다.
+- `최종_패치파일.bat`를 최신 `existing_install_hotfix_20260709.py`와 기존 내장 `mss-10.2.0` wheel로 다시 생성했다.
+
+검증:
+
+```cmd
+py -3.11 -m pytest workspace\tests\test_existing_install_hotfix.py workspace\tests\test_opencode_lig_plugin_runtime.py -q
+py -3.11 -m py_compile workspace\patches\existing_install_hotfix_20260709.py workspace\agent_ops\pending_check.py workspace\agent_ops\ocd.py workspace\agent_ops\ui\hamster_overlay.py workspace\agent_ops\agentops.py
+py -3.11 workspace\tests\test_launch_bats.py
+```
+
+이어받는 기준:
+
+- 사내 PC에는 `최종_패치파일.bat` 하나만 실행한다.
+- 적용 후 `RUN_OPENCODE_LIG.bat`가 느리면 `pending-check-last.md`의 `OpenCode fast runtime isolation`과 `direct hamster launcher`를 먼저 본다.
+- `OPENCODE_PURE=1`, plugins 폴더 rename/삭제, `browser_cdp.py` 비활성화, `opencode.json` 최소화는 재발 원인이므로 하지 않는다.
+
+## 2026-07-09 추가 보강: 실수 재발 방지 품질 게이트
+
+사용자 지적:
+
+- 이전 작업에서 파일 존재를 실제 동작 검증으로 착각했다.
+- 개발본 기준으로만 판단하고 기존 설치본 변형을 충분히 재현하지 못했다.
+- 위키/Obsidian/햄스터/자동저장처럼 “사용자는 그냥 쓰면 된다”는 철학이 테스트와 점검 기준에 충분히 들어가지 않았다.
+
+조치:
+
+- `agent_ops\quality_gate.py` 추가.
+- `agentops.py quality-gate` 명령 추가.
+- `tests\test_quality_gate.py` 추가.
+- `existing_install_hotfix_20260709.py`가 기존 설치본에 `quality_gate.py`와 `agentops.py quality-gate` 명령을 복구하도록 보강.
+- `최종_패치파일.bat`에 최신 hotfix payload를 다시 내장.
+
+품질 게이트가 확인하는 계약:
+
+- `RUN_OPENCODE_LIG.bat`가 fast runtime/offline timeout 방지 환경변수를 OpenCode 실행 직전에 설정한다.
+- `OPENCODE_PURE=1`이 없다.
+- 햄스터는 `agent_ops\ui\hamster_overlay.py`를 직접 실행한다.
+- `ocd` 작업폴더가 `LIG_PROJECT_DIR`로 보존된다.
+- 필수 플러그인이 존재하고 작업폴더로 동기화된다.
+- `session-autosave.ts`가 Obsidian `wiki\sessions`에 append하며 `event.properties` 내부까지 추출한다.
+- `memory-inject.ts`가 TUI 시작을 막지 않는 fallback + background refresh 구조다.
+- Obsidian은 `obsidian_detached.vbs`로 분리 실행되어 TUI에 Electron 로그가 섞이지 않는다.
+- 격리 임시 메모리에서 `remember → wiki consolidate` smoke가 성공한다.
+- 최종 패치 BAT가 최신 hotfix payload와 `mss` wheel을 자체 포함한다.
+- 기존 설치본에 `quality_gate.py`와 `agentops.py quality-gate` 명령이 없어도 hotfix가 복구한다.
+
+수동 실행 명령:
+
+```cmd
+py -3.11 workspace\agent_ops\quality_gate.py --no-commands
+py -3.11 workspace\agent_ops\agentops.py quality-gate --no-commands
+```
+
+출시 전 전체 게이트:
+
+```cmd
+py -3.11 workspace\agent_ops\quality_gate.py
+```
+
+검증:
+
+```cmd
+py -3.11 -m pytest workspace\tests\test_quality_gate.py -q
+```
+
+결과: 5 passed.
+
+## 2026-07-09 추가 보강: 햄스터 멀티에이전트 표시 + 자동 자가개선 루프
+
+사용자 지적:
+
+- OpenCode native subagent/Task에 일을 맡기면 현재 멈춘 것인지 처리 중인지 구분하기 어렵다.
+- 모델이 초반에 같은 실수를 반복하고, 한 세션 안에서는 나아져도 새 세션에서 다시 같은 시행착오를 겪는다.
+- 사용자가 별도 명령을 고르지 않아도 상태 표시, 실수 기록, 해결법 승격, 다음 세션 반영이 자동으로 작동해야 한다.
+- 필요하면 파일럿 자가개선 기능을 끌 수 있어야 한다.
+
+조치:
+
+- `hamster-status.ts`가 `task.start`, `task.end`, subagent/agent_name 계열 이벤트를 넓게 감지해 `current_status.json`에 `working/done`을 쓴다.
+- 이벤트 타입만 `%LIG_DIAG_DIR%\opencode-event-types.log`에 남겨, OpenCode 이벤트명이 바뀌어도 원인 추적이 가능하게 했다. 본문/비밀값은 저장하지 않는다.
+- `agent_ops\self_improvement.py` 추가.
+- 기본값은 자동 ON이며, 실패/성공/도구오류/agent loop 종료를 요약형 `self_error`, `self_fix`, `self_lesson`으로 기록한다.
+- `agentops.py self-improve status/on/off/report/inject` 명령을 추가했다. 명령은 제어/진단용이고, 일반 사용자는 직접 고르지 않아도 된다.
+- `recall --pinned` 경로가 자가개선 지침을 최대 3개만 추가 출력하므로 다음 세션 주입이 기존 `memory-inject.ts` 흐름을 그대로 탄다.
+- Obsidian 보기용 요약은 `%USERPROFILE%\OpenCodeLIG_USERDATA\memory\wiki\self-improvement\0-자가개선-대시보드.md`에 생성된다.
+- `quality_gate.py`에 `hamster_subagent_status_bridge`, `self_improvement_auto_loop` 검사를 추가했다.
+- 기존 설치본용 hotfix와 `최종_패치파일.bat`에도 같은 내용을 누적한다.
+
+검증 기준:
+
+```cmd
+py -3.11 -m pytest workspace\tests\test_self_improvement.py -q
+py -3.11 -m pytest workspace\tests\test_opencode_lig_plugin_runtime.py workspace\tests\test_quality_gate.py -q
+py -3.11 -m py_compile workspace\agent_ops\self_improvement.py workspace\agent_ops\agentops.py workspace\agent_ops\tool_dispatch.py workspace\agent_ops\orchestrator.py workspace\agent_ops\quality_gate.py
+```
+
+운영 기준:
+
+- 파일럿 기간에는 자가개선 ON이 기본이다.
+- OFF는 새 기록/주입만 멈추며 기존 기록과 위키 요약은 삭제하지 않는다.
+- 주입은 최대 3개, 각 항목은 짧은 행동지침만 포함한다.
+- command_guard, approval, USERDATA 보호는 변경하지 않는다.

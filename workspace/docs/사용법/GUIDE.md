@@ -41,6 +41,15 @@ OpenCodeLIG는 세 층으로 동작합니다.
 %USERPROFILE%\OpenCodeLIG\workspace\RUN_OPENCODE_LIG.bat
 ```
 
+작업 폴더를 따로 정해서 쓰려면 그 폴더로 이동한 뒤 `ocd`를 실행합니다.
+
+```bat
+cd C:\내업무\진동시험
+ocd
+```
+
+이 방식으로 시작하면 프로그램 본체와 기억은 기존 설치본을 쓰되, 새 문서·보고서·결과물은 현재 작업 폴더 기준으로 정리됩니다.
+
 설치 후 사내 앱, Obsidian, 브라우저, OCR, Fluent, SolidWorks 등 현장 확인이 필요한 항목을 한 번에 점검하려면 아래 파일을 실행합니다.
 
 ```text
@@ -92,6 +101,9 @@ LIG_API_KEY=발급받은키
 요청 의도에 따라 런타임이 문서 생성, 데이터 리포트, 일정, 기억, 앱 자동화 등을 고릅니다.
 삭제, 외부 전송, 실제 저장, 모델/게이트웨이 기본값 변경처럼 되돌리기 어려운 요청은 자동으로 멈추고 확인을 요구합니다.
 
+OpenCodeLIG 플러그인은 실행 중 상태를 햄스터 표시와 Obsidian 자동저장으로 연결합니다. 일반 대화와 도구 실행 이벤트는 가능한 즉시
+`%USERPROFILE%\OpenCodeLIG_USERDATA\memory\wiki\sessions`에 날짜별 노트로 남습니다.
+
 ### 보조: 번호 메뉴
 
 채팅 없이 빠르게 실행하려면 메뉴를 씁니다.
@@ -130,9 +142,12 @@ LIG_API_KEY=발급받은키
 산출물은 보통 아래에 저장됩니다.
 
 ```text
-%USERPROFILE%\OpenCodeLIG\workspace\agent_ops\results\artifacts
-%USERPROFILE%\OpenCodeLIG\workspace\agent_ops\results\reports
+현재 작업 폴더\agent_ops\results\artifacts
+현재 작업 폴더\agent_ops\results\reports
 ```
+
+설치본 `RUN_OPENCODE_LIG.bat`를 직접 더블클릭한 경우에는 현재 작업 폴더가 설치 workspace이므로 기존처럼
+`%USERPROFILE%\OpenCodeLIG\workspace\agent_ops\results` 아래에 쌓입니다. 업무별 폴더에 결과를 모으려면 `cd 작업폴더 && ocd` 방식을 권장합니다.
 
 ## 5. 승인 모드
 
@@ -156,6 +171,7 @@ OpenCodeLIG는 일을 하면서 배운 내용을 USERDATA에 저장합니다.
 | 규칙집 | `memory\WIKI.md` | 사람이 직접 적을 수 있는 전역 규칙 |
 | LLM Wiki | `memory\wiki\*.md` | 원장에서 자동 생성되는 주제별 페이지 |
 | 수동 노트 | `memory\wiki\manual\` | 사람이 Obsidian에서 직접 작성하는 노트 |
+| 세션 자동저장 | `memory\wiki\sessions\` | OpenCode 대화/작업 이벤트가 날짜별로 자동 누적되는 노트 |
 | 지식책 | HTML | 기억, 복습, 위키를 보기 좋게 묶은 책 |
 
 기억시키는 방법:
