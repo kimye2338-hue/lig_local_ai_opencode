@@ -7,6 +7,7 @@ import py_compile
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 
@@ -69,14 +70,32 @@ def test_final_patch_bat_is_self_contained_and_embeds_compilable_payload(tmp_pat
     raw = FINAL_BAT.read_bytes()
     assert b"\n" not in raw.replace(b"\r\n", b"")
     text = raw.decode("utf-8")
-    marker = "__OPENCODELIG_HOTFIX_PAYLOAD_BASE64__"
+    py_marker = "__OPENCODELIG_HOTFIX_PY_BASE64__"
+    wheel_name_marker = "__OPENCODELIG_HOTFIX_MSS_WHEEL_NAME__"
+    wheel_marker = "__OPENCODELIG_HOTFIX_MSS_WHEEL_BASE64__"
+    end_marker = "__OPENCODELIG_HOTFIX_END__"
     lines = text.splitlines()
-    assert marker in lines
-    payload = "".join(lines[lines.index(marker) + 1 :])
-    assert len(payload) > 1000
+    assert py_marker in lines
+    assert wheel_name_marker in lines
+    assert wheel_marker in lines
+    assert end_marker in lines
+
+    def section(start: str, end: str) -> str:
+        return "".join(lines[lines.index(start) + 1 : lines.index(end)])
+
+    payload = section(py_marker, wheel_name_marker)
     extracted = tmp_path / "embedded_hotfix.py"
     extracted.write_bytes(base64.b64decode(payload))
     py_compile.compile(str(extracted), doraise=True)
+
+    wheel_name = section(wheel_name_marker, wheel_marker).strip()
+    assert wheel_name.startswith("mss-")
+    assert wheel_name.endswith(".whl")
+    wheel_path = tmp_path / wheel_name
+    wheel_path.write_bytes(base64.b64decode(section(wheel_marker, end_marker)))
+    with zipfile.ZipFile(wheel_path) as zf:
+        names = zf.namelist()
+    assert any(name.endswith("/METADATA") and name.startswith("mss-") for name in names)
 
 
 def test_hotfix_preserves_user_working_directory_and_detaches_obsidian(tmp_path: Path) -> None:
