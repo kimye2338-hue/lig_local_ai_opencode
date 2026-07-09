@@ -79,9 +79,28 @@ function collectText(value: any, out: string[], depth = 0): void {
     return
   }
   if (typeof value === "object") {
-    const priority = ["role", "text", "content", "message", "summary", "prompt", "title"]
+    const priority = [
+      "properties",
+      "role",
+      "text",
+      "delta",
+      "content",
+      "message",
+      "summary",
+      "prompt",
+      "title",
+      "input",
+      "output",
+      "command",
+      "tool",
+      "error",
+      "result",
+    ]
     for (const key of priority) {
       if (key in value) collectText(value[key], out, depth + 1)
+    }
+    for (const [key, child] of Object.entries(value)) {
+      if (!priority.includes(key)) collectText(child, out, depth + 1)
     }
   }
 }
@@ -159,7 +178,16 @@ function writeEvent(event: any, base: string): void {
     ensureSessionFile()
     const type = String(event?.type || "event")
     const text = usefulText(event)
-    if (!text && type !== "session.idle" && type !== "session.error") return
+    const statusType = String(event?.properties?.status?.type || event?.status?.type || "")
+    const shouldFlush = (
+      type === "session.idle" ||
+      type === "session.error" ||
+      type === "session.status" && statusType === "idle" ||
+      type === "session.next.step.ended" ||
+      type === "session.next.step.failed" ||
+      type === "session.compacting"
+    )
+    if (!text && !shouldFlush) return
 
     const now = Date.now()
     const signature = `${type}:${text.slice(0, 400)}`
@@ -171,7 +199,7 @@ function writeEvent(event: any, base: string): void {
     const body = text ? `${text}\n` : "(상태 이벤트)\n"
     appendFileSync(sessionFile(), heading + body, "utf-8")
     if (text) sessionBuffer.push(`[${type}] ${text}`)
-    rememberSessionActivity(base, type === "session.idle" || type === "session.error" || type === "session.compacting")
+    rememberSessionActivity(base, shouldFlush)
   } catch {
     // Autosave must never interrupt the user's session.
   }

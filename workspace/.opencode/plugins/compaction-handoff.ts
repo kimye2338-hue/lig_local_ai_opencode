@@ -3,7 +3,10 @@ import { join } from "path"
 
 export const CompactionHandoff = async (ctx: any) => ({
   "experimental.session.compacting": async (_input: any, output: any) => {
-    const base = ctx?.directory || ctx?.worktree?.path || process.cwd()
+    const explicit = process.env.LIG_AGENTOPS_HOME || process.env.AGENTOPS_HOME
+    const base = explicit && explicit.trim()
+      ? explicit
+      : (ctx?.directory || ctx?.worktree?.path || process.cwd())
     let handoff = ""
     let missing = false
     try {

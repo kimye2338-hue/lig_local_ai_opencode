@@ -6,7 +6,7 @@
 // during generation and "대기 중" when the session goes idle.
 // No external imports (offline / 망분리 safe). Best-effort: never throws.
 
-import { writeFileSync, mkdirSync } from "fs"
+import { appendFileSync, renameSync, writeFileSync, mkdirSync } from "fs"
 import { join } from "path"
 
 function stateDir(): string {
@@ -19,6 +19,12 @@ function stateDir(): string {
 let lastWrite = 0
 let lastStatus = ""
 
+function writeAtomic(path: string, body: string): void {
+  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`
+  writeFileSync(tmp, body, "utf-8")
+  renameSync(tmp, path)
+}
+
 function write(status: string, message: string, force = false): void {
   try {
     // 스트리밍 이벤트가 초당 수십 번 올 수 있으므로 같은 상태는 800ms로 스로틀.
@@ -28,14 +34,83 @@ function write(status: string, message: string, force = false): void {
     lastStatus = status
     const dir = stateDir()
     mkdirSync(dir, { recursive: true })
-    writeFileSync(
-      join(dir, "current_status.json"),
-      JSON.stringify({ status, message, task: "chat", source: "opencode-chat" }),
-      "utf-8",
-    )
+    writeAtomic(join(dir, "current_status.json"), JSON.stringify({
+      status,
+      message,
+      task: "chat",
+      source: "opencode-chat",
+      updated_at: new Date().toISOString(),
+    }))
   } catch {
     // 상태 표시는 부가 기능 — 실패해도 채팅에 영향 주지 않는다.
   }
+}
+
+function eventLogPath(): string {
+  const home = process.env.USERPROFILE || process.env.HOME || "."
+  const diag = process.env.LIG_DIAG_DIR || join(home, "OpenCodeLIG_USERDATA", "diagnostics")
+  return join(diag, "opencode-event-types.log")
+}
+
+function logEventType(type: string, marker = ""): void {
+  try {
+    const home = process.env.USERPROFILE || process.env.HOME || "."
+    const diag = process.env.LIG_DIAG_DIR || join(home, "OpenCodeLIG_USERDATA", "diagnostics")
+    mkdirSync(diag, { recursive: true })
+    appendFileSync(eventLogPath(), `${new Date().toISOString()} ${type}${marker ? " " + marker : ""}\n`, "utf-8")
+  } catch {
+    // 진단 로그는 부가 기능이다.
+  }
+}
+
+function statusFromSessionStatus(event: any): string {
+  return String(event?.properties?.status?.type || event?.status?.type || "")
+}
+
+function eventText(event: any): string {
+  try {
+    return JSON.stringify(event || {}).slice(0, 4000)
+  } catch {
+    return ""
+  }
+}
+
+function subagentName(event: any): string {
+  return String(
+    event?.properties?.agent_name ||
+    event?.properties?.agent ||
+    event?.agent_name ||
+    event?.agent ||
+    event?.properties?.task?.agent ||
+    "subagent"
+  )
+}
+
+function isSubagentOrTaskStart(type: string, event: any): boolean {
+  const body = eventText(event).toLowerCase()
+  return (
+    type === "task.start" ||
+    type === "task.started" ||
+    type === "task.spawned" ||
+    type === "session.task.started" ||
+    type === "session.next.task.started" ||
+    type === "session.next.tool.called" && body.includes("\"task\"") ||
+    body.includes("subagent") ||
+    body.includes("agent_name") ||
+    body.includes("OpenCode subagent".toLowerCase())
+  )
+}
+
+function isSubagentOrTaskEnd(type: string, event: any): boolean {
+  const body = eventText(event).toLowerCase()
+  return (
+    type === "task.end" ||
+    type === "task.ended" ||
+    type === "task.done" ||
+    type === "session.task.ended" ||
+    type === "session.next.task.ended" ||
+    type === "session.next.tool.success" && body.includes("\"task\"")
+  )
 }
 
 export const HamsterStatus = async (_ctx: any) => {
@@ -51,10 +126,47 @@ export const HamsterStatus = async (_ctx: any) => {
     },
     event: async ({ event }: any) => {
       const t: string = (event && event.type) || ""
-      if (t === "session.idle" || t === "session.error") {
+      if (t) logEventType(t, isSubagentOrTaskStart(t, event) ? "subagent_start" : "")
+      const status = statusFromSessionStatus(event)
+      if (isSubagentOrTaskStart(t, event)) {
+        write("working", `OpenCode subagent ${subagentName(event)} 작업 중...`, true)
+      } else if (isSubagentOrTaskEnd(t, event)) {
+        write("done", `OpenCode subagent ${subagentName(event)} 작업 완료`, true)
+      } else if (t === "session.status" && status === "idle") {
         write("idle", "대기 중입니다. 작업이 시작되면 알려드릴게요.", true)
-      } else if (t.indexOf("message") >= 0 || t.indexOf("part") >= 0) {
+      } else if (t === "session.status" && status === "busy") {
+        write("working", "OpenCode가 작업 중입니다.")
+      } else if (t === "session.status" && status === "retry") {
+        write("working", "모델 응답을 재시도 중입니다.", true)
+      } else if (t === "session.idle") {
+        write("idle", "대기 중입니다. 작업이 시작되면 알려드릴게요.", true)
+      } else if (t === "session.error" || t === "session.next.step.failed" || t === "session.next.tool.failed") {
+        write("error", "작업 중 오류가 발생했습니다.", true)
+      } else if (t === "session.next.step.ended") {
+        write("done", "작업이 끝났습니다.", true)
+      } else if (
+        t === "session.next.prompted" ||
+        t === "session.next.prompt.admitted" ||
+        t === "session.next.step.started" ||
+        t === "session.next.text.started" ||
+        t === "session.next.text.delta" ||
+        t === "session.next.text.ended" ||
+        t === "session.next.reasoning.started" ||
+        t === "session.next.reasoning.delta" ||
+        t === "session.next.reasoning.ended"
+      ) {
         write("working", "모델이 응답 중...")
+      } else if (
+        t === "session.next.tool.input.started" ||
+        t === "session.next.tool.input.delta" ||
+        t === "session.next.tool.input.ended" ||
+        t === "session.next.tool.called" ||
+        t === "session.next.tool.progress" ||
+        t === "session.next.tool.success" ||
+        t === "session.next.shell.started" ||
+        t === "session.next.shell.ended"
+      ) {
+        write("working", "도구 실행 중...")
       }
     },
   }

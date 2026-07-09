@@ -11,7 +11,7 @@ const MAX_RECALL_CHARS = 6000
 const MAX_SUMMARY_CHARS = 1200
 
 function baseDir(ctx) {
-  const explicit = process.env.AGENTOPS_HOME
+  const explicit = process.env.LIG_AGENTOPS_HOME || process.env.AGENTOPS_HOME
   if (explicit && explicit.trim()) return explicit
   return ctx?.directory || ctx?.worktree?.path || process.cwd()
 }
@@ -91,6 +91,24 @@ function writeStartupRecall(base, block) {
   }
 }
 
+function fallbackStartupBlock() {
+  return [
+    "## OpenCodeLIG memory",
+    "Pinned memory refresh is running in the background.",
+    "If immediate recall is needed, run: `python agent_ops/agentops.py recall --pinned`",
+  ].join("\n")
+}
+
+function refreshStartupRecallAsync(base) {
+  setTimeout(() => {
+    try {
+      writeStartupRecall(base, pinnedRecallBlock(base))
+    } catch {
+      // Background recall must never delay or break TUI startup.
+    }
+  }, 1)
+}
+
 function compactSummary(input, output) {
   const candidates = [
     input?.summary,
@@ -120,8 +138,8 @@ function logCompactionActivity(base, input, output) {
 
 export const MemoryInject = async (ctx) => {
   const base = baseDir(ctx)
-  const startupBlock = pinnedRecallBlock(base)
-  writeStartupRecall(base, startupBlock)
+  writeStartupRecall(base, fallbackStartupBlock())
+  refreshStartupRecallAsync(base)
 
   return {
     "experimental.session.compacting": async (input, output) => {
@@ -131,8 +149,9 @@ export const MemoryInject = async (ctx) => {
     },
     event: async ({ event }) => {
       const t = String((event && event.type) || "")
-      if (t === "session.idle" || t === "session.error") {
-        writeStartupRecall(base, pinnedRecallBlock(base))
+      const status = String(event?.properties?.status?.type || event?.status?.type || "")
+      if (t === "session.idle" || t === "session.error" || (t === "session.status" && status === "idle")) {
+        refreshStartupRecallAsync(base)
       }
     },
   }
