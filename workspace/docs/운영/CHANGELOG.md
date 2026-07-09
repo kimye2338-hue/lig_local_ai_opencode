@@ -1,5 +1,41 @@
 # Changelog
 
+## 2026-07-10 - CF-0 ~ CF-6 hardening complete
+
+- 테스트 하니스 경로 의존을 제거해 `test_existing_install_hotfix.py`가 Codex/하니스 셸에서도 안정적으로 돈다.
+- OpenCode 플러그인 4종을 비동기/비블로킹 기준으로 재정리했다.
+  `memory-inject.ts`는 fallback 후 백그라운드 refresh로 바뀌었고,
+  `session-autosave.ts`는 delta 버퍼링 후 ended 시점 flush로 바뀌었다.
+- 햄스터 상태 판정은 실존 OpenCode 이벤트만 사용하도록 정리했다.
+  가짜 `task.start`/본문 substring 추정은 제거했고, `task` tool 구조 신호만 본다.
+- 자가개선은 별도 원장을 줄이고 메인 기억 원장으로 통합했다.
+  실패/교훈/다음 세션 주입이 한 경로로 흐르며 중복 적재를 줄였다.
+- 런처는 fast runtime 마이그레이션, `ocd` 작업폴더 보존, 햄스터 직접 실행,
+  회사망 fetch 차단 환경변수 유지 기준으로 다시 검증했다.
+- `agent_ops/release_contracts.py`를 추가해 런처/플러그인/진단 마커 계약을 한 곳으로 모았다.
+  `pending_check.py`, `quality_gate.py`, 회귀 테스트가 이 공통 계약을 바라본다.
+- `workspace/patches/build_final_patch.py`를 추가했다.
+  이 스크립트가 원본 플러그인/런타임 파일을 읽어
+  `existing_install_hotfix_20260709.py` 임베드를 다시 맞추고,
+  `최종_패치파일.bat`를 CRLF/오프라인 포함 상태로 재생성한다.
+- `existing_install_hotfix_20260709.py`는 이제 `release_contracts.py`도 같이 복구한다.
+  따라서 기존 설치본에 최신 `quality_gate.py`를 밀어 넣어도 import 누락이 나지 않는다.
+
+검증:
+
+- `py -3.11 -m pytest tests\test_existing_install_hotfix.py tests\test_quality_gate.py tests\test_opencode_lig_plugin_runtime.py -q`
+  - 결과: `27 passed`
+- `py -3.11 tests\test_launch_bats.py`
+  - 결과: `ALL 101 CHECKS PASSED`
+- 로컬 커밋:
+  - `01da2a5 fix hotfix test harness path dependency`
+  - `ddc16b8 make plugin recall and autosave nonblocking`
+  - `8223bc8 align hamster status bridge with real opencode events`
+  - `b15d426 merge self improvement into main memory pipeline`
+  - `9e3cced harden launcher migration and ocd environment handling`
+  - `22ea48c centralize release runtime contracts`
+  - `5df9726 rebuild offline hotfix and final patch bat`
+
 ## 2026-07-05 - FULL (완전 오토) permission tier
 
 - TUI patch: permission policy is now a 3-way cycle ASK → AUTO → FULL
