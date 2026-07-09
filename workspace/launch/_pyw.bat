@@ -2,6 +2,9 @@
 chcp 65001 >nul
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
+set "LITELLM_LOCAL_MODEL_COST_MAP=True"
+set "LITELLM_LOCAL_POLICY_TEMPLATES=True"
+set "LITELLM_LOCAL_BLOG_POSTS=True"
 rem Shared Pythonw 3.11 resolver. Sets %PYW% for the calling BAT. Exit 9 if none.
 set "PYW="
 pyw -3.11 -c "pass" >nul 2>&1 && set "PYW=pyw -3.11"

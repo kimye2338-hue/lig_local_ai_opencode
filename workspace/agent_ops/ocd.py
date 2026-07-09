@@ -61,6 +61,7 @@ def build_env(cwd: Path) -> dict:
     env["AGENTOPS_PROJECT_RULES"] = str(profile_dir / "RULES.md")
     # 산출물을 현재 폴더(ocd로 들어온 프로젝트 폴더)에 저장하도록 지정.
     env["AGENTOPS_OUTPUT_DIR"] = str(cwd)
+    env.setdefault("LIG_PROJECT_DIR", str(cwd))
     return env
 
 

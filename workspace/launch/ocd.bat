@@ -10,6 +10,9 @@ if not exist "%OCDPY%" (
   echo [ERROR] OpenCodeLIG 가 설치되어 있지 않습니다: %OCDPY%
   exit /b 9
 )
+if "%~1"=="" (
+  if not defined LIG_PROJECT_DIR set "LIG_PROJECT_DIR=%CD%"
+)
 rem py 런처가 있으면 3.11 로, 없으면 python 으로 (이중 실행 방지: 한 쪽만).
 where py >nul 2>nul
 if %errorlevel%==0 (

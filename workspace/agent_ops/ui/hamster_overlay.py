@@ -48,6 +48,7 @@ POLL_MS = int(os.environ.get("LIG_HAMSTER_POLL_MS") or "1000")
 ANIM_MS = int(os.environ.get("LIG_HAMSTER_ANIM_MS") or "420")
 REST_MS = int(os.environ.get("LIG_HAMSTER_REST_MS") or "3200")
 WATCH_PROCESS = (os.environ.get("LIG_HAMSTER_WATCH_PROCESS") or "opencode.exe").strip()
+START_GRACE_SECONDS = int(os.environ.get("LIG_HAMSTER_START_GRACE_SECONDS") or "300")
 ASSET_DIR = Path(__file__).resolve().parent / "assets" / "hamster_pet"
 ICON_PATH = ASSET_DIR / "hamster_pet.ico"
 SETTINGS_PATH = DEFAULT_STATE_DIR / "hamster_pet_settings.json"
@@ -737,7 +738,7 @@ class HamsterPetOverlay:
                     self._process_absence += 1
                     # Run launcher starts the pet just before OpenCode.
                     # Give OpenCode enough time to appear before auto-exiting the pet.
-                    if time.time() - self._started_at > 20 and self._process_absence >= 4:
+                    if time.time() - self._started_at > START_GRACE_SECONDS and self._process_absence >= 4:
                         self.exit_app()
                         exited = True
         except Exception:
