@@ -132,6 +132,13 @@ def test_final_patch_bat_extracts_and_runs_against_min_install(tmp_path: Path) -
 
 def test_hotfix_preserves_user_working_directory_and_detaches_obsidian(tmp_path: Path) -> None:
     root = _copy_min_install(tmp_path)
+    autocad_adapter = root / "workspace" / "agent_ops" / "adapters" / "autocad_batch.py"
+    autocad_adapter.write_text(
+        "# -*- coding: utf-8 -*-\n"
+        "def find_accoreconsole():\n"
+        "    return ''\n",
+        encoding="utf-8",
+    )
 
     result = _run_hotfix(root, tmp_path)
 
@@ -150,6 +157,10 @@ def test_hotfix_preserves_user_working_directory_and_detaches_obsidian(tmp_path:
     assert (root / "workspace" / "launch" / "obsidian_detached.vbs").exists()
     assert (root / "workspace" / "launch" / "project_agentops_wrapper.py").exists()
     assert (root / "workspace" / ".opencode" / "plugins" / "session-autosave.ts").exists()
+    patched_autocad = autocad_adapter.read_text(encoding="utf-8")
+    assert "def find_acad" in patched_autocad
+    assert "LIGNEX1" in patched_autocad
+    assert "ACADM" in patched_autocad
     assert (root / "bin" / "ocd.bat").exists()
     assert "agent_ops\\ocd.py" in (root / "bin" / "ocd.bat").read_text(encoding="utf-8")
     assert (root / "bin" / "probe-gateway.bat").exists()
@@ -181,6 +192,7 @@ def test_hotfix_skips_current_files_and_existing_mss(tmp_path: Path) -> None:
     assert "root check BAT already current" in combined
     assert "command wrapper already current" in combined
     assert "ocd wrapper already current" in combined
+    assert "AutoCAD adapter already current" in combined
 
 
 def test_session_autosave_plugin_writes_to_obsidian_sessions(tmp_path: Path) -> None:

@@ -64,3 +64,26 @@
   - 결과: 8 passed
 - `py -3.11 -m py_compile workspace\agent_ops\pending_check.py workspace\patches\existing_install_hotfix_20260709.py`
   - 결과: 통과
+
+## 2026-07-09 추가 보강: 최종 단일 BAT 통합
+
+사용자 지적: 여러 차례 패치가 나뉘면 사내 PC에서 무엇을 다시 실행해야 하는지 관리가 어려워진다. 최종 BAT 하나에 이전 보완과 현재 보완을 모두 누적해야 한다.
+
+조치:
+
+- `최종_패치파일.bat` 하나에 다음을 모두 포함:
+  - `mss-10.2.0-py3-none-any.whl` 내장
+  - Obsidian 분리 실행
+  - `probe-gateway` wrapper
+  - `ocd` 작업폴더 기준 실행
+  - 세션 자동저장 플러그인
+  - AutoCAD GUI 실행 경로 인식
+  - 기존 설치본의 `agent_ops/adapters/autocad_batch.py` 실제 갱신
+- 특히 AutoCAD는 점검만 PASS로 보이는 것이 아니라, 실제 어댑터가 `acad.exe <사본.dwg> /p LIGNEX1 /product ACADM /b <script.scr>` fallback을 수행하도록 기존 설치본 파일을 교체한다.
+- 이미 같은 내용이면 덮어쓰지 않고 SKIP한다.
+
+검증:
+
+- `py -3.11 -m pytest workspace\tests\test_existing_install_hotfix.py workspace\tests\test_autocad_gui_fallback.py -q`
+  - 결과: 8 passed
+- `test_final_patch_bat_extracts_and_runs_against_min_install`로 최종 BAT 직접 실행 검증 포함.
