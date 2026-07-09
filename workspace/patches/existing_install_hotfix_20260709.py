@@ -28,7 +28,7 @@ SESSION_AUTOSAVE_PLUGIN = r'''// OpenCodeLIG session autosave.
 // Best-effort and offline-safe: failure must never affect the chat path.
 
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "fs"
-import { execFileSync } from "child_process"
+import { execFile } from "child_process"
 import { join } from "path"
 
 const MAX_TEXT_CHARS = 1600
@@ -41,6 +41,11 @@ let lastSignature = ""
 let lastWriteMs = 0
 let lastFlushMs = 0
 let sessionBuffer: string[] = []
+let streamBuffer = {
+  text: "",
+  reasoning: "",
+  toolInput: "",
+}
 
 function userdataDir(): string {
   const explicit = process.env.OPENCODE_USERDATA
@@ -85,10 +90,18 @@ function compact(value: string): string {
 }
 
 function redact(value: string): string {
-  return value
+  let redacted = value
     .replace(/Bearer\s+[A-Za-z0-9._\-+/=]+/g, "Bearer <hidden>")
     .replace(/(api[_-]?key\s*[=:]\s*)[^\s,;]+/gi, "$1<hidden>")
     .replace(/(password\s*[=:]\s*)[^\s,;]+/gi, "$1<hidden>")
+    .replace(/((?:token|secret|credential)\s*[=:]\s*)[^\s,;]+/gi, "$1<hidden>")
+  for (const [key, raw] of Object.entries(process.env)) {
+    if (!/(api.*key|token|secret|credential|password)/i.test(key)) continue
+    const value = String(raw || "").trim()
+    if (value.length < 8) continue
+    redacted = redacted.split(value).join("<hidden>")
+  }
+  return redacted
 }
 
 function collectText(value: any, out: string[], depth = 0): void {
@@ -154,7 +167,7 @@ function activityTitle(date = new Date()): string {
   return `OpenCode session autosave ${dayStamp(date)} ${String(date.getHours()).padStart(2, "0")}:${String(bucket).padStart(2, "0")}`
 }
 
-function runAgentOps(base: string, args: string[]): void {
+function runAgentOpsAsync(base: string, args: string[]): void {
   const script = agentopsPath(base)
   if (!existsSync(script)) return
   const env = {
@@ -166,20 +179,24 @@ function runAgentOps(base: string, args: string[]): void {
     ["py", ["-3.11", script, ...args]],
     ["python", [script, ...args]],
   ]
-  for (const [exe, exeArgs] of runners) {
+  const attempt = (index: number): void => {
+    if (index >= runners.length) return
+    const [exe, exeArgs] = runners[index]
     try {
-      execFileSync(exe, exeArgs, {
+      execFile(exe, exeArgs, {
         cwd: base,
         env,
         encoding: "utf-8",
-        stdio: ["ignore", "ignore", "ignore"],
         timeout: 8000,
+        windowsHide: true,
+      }, (error) => {
+        if (error) attempt(index + 1)
       })
-      return
     } catch {
-      // try next runner
+      attempt(index + 1)
     }
   }
+  attempt(0)
 }
 
 function rememberSessionActivity(base: string, force = false): void {
@@ -191,10 +208,32 @@ function rememberSessionActivity(base: string, force = false): void {
     lastFlushMs = now
     sessionBuffer = []
     if (!body) return
-    runAgentOps(base, ["log-activity", body.slice(0, MAX_EVENT_CHARS), "--title", activityTitle()])
+    runAgentOpsAsync(base, ["log-activity", body.slice(0, MAX_EVENT_CHARS), "--title", activityTitle()])
   } catch {
     // Memory promotion is best-effort; raw Obsidian autosave is already written.
   }
+}
+
+function streamBucket(type: string): "text" | "reasoning" | "toolInput" | "" {
+  if (type.includes(".text.")) return "text"
+  if (type.includes(".reasoning.")) return "reasoning"
+  if (type.includes(".tool.input.")) return "toolInput"
+  return ""
+}
+
+function bufferEventText(type: string, text: string): void {
+  const bucket = streamBucket(type)
+  if (!bucket || !text) return
+  const prior = streamBuffer[bucket]
+  streamBuffer[bucket] = compact(`${prior}\n${text}`).slice(0, MAX_EVENT_CHARS)
+}
+
+function takeBufferedText(type: string): string {
+  const bucket = streamBucket(type)
+  if (!bucket) return ""
+  const text = streamBuffer[bucket]
+  streamBuffer[bucket] = ""
+  return text
 }
 
 function writeEvent(event: any, base: string): void {
@@ -202,6 +241,16 @@ function writeEvent(event: any, base: string): void {
     ensureSessionFile()
     const type = String(event?.type || "event")
     const text = usefulText(event)
+    if (
+      type === "session.next.text.delta" ||
+      type === "session.next.reasoning.delta" ||
+      type === "session.next.tool.input.delta"
+    ) {
+      bufferEventText(type, text)
+      return
+    }
+    const buffered = takeBufferedText(type)
+    const mergedText = compact([buffered, text].filter(Boolean).join("\n\n")).slice(0, MAX_EVENT_CHARS)
     const statusType = String(event?.properties?.status?.type || event?.status?.type || "")
     const shouldFlush = (
       type === "session.idle" ||
@@ -209,20 +258,23 @@ function writeEvent(event: any, base: string): void {
       type === "session.status" && statusType === "idle" ||
       type === "session.next.step.ended" ||
       type === "session.next.step.failed" ||
-      type === "session.compacting"
+      type === "session.compacting" ||
+      type === "session.next.text.ended" ||
+      type === "session.next.reasoning.ended" ||
+      type === "session.next.tool.input.ended"
     )
-    if (!text && !shouldFlush) return
+    if (!mergedText && !shouldFlush) return
 
     const now = Date.now()
-    const signature = `${type}:${text.slice(0, 400)}`
+    const signature = `${type}:${mergedText.slice(0, 400)}`
     if (signature === lastSignature && now - lastWriteMs < 3000) return
     lastSignature = signature
     lastWriteMs = now
 
     const heading = `\n## ${timeStamp()} ${type}\n`
-    const body = text ? `${text}\n` : "(상태 이벤트)\n"
+    const body = mergedText ? `${mergedText}\n` : "(상태 이벤트)\n"
     appendFileSync(sessionFile(), heading + body, "utf-8")
-    if (text) sessionBuffer.push(`[${type}] ${text}`)
+    if (mergedText) sessionBuffer.push(`[${type}] ${mergedText}`)
     rememberSessionActivity(base, shouldFlush)
   } catch {
     // Autosave must never interrupt the user's session.
@@ -256,8 +308,12 @@ HAMSTER_STATUS_PLUGIN = r'''// Hamster status bridge — reflects OpenCode chat/
 // during generation and "대기 중" when the session goes idle.
 // No external imports (offline / 망분리 safe). Best-effort: never throws.
 
-import { appendFileSync, renameSync, writeFileSync, mkdirSync } from "fs"
+import { appendFileSync, renameSync, writeFileSync, mkdirSync, statSync, truncateSync } from "fs"
 import { join } from "path"
+
+const ENABLE_EVENT_LOG = process.env.LIG_DIAG_EVENTS === "1"
+const EVENT_LOG_MAX_BYTES = 1024 * 1024
+const seenEventTypes = new Set<string>()
 
 function stateDir(): string {
   const explicit = process.env.LIG_STATE_DIR
@@ -303,11 +359,21 @@ function eventLogPath(): string {
 }
 
 function logEventType(type: string, marker = ""): void {
+  if (!ENABLE_EVENT_LOG) return
   try {
     const home = process.env.USERPROFILE || process.env.HOME || "."
     const diag = process.env.LIG_DIAG_DIR || join(home, "OpenCodeLIG_USERDATA", "diagnostics")
+    const path = eventLogPath()
+    const key = `${type} ${marker}`.trim()
+    if (seenEventTypes.has(key)) return
+    seenEventTypes.add(key)
     mkdirSync(diag, { recursive: true })
-    appendFileSync(eventLogPath(), `${new Date().toISOString()} ${type}${marker ? " " + marker : ""}\n`, "utf-8")
+    try {
+      if (statSync(path).size > EVENT_LOG_MAX_BYTES) truncateSync(path, 0)
+    } catch {
+      // first write
+    }
+    appendFileSync(path, `${new Date().toISOString()} ${type}${marker ? " " + marker : ""}\n`, "utf-8")
   } catch {
     // 진단 로그는 부가 기능이다.
   }
@@ -317,53 +383,33 @@ function statusFromSessionStatus(event: any): string {
   return String(event?.properties?.status?.type || event?.status?.type || "")
 }
 
-function eventText(event: any): string {
-  try {
-    return JSON.stringify(event || {}).slice(0, 4000)
-  } catch {
-    return ""
-  }
-}
-
-function subagentName(event: any): string {
+function taskToolName(event: any): string {
   return String(
-    event?.properties?.agent_name ||
-    event?.properties?.agent ||
-    event?.agent_name ||
-    event?.agent ||
-    event?.properties?.task?.agent ||
-    "subagent"
+    event?.properties?.taskName ||
+    event?.properties?.task?.name ||
+    event?.properties?.name ||
+    event?.properties?.tool ||
+    "task"
   )
 }
 
-function isSubagentOrTaskStart(type: string, event: any): boolean {
-  const body = eventText(event).toLowerCase()
-  return (
-    type === "task.start" ||
-    type === "task.started" ||
-    type === "task.spawned" ||
-    type === "session.task.started" ||
-    type === "session.next.task.started" ||
-    type === "session.next.tool.called" && body.includes("\"task\"") ||
-    body.includes("subagent") ||
-    body.includes("agent_name") ||
-    body.includes("OpenCode subagent".toLowerCase())
-  )
+function isTaskToolCall(type: string, event: any): boolean {
+  return type === "session.next.tool.called" && event?.properties?.tool === "task"
 }
 
-function isSubagentOrTaskEnd(type: string, event: any): boolean {
-  const body = eventText(event).toLowerCase()
-  return (
-    type === "task.end" ||
-    type === "task.ended" ||
-    type === "task.done" ||
-    type === "session.task.ended" ||
-    type === "session.next.task.ended" ||
-    type === "session.next.tool.success" && body.includes("\"task\"")
-  )
+function isTaskToolSuccess(type: string, event: any): boolean {
+  return type === "session.next.tool.success" && event?.properties?.tool === "task"
+}
+
+function isTaskToolFailure(type: string, event: any): boolean {
+  return type === "session.next.tool.failed" && event?.properties?.tool === "task"
 }
 
 export const HamsterStatus = async (_ctx: any) => {
+  // Binary grep on the patched opencode.exe showed these session events exist:
+  // session.next.*, session.status, session.idle, experimental.session.compacting.
+  // Older guessed task/subagent event families were not present, so this bridge
+  // only trusts structured tool/status fields that are actually emitted.
   // OpenCode 시작 시 지난 세션의 완료/작업 상태가 남아 "완료"로 뜨지 않도록 대기중으로 초기화.
   // (햄스터는 상태 파일 중 가장 최근 것을 표시하므로, 시작 시 최신 idle 을 써서 이전 상태를 덮는다.)
   write("idle", "대기 중입니다. 작업이 시작되면 알려드릴게요.", true)
@@ -376,18 +422,22 @@ export const HamsterStatus = async (_ctx: any) => {
     },
     event: async ({ event }: any) => {
       const t: string = (event && event.type) || ""
-      if (t) logEventType(t, isSubagentOrTaskStart(t, event) ? "subagent_start" : "")
+      if (t) logEventType(t, isTaskToolCall(t, event) ? "task_tool_called" : "")
       const status = statusFromSessionStatus(event)
-      if (isSubagentOrTaskStart(t, event)) {
-        write("working", `OpenCode subagent ${subagentName(event)} 작업 중...`, true)
-      } else if (isSubagentOrTaskEnd(t, event)) {
-        write("done", `OpenCode subagent ${subagentName(event)} 작업 완료`, true)
+      if (isTaskToolCall(t, event)) {
+        write("working", `멀티에이전트 ${taskToolName(event)} 작업 중...`, true)
+      } else if (isTaskToolSuccess(t, event)) {
+        write("done", `멀티에이전트 ${taskToolName(event)} 작업 완료`, true)
+      } else if (isTaskToolFailure(t, event)) {
+        write("error", `멀티에이전트 ${taskToolName(event)} 작업 중 오류가 발생했습니다.`, true)
       } else if (t === "session.status" && status === "idle") {
         write("idle", "대기 중입니다. 작업이 시작되면 알려드릴게요.", true)
       } else if (t === "session.status" && status === "busy") {
         write("working", "OpenCode가 작업 중입니다.")
       } else if (t === "session.status" && status === "retry") {
         write("working", "모델 응답을 재시도 중입니다.", true)
+      } else if (t === "experimental.session.compacting") {
+        write("working", "세션 정리 중...", true)
       } else if (t === "session.idle") {
         write("idle", "대기 중입니다. 작업이 시작되면 알려드릴게요.", true)
       } else if (t === "session.error" || t === "session.next.step.failed" || t === "session.next.tool.failed") {
@@ -424,16 +474,21 @@ export const HamsterStatus = async (_ctx: any) => {
 '''
 
 MEMORY_INJECT_PLUGIN = r'''// OpenCodeLIG memory bridge.
-// Best-effort, offline-safe plugin: injects pinned AgentOps memory during
-// compaction, and leaves a local session recall file at startup for fallback
-// commands/agent instructions. Never throws into the chat path.
+// Best-effort, offline-safe plugin: injects cached AgentOps memory during
+// compaction, and refreshes the durable recall file in the background.
+// Never throws into the chat path and never blocks TUI startup on a sync child.
 
-import { execFileSync } from "child_process"
-import { existsSync, mkdirSync, writeFileSync } from "fs"
+import { execFile } from "child_process"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 
 const MAX_RECALL_CHARS = 6000
 const MAX_SUMMARY_CHARS = 1200
+const STARTUP_REFRESH_COOLDOWN_MS = 60_000
+const COMPACTION_REFRESH_COOLDOWN_MS = 60_000
+const IDLE_REFRESH_COOLDOWN_MS = 60_000
+
+let lastRefreshAt = 0
 
 function baseDir(ctx) {
   const explicit = process.env.LIG_AGENTOPS_HOME || process.env.AGENTOPS_HOME
@@ -451,9 +506,12 @@ function stateDir(base) {
   return join(base, "agent_ops", "state")
 }
 
-function runAgentOps(base, args) {
+function runAgentOpsAsync(base, args, onDone) {
   const script = agentopsPath(base)
-  if (!existsSync(script)) return ""
+  if (!existsSync(script)) {
+    if (onDone) onDone("")
+    return
+  }
   const env = {
     ...process.env,
     PYTHONUTF8: process.env.PYTHONUTF8 || "1",
@@ -463,24 +521,34 @@ function runAgentOps(base, args) {
     ["python", [script, ...args]],
     ["py", ["-3.11", script, ...args]],
   ]
-  for (const [exe, exeArgs] of runners) {
+  const attempt = (index) => {
+    if (index >= runners.length) {
+      if (onDone) onDone("")
+      return
+    }
+    const [exe, exeArgs] = runners[index]
     try {
-      return String(execFileSync(exe, exeArgs, {
+      execFile(exe, exeArgs, {
         cwd: base,
         env,
         encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
         timeout: 10000,
-      }) || "").trim()
+        windowsHide: true,
+      }, (error, stdout) => {
+        if (error) {
+          attempt(index + 1)
+          return
+        }
+        if (onDone) onDone(String(stdout || "").trim())
+      })
     } catch {
-      // Try the next runner. Memory is helpful context, not a hard dependency.
+      attempt(index + 1)
     }
   }
-  return ""
+  attempt(0)
 }
 
-function pinnedRecallBlock(base) {
-  const recalled = runAgentOps(base, ["recall", "--pinned"])
+function pinnedRecallBlockFromText(recalled) {
   if (!recalled) {
     return [
       "## OpenCodeLIG memory",
@@ -496,6 +564,16 @@ function pinnedRecallBlock(base) {
     "Use these durable user rules, project facts, recent lessons, and activity hints before answering.",
     body,
   ].join("\n")
+}
+
+function cachedRecallBlock(base) {
+  try {
+    const cached = readFileSync(join(stateDir(base), "SESSION_RECALL.md"), "utf-8").trim()
+    if (cached) return cached
+  } catch {
+    // fallback below
+  }
+  return fallbackStartupBlock()
 }
 
 function pushContext(output, block) {
@@ -524,13 +602,18 @@ function fallbackStartupBlock() {
   ].join("\n")
 }
 
-function refreshStartupRecallAsync(base) {
+function refreshStartupRecallAsync(base, cooldownMs = STARTUP_REFRESH_COOLDOWN_MS) {
+  const now = Date.now()
+  if (now - lastRefreshAt < cooldownMs) return
+  lastRefreshAt = now
   setTimeout(() => {
-    try {
-      writeStartupRecall(base, pinnedRecallBlock(base))
-    } catch {
-      // Background recall must never delay or break TUI startup.
-    }
+    runAgentOpsAsync(base, ["recall", "--pinned"], (recalled) => {
+      try {
+        writeStartupRecall(base, pinnedRecallBlockFromText(recalled))
+      } catch {
+        // Background recall must never delay or break TUI startup.
+      }
+    })
   }, 1)
 }
 
@@ -558,27 +641,35 @@ function logCompactionActivity(base, input, output) {
   // most one entry per day.
   const summary = compactSummary(input, output)
   if (!summary) return
-  runAgentOps(base, ["log-activity", summary, "--title", "OpenCode TUI 세션 요약"])
+  runAgentOpsAsync(base, ["log-activity", summary, "--title", "OpenCode TUI 세션 요약"])
 }
 
 export const MemoryInject = async (ctx) => {
-  const base = baseDir(ctx)
-  writeStartupRecall(base, fallbackStartupBlock())
-  refreshStartupRecallAsync(base)
+  try {
+    const base = baseDir(ctx)
+    writeStartupRecall(base, fallbackStartupBlock())
+    refreshStartupRecallAsync(base, STARTUP_REFRESH_COOLDOWN_MS)
 
-  return {
-    "experimental.session.compacting": async (input, output) => {
-      const freshBlock = pinnedRecallBlock(base)
-      pushContext(output, freshBlock)
-      logCompactionActivity(base, input, output)
-    },
-    event: async ({ event }) => {
-      const t = String((event && event.type) || "")
-      const status = String(event?.properties?.status?.type || event?.status?.type || "")
-      if (t === "session.idle" || t === "session.error" || (t === "session.status" && status === "idle")) {
-        refreshStartupRecallAsync(base)
-      }
-    },
+    return {
+      "experimental.session.compacting": async (input, output) => {
+        try {
+          pushContext(output, cachedRecallBlock(base))
+          refreshStartupRecallAsync(base, COMPACTION_REFRESH_COOLDOWN_MS)
+          logCompactionActivity(base, input, output)
+        } catch {
+          // Compaction hook is additive only.
+        }
+      },
+      event: async ({ event }) => {
+        const t = String((event && event.type) || "")
+        const status = String(event?.properties?.status?.type || event?.status?.type || "")
+        if (t === "session.idle" || t === "session.error" || (t === "session.status" && status === "idle")) {
+          refreshStartupRecallAsync(base, IDLE_REFRESH_COOLDOWN_MS)
+        }
+      },
+    }
+  } catch {
+    return {}
   }
 }
 '''
@@ -586,32 +677,42 @@ export const MemoryInject = async (ctx) => {
 COMPACTION_HANDOFF_PLUGIN = r'''import { readFileSync } from "fs"
 import { join } from "path"
 
-export const CompactionHandoff = async (ctx: any) => ({
-  "experimental.session.compacting": async (_input: any, output: any) => {
-    const explicit = process.env.LIG_AGENTOPS_HOME || process.env.AGENTOPS_HOME
-    const base = explicit && explicit.trim()
-      ? explicit
-      : (ctx?.directory || ctx?.worktree?.path || process.cwd())
-    let handoff = ""
-    let missing = false
-    try {
-      handoff = readFileSync(join(base, "agent_ops/state/COMPACT_HANDOFF.md"), "utf-8")
-    } catch {
-      missing = true
+export const CompactionHandoff = async (ctx: any) => {
+  try {
+    return {
+      "experimental.session.compacting": async (_input: any, output: any) => {
+        try {
+          const explicit = process.env.LIG_AGENTOPS_HOME || process.env.AGENTOPS_HOME
+          const base = explicit && explicit.trim()
+            ? explicit
+            : (ctx?.directory || ctx?.worktree?.path || process.cwd())
+          let handoff = ""
+          let missing = false
+          try {
+            handoff = readFileSync(join(base, "agent_ops/state/COMPACT_HANDOFF.md"), "utf-8")
+          } catch {
+            missing = true
+          }
+          const block = [
+            "## AgentOps durable handoff (preserve across compaction)",
+            "After compaction, FIRST read: agent_ops/state/COMPACT_HANDOFF.md, RESUME_PLAN.md, ACTIVE_TASK.json, CHECKPOINT.json.",
+            "Items under next_step/queue are PLANNED, not approved. No risk:review_required action without explicit current-session user approval.",
+            missing ? "(COMPACT_HANDOFF.md not found at session start — run `python agent_ops/agentops.py checkpoint` early.)" : handoff,
+          ].join("\n")
+          if (Array.isArray(output?.context)) {
+            output.context.push(block)   // additive: preferred (F2)
+          } else {
+            output.prompt = (output.prompt ? output.prompt + "\n\n" : "") + block
+          }
+        } catch {
+          // Handoff is additive only.
+        }
+      },
     }
-    const block = [
-      "## AgentOps durable handoff (preserve across compaction)",
-      "After compaction, FIRST read: agent_ops/state/COMPACT_HANDOFF.md, RESUME_PLAN.md, ACTIVE_TASK.json, CHECKPOINT.json.",
-      "Items under next_step/queue are PLANNED, not approved. No risk:review_required action without explicit current-session user approval.",
-      missing ? "(COMPACT_HANDOFF.md not found at session start — run `python agent_ops/agentops.py checkpoint` early.)" : handoff,
-    ].join("\n")
-    if (Array.isArray(output?.context)) {
-      output.context.push(block)
-    } else {
-      output.prompt = (output.prompt ? output.prompt + "\n\n" : "") + block
-    }
-  },
-})
+  } catch {
+    return {}
+  }
+}
 '''
 
 AUTOCAD_BATCH_SOURCE = r'''# -*- coding: utf-8 -*-
@@ -1023,6 +1124,14 @@ def create_self_improvement() -> None:
         log(f"[OK] self-improvement runtime created/updated: {path}")
     else:
         log(f"[SKIP] self-improvement runtime already current: {path}")
+
+
+def create_release_contracts() -> None:
+    path = WS / "agent_ops" / "release_contracts.py"
+    if write_text_if_changed(path, RELEASE_CONTRACTS_SOURCE):
+        log(f"[OK] release contracts created/updated: {path}")
+    else:
+        log(f"[SKIP] release contracts already current: {path}")
 
 def create_quality_gate() -> None:
     path = WS / "agent_ops" / "quality_gate.py"
@@ -1743,20 +1852,134 @@ _lig_hotfix_refresh_adapter_status()
 # END LIG ADAPTER STATUS HOTFIX 20260709
 '''
 
-SELF_IMPROVEMENT_SOURCE = r'''# -*- coding: utf-8 -*-
-"""Automatic self-improvement loop for OpenCodeLIG.
+RELEASE_CONTRACTS_SOURCE = r'''# -*- coding: utf-8 -*-
+"""Shared release/runtime contracts for OpenCodeLIG.
 
-This is intentionally small and append-only. It records compact observations
-about model/tool mistakes, links a later success in the same task/run to a fix,
-and exposes a tiny set of actionable lessons for the next session.
+Keep launcher/plugin/static verification markers in one place so pending checks,
+quality gate, tests, and hotfix regeneration do not drift.
+"""
+from __future__ import annotations
+
+PLUGIN_SYNC_GLOB = ".opencode\\plugins\\*.ts"
+
+REQUIRED_PLUGIN_FILES = (
+    "command-guard.ts",
+    "compaction-handoff.ts",
+    "hamster-status.ts",
+    "memory-inject.ts",
+    "session-autosave.ts",
+)
+
+LAUNCHER_FAST_RUNTIME_MARKERS = (
+    "OPENCODE_FAST_BASE=%OPENCODE_USERDATA%\\opencode_fast_runtime",
+    "OPENCODE_CONFIG_DIR=%OPENCODE_FAST_CONFIG%",
+    "XDG_CONFIG_HOME=%OPENCODE_FAST_CONFIG%",
+    "XDG_DATA_HOME=%OPENCODE_FAST_DATA%",
+    "XDG_CACHE_HOME=%OPENCODE_FAST_CACHE%",
+    "OPENCODE_DISABLE_MODELS_FETCH=1",
+    "OPENCODE_DISABLE_AUTOUPDATE=1",
+    "OPENCODE_DISABLE_LSP_DOWNLOAD=1",
+    "OPENCODE_MODELS_URL=http://127.0.0.1:9/api.json",
+    "NPM_CONFIG_REGISTRY=http://127.0.0.1:9/",
+    "BUN_CONFIG_REGISTRY=http://127.0.0.1:9/",
+    "NO_PROXY=*",
+    'set "OPENCODE_PURE="',
+)
+
+LAUNCHER_HAMSTER_MARKERS = (
+    "LIG_WORKSPACE_HOME=%USERPROFILE%\\OpenCodeLIG\\workspace",
+    "agent_ops\\ui\\hamster_overlay.py",
+    "hamster_overlay_start.log",
+    'start "OpenCodeLIG Hamster"',
+    "LIG_AGENTOPS_HOME=%LIG_WORKSPACE_HOME%",
+)
+
+LAUNCHER_PROJECT_DIR_MARKERS = (
+    "if not defined LIG_PROJECT_DIR (",
+    'set "LIG_PROJECT_DIR=%CD%"',
+    "%WINDIR%\\System32",
+    "%WINDIR%\\SysWOW64",
+    'cd /d "%LIG_PROJECT_DIR%"',
+)
+
+LAUNCHER_DRIVE_ROOT_FALLBACK = (
+    'for %%I in ("%LIG_PROJECT_DIR%") do if /I "%%~fI"=="%%~dI\\\\" '
+    'set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"'
+)
+
+HAMSTER_EVENT_BRIDGE_MARKERS = (
+    "session.status",
+    "session.next.text.delta",
+    "session.next.step.started",
+    "session.next.step.ended",
+    "session.next.step.failed",
+    "session.next.tool.called",
+    "session.next.tool.success",
+    "session.next.tool.failed",
+    "experimental.session.compacting",
+    'properties?.tool === "task"',
+    "isTaskToolCall",
+    "isTaskToolSuccess",
+    "isTaskToolFailure",
+    "writeAtomic",
+    "opencode-event-types.log",
+)
+
+HAMSTER_LEGACY_MARKERS = (
+    'type === "task.start"',
+    'type === "task.end"',
+    'type === "session.task.started"',
+    'type === "session.next.task.started"',
+    "event?.properties?.agent_name",
+    'body.includes("subagent")',
+    'body.includes("agent_name")',
+)
+
+AUTOSAVE_REQUIRED_MARKERS = (
+    'appendFileSync(sessionFile()',
+    '"properties"',
+    '"delta"',
+    '"input"',
+    '"output"',
+    "Object.entries(value)",
+    "log-activity",
+    "rememberSessionActivity",
+    "bufferEventText",
+    "takeBufferedText",
+    "session.status",
+    "session.next.text.delta",
+    "session.next.step.ended",
+    "session.next.step.failed",
+    "token",
+    "secret",
+    "credential",
+)
+
+MEMORY_INJECT_REQUIRED_MARKERS = (
+    "fallbackStartupBlock",
+    "refreshStartupRecallAsync",
+    "setTimeout",
+    "process.env.LIG_AGENTOPS_HOME",
+    "session.status",
+    "STARTUP_REFRESH_COOLDOWN_MS",
+    "COMPACTION_REFRESH_COOLDOWN_MS",
+    "IDLE_REFRESH_COOLDOWN_MS",
+    "cachedRecallBlock",
+)
+'''
+
+SELF_IMPROVEMENT_SOURCE = r'''# -*- coding: utf-8 -*-
+"""Automatic self-improvement loop backed by the main memory ledger.
+
+Settings/report stay in a small side directory, but failures/lessons use the
+same memory.jsonl pipeline as the rest of OpenCodeLIG so recall/quality/decay
+stay consistent and duplicate ledgers do not diverge.
 """
 from __future__ import annotations
 
 import json
 import os
-import re
-import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -1769,16 +1992,8 @@ DEFAULT_SETTINGS = {
     "max_injected": 3,
 }
 
-EVENTS = "events.jsonl"
-LESSONS = "lessons.jsonl"
 SETTINGS = "settings.json"
 REPORT = "report.md"
-
-_SECRET_PATTERNS = [
-    re.compile(r"Bearer\s+[A-Za-z0-9._\-+/=]+", re.I),
-    re.compile(r"(api[_-]?key\s*[=:]\s*)[^\s,;]+", re.I),
-    re.compile(r"(password\s*[=:]\s*)[^\s,;]+", re.I),
-]
 
 
 def now_iso() -> str:
@@ -1809,13 +2024,6 @@ def _ensure() -> None:
         _write_json(_path(SETTINGS), DEFAULT_SETTINGS)
 
 
-def _read_json(path: Path, default: Any) -> Any:
-    try:
-        return json.loads(path.read_text(encoding="utf-8-sig", errors="replace"))
-    except Exception:
-        return default
-
-
 def _write_json(path: Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -1823,38 +2031,11 @@ def _write_json(path: Path, payload: Dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
+def _read_json(path: Path, default: Any) -> Any:
     try:
-        for line in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
-            if not line.strip():
-                continue
-            item = json.loads(line)
-            if isinstance(item, dict):
-                rows.append(item)
+        return json.loads(path.read_text(encoding="utf-8-sig", errors="replace"))
     except Exception:
-        pass
-    return rows
-
-
-def _append_jsonl(path: Path, item: Dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(item, ensure_ascii=False) + "\n")
-
-
-def _redact(text: Any, limit: int = 500) -> str:
-    value = str(text or "").replace("\r", " ").replace("\n", " ")
-    value = " ".join(value.split())
-    for pat in _SECRET_PATTERNS:
-        value = pat.sub(lambda m: (m.group(1) if m.groups() else "Bearer ") + "<hidden>", value)
-    return value[:limit]
-
-
-def _signature(*parts: str) -> str:
-    import hashlib
-    raw = "|".join(_redact(p, 300).lower() for p in parts)
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+        return default
 
 
 def get_settings() -> Dict[str, Any]:
@@ -1880,148 +2061,115 @@ def set_enabled(enabled: bool) -> Dict[str, Any]:
 
 
 def enabled() -> bool:
-    s = get_settings()
-    return bool(s.get("enabled", True) and s.get("auto_capture", True))
+    settings = get_settings()
+    return bool(settings.get("enabled", True) and settings.get("auto_capture", True))
 
 
-def record_event(kind: str, area: str, *, failure: str = "", fix: str = "",
-                 next_action: str = "", task: str = "", run_id: str = "",
-                 route: str = "", source: str = "auto",
-                 metadata: Optional[Dict[str, Any]] = None,
-                 force: bool = False) -> Optional[Dict[str, Any]]:
-    """Append one compact self-improvement event. Returns None when disabled."""
-    if not force and not enabled():
-        return None
-    _ensure()
-    item = {
-        "id": "si_" + uuid.uuid4().hex[:10],
-        "created_at": now_iso(),
-        "kind": kind,
-        "status": "active",
-        "area": _redact(area, 80),
-        "failure": _redact(failure, 500),
-        "fix": _redact(fix, 500),
-        "next_action": _redact(next_action, 300),
-        "task": _redact(task, 160),
-        "run_id": _redact(run_id, 80),
-        "route": _redact(route, 80),
-        "source": source,
-        "signature": _signature(kind, area, failure, next_action or fix),
-        "metadata": metadata or {},
-    }
-    _append_jsonl(_path(EVENTS), item)
-    if kind in {"self_fix", "self_lesson"}:
-        _upsert_lesson(item)
-    if get_settings().get("auto_wiki", True):
-        render_report()
-    return item
+def _memory_rows() -> List[Dict[str, Any]]:
+    from .memory_manager import load_memory
+    return [r for r in load_memory(status="active") if isinstance(r, dict)]
+
+
+def _self_errors(area: str = "") -> List[Dict[str, Any]]:
+    want = f"자가 관찰 실수: {area}" if area else ""
+    rows = []
+    for row in _memory_rows():
+        if row.get("kind") != "error_pattern" or row.get("source") != "self_observed":
+            continue
+        if want and row.get("title") != want:
+            continue
+        rows.append(row)
+    rows.sort(key=lambda r: str(r.get("updated_at") or r.get("created_at", "")), reverse=True)
+    return rows
+
+
+def _self_fix_lessons() -> List[Dict[str, Any]]:
+    rows = []
+    for row in _memory_rows():
+        if row.get("kind") == "lesson" and row.get("source") == "self_fix":
+            rows.append(row)
+    rows.sort(key=lambda r: str(r.get("updated_at") or r.get("created_at", "")), reverse=True)
+    return rows
+
+
+def _dedupe_tag(row: Dict[str, Any]) -> str:
+    for tag in row.get("tags") or []:
+        tag = str(tag)
+        if tag.startswith("dedupe:"):
+            return tag
+    return ""
+
+
+def _task_marker(task: str) -> str:
+    value = " ".join(str(task or "").split())[:80]
+    return f"task:{value}" if value else ""
 
 
 def record_error(area: str, detail: str, *, task: str = "", run_id: str = "",
                  route: str = "", source: str = "auto") -> Optional[Dict[str, Any]]:
-    return record_event(
-        "self_error",
-        area,
-        failure=detail,
-        task=task,
-        run_id=run_id,
-        route=route,
-        source=source,
-    )
+    if not enabled():
+        return None
+    from .memory_manager import record_self_error
+    return record_self_error(area, detail or "", task=task or "")
 
 
-def record_fix(area: str, failure: str, fix: str, next_action: str, *,
-               task: str = "", run_id: str = "", route: str = "",
-               source: str = "auto") -> Optional[Dict[str, Any]]:
-    return record_event(
-        "self_fix",
-        area,
-        failure=failure,
-        fix=fix,
-        next_action=next_action,
-        task=task,
-        run_id=run_id,
-        route=route,
-        source=source,
-    )
+def _matching_error(task: str, area: str) -> Optional[Dict[str, Any]]:
+    task_text = " ".join(str(task or "").split())[:80]
+    for row in _self_errors(area):
+        body = str(row.get("body", ""))
+        if task_text and task_text in body:
+            return row
+    errors = _self_errors(area)
+    return errors[0] if errors else None
 
 
-def _matching_unresolved_error(task: str, run_id: str, area: str) -> Optional[Dict[str, Any]]:
-    events = list(reversed(_read_jsonl(_path(EVENTS))))
-    task_norm = _redact(task, 160)
-    run_norm = _redact(run_id, 80)
-    area_norm = _redact(area, 80)
-    for item in events[:40]:
-        if item.get("kind") != "self_error":
+def _existing_lesson(tag: str, action: str) -> Optional[Dict[str, Any]]:
+    for row in _self_fix_lessons():
+        if tag and tag not in [str(t) for t in (row.get("tags") or [])]:
             continue
-        if run_norm and item.get("run_id") == run_norm:
-            return item
-        if task_norm and item.get("task") == task_norm:
-            return item
-        if area_norm and item.get("area") == area_norm:
-            return item
+        if str(row.get("body", "")) == action:
+            return row
     return None
+
+
+def _today() -> str:
+    return datetime.now().strftime("%Y-%m-%d")
 
 
 def capture_task_result(task: str, *, ok: bool, area: str = "task",
                         detail: str = "", run_id: str = "", route: str = "") -> Optional[Dict[str, Any]]:
-    """Record failure, or link a later success to the most recent failure."""
-    if ok:
-        prev = _matching_unresolved_error(task, run_id, area)
-        if not prev:
-            return None
-        fix = detail or route or "later successful path"
-        next_action = (
-            f"다음에는 `{prev.get('area')}` 작업에서 같은 증상('{prev.get('failure')}')이 보이면 "
-            f"방금 성공한 방법({fix})을 먼저 적용한다."
-        )
-        return record_fix(
-            str(prev.get("area") or area),
-            str(prev.get("failure") or detail),
-            fix,
-            next_action,
-            task=task,
-            run_id=run_id,
-            route=route,
-        )
-    return record_error(area, detail, task=task, run_id=run_id, route=route)
+    if not enabled():
+        return None
+    if not ok:
+        return record_error(area, detail, task=task, run_id=run_id, route=route, source="auto")
 
+    error = _matching_error(task, area)
+    if not error:
+        return None
 
-def _upsert_lesson(event: Dict[str, Any]) -> Dict[str, Any]:
-    lessons = _read_jsonl(_path(LESSONS))
-    sig = _signature(str(event.get("area")), str(event.get("failure")), str(event.get("next_action")))
-    for row in lessons:
-        if row.get("signature") == sig:
-            row["count"] = int(row.get("count") or 1) + 1
-            row["updated_at"] = now_iso()
-            row["priority"] = "high" if row["count"] >= 2 else row.get("priority", "normal")
-            row["fix"] = event.get("fix", row.get("fix", ""))
-            _rewrite_jsonl(_path(LESSONS), lessons)
-            return row
-    lesson = {
-        "id": "sil_" + uuid.uuid4().hex[:10],
-        "created_at": now_iso(),
-        "updated_at": now_iso(),
-        "kind": "self_lesson",
-        "status": "active",
-        "priority": "normal",
-        "area": event.get("area", ""),
-        "failure": event.get("failure", ""),
-        "fix": event.get("fix", ""),
-        "next_action": event.get("next_action", "") or event.get("fix", ""),
-        "count": 1,
-        "signature": sig,
-    }
-    lessons.append(lesson)
-    _rewrite_jsonl(_path(LESSONS), lessons)
+    dedupe = _dedupe_tag(error)
+    fix = " ".join(str(detail or route or "성공한 경로를 우선 재사용").split())[:220]
+    failure = " ".join(str(error.get("body", "")).split())[:220]
+    action = f"{area}에서 '{failure}'가 다시 보이면 먼저 '{fix}' 순서로 처리한다."
+    existing = _existing_lesson(dedupe, action)
+    if existing and str(existing.get("created_at", ""))[:10] == _today():
+        return existing
+
+    from .memory_manager import add_memory_event, extract_keywords
+    tags = [t for t in [dedupe, _task_marker(task), f"area:{area}"] if t]
+    tags.extend(extract_keywords(f"{task} {area} {fix}")[:5])
+    lesson = add_memory_event(
+        "lesson",
+        f"자가개선 교훈: {area}",
+        action,
+        status="active",
+        priority="normal",
+        source="self_fix",
+        tags=tags,
+    )
+    if get_settings().get("auto_wiki", True):
+        render_report()
     return lesson
-
-
-def _rewrite_jsonl(path: Path, rows: List[Dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
-    tmp.replace(path)
 
 
 def lessons_for_injection(limit: int | None = None) -> List[Dict[str, Any]]:
@@ -2029,13 +2177,10 @@ def lessons_for_injection(limit: int | None = None) -> List[Dict[str, Any]]:
     if not settings.get("enabled", True) or not settings.get("auto_inject", True):
         return []
     max_items = int(limit if limit is not None else settings.get("max_injected", 3))
-    rows = [r for r in _read_jsonl(_path(LESSONS)) if r.get("status") == "active"]
-    indexed = list(enumerate(rows))
-    indexed.sort(key=lambda pair: pair[0], reverse=True)
-    indexed.sort(key=lambda pair: str(pair[1].get("updated_at") or pair[1].get("created_at", "")), reverse=True)
-    indexed.sort(key=lambda pair: int(pair[1].get("count") or 1), reverse=True)
-    indexed.sort(key=lambda pair: 0 if pair[1].get("priority") == "high" else 1)
-    return [row for _idx, row in indexed[:max(0, max_items)]]
+    rows = list(reversed(_self_fix_lessons()))
+    rows.sort(key=lambda r: str(r.get("updated_at") or r.get("created_at", "")), reverse=True)
+    rows.sort(key=lambda r: 0 if r.get("priority") == "high" else 1)
+    return rows[:max(0, max_items)]
 
 
 def format_injection_block(limit: int | None = None) -> str:
@@ -2044,31 +2189,28 @@ def format_injection_block(limit: int | None = None) -> str:
         return ""
     lines = ["## OpenCodeLIG 자가개선 지침", "같은 시행착오를 반복하지 않도록 우선 적용:"]
     for row in lessons:
-        action = _redact(row.get("next_action") or row.get("fix"), 220)
-        if action:
-            lines.append(f"- {action}")
+        lines.append(f"- {str(row.get('body', '')).strip()[:220]}")
     return "\n".join(lines)
 
 
 def render_report() -> Path:
     _ensure()
-    events = _read_jsonl(_path(EVENTS))
-    lessons = _read_jsonl(_path(LESSONS))
+    errors = _self_errors()
+    lessons = _self_fix_lessons()
     lines = [
         "# Self Improvement Report",
         "",
         f"- updated: `{now_iso()}`",
         f"- enabled: `{get_settings().get('enabled', True)}`",
-        f"- events: `{len(events)}`",
+        f"- errors: `{len(errors)}`",
         f"- lessons: `{len(lessons)}`",
         "",
         "## Active Lessons",
     ]
-    active = [r for r in lessons if r.get("status") == "active"]
-    if not active:
+    if not lessons:
         lines.append("- 없음")
-    for row in active[-20:]:
-        lines.append(f"- **{row.get('area')}**: {row.get('next_action')} (count={row.get('count')})")
+    for row in lessons[:20]:
+        lines.append(f"- **{row.get('title')}**: {row.get('body')}")
     path = _path(REPORT)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     if get_settings().get("auto_wiki", True):
@@ -2090,8 +2232,8 @@ def status() -> Dict[str, Any]:
     return {
         "settings": get_settings(),
         "dir": str(base_dir()),
-        "events": len(_read_jsonl(_path(EVENTS))),
-        "lessons": len(_read_jsonl(_path(LESSONS))),
+        "errors": len(_self_errors()),
+        "lessons": len(_self_fix_lessons()),
     }
 '''
 
@@ -2115,6 +2257,23 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+
+_WS_ROOT = Path(__file__).resolve().parents[1]
+if str(_WS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_WS_ROOT))
+
+from agent_ops.release_contracts import (
+    AUTOSAVE_REQUIRED_MARKERS,
+    HAMSTER_EVENT_BRIDGE_MARKERS,
+    HAMSTER_LEGACY_MARKERS,
+    LAUNCHER_DRIVE_ROOT_FALLBACK,
+    LAUNCHER_FAST_RUNTIME_MARKERS,
+    LAUNCHER_HAMSTER_MARKERS,
+    LAUNCHER_PROJECT_DIR_MARKERS,
+    MEMORY_INJECT_REQUIRED_MARKERS,
+    PLUGIN_SYNC_GLOB,
+    REQUIRED_PLUGIN_FILES,
+)
 
 
 @dataclass
@@ -2184,23 +2343,8 @@ def _check_launcher(workspace: Path, checks: list[GateCheck]) -> None:
     text = _read_text(launcher)
     run_idx = text.find("\"%OCODE_EXE%\" %*")
 
-    fast_required = [
-        "OPENCODE_FAST_BASE=%OPENCODE_USERDATA%\\opencode_fast_runtime",
-        "OPENCODE_CONFIG_DIR=%OPENCODE_FAST_CONFIG%",
-        "XDG_CONFIG_HOME=%OPENCODE_FAST_CONFIG%",
-        "XDG_DATA_HOME=%OPENCODE_FAST_DATA%",
-        "XDG_CACHE_HOME=%OPENCODE_FAST_CACHE%",
-        "OPENCODE_DISABLE_MODELS_FETCH=1",
-        "OPENCODE_DISABLE_AUTOUPDATE=1",
-        "OPENCODE_DISABLE_LSP_DOWNLOAD=1",
-        "OPENCODE_MODELS_URL=http://127.0.0.1:9/api.json",
-        "NPM_CONFIG_REGISTRY=http://127.0.0.1:9/",
-        "BUN_CONFIG_REGISTRY=http://127.0.0.1:9/",
-        "NO_PROXY=*",
-        "set \"OPENCODE_PURE=\"",
-    ]
-    fast_ok, fast_evidence = _markers(text, fast_required)
-    before_run = run_idx >= 0 and all(0 <= text.find(marker) < run_idx for marker in fast_required)
+    fast_ok, fast_evidence = _markers(text, list(LAUNCHER_FAST_RUNTIME_MARKERS))
+    before_run = run_idx >= 0 and all(0 <= text.find(marker) < run_idx for marker in LAUNCHER_FAST_RUNTIME_MARKERS)
     _add(
         checks,
         "launcher_fast_runtime",
@@ -2209,14 +2353,7 @@ def _check_launcher(workspace: Path, checks: list[GateCheck]) -> None:
         "OpenCode 실행 직전 fast runtime/offline 환경변수를 설정하고 OPENCODE_PURE=1을 제거하세요.",
     )
 
-    hamster_required = [
-        "LIG_WORKSPACE_HOME=%USERPROFILE%\\OpenCodeLIG\\workspace",
-        "agent_ops\\ui\\hamster_overlay.py",
-        "hamster_overlay_start.log",
-        "start \"OpenCodeLIG Hamster\"",
-        "LIG_AGENTOPS_HOME=%LIG_WORKSPACE_HOME%",
-    ]
-    hamster_ok, hamster_evidence = _markers(text, hamster_required)
+    hamster_ok, hamster_evidence = _markers(text, list(LAUNCHER_HAMSTER_MARKERS))
     _add(
         checks,
         "launcher_direct_hamster",
@@ -2225,36 +2362,23 @@ def _check_launcher(workspace: Path, checks: list[GateCheck]) -> None:
         "햄스터는 설치 workspace의 agent_ops\\ui\\hamster_overlay.py를 직접 실행해야 합니다.",
     )
 
-    project_required = [
-        "if not defined LIG_PROJECT_DIR (",
-        "set \"LIG_PROJECT_DIR=%CD%\"",
-        "%WINDIR%\\System32",
-        "%WINDIR%\\SysWOW64",
-        "cd /d \"%LIG_PROJECT_DIR%\"",
-    ]
-    project_ok, project_evidence = _markers(text, project_required)
+    project_ok, project_evidence = _markers(text, list(LAUNCHER_PROJECT_DIR_MARKERS))
     unconditional_workspace = 'set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"' in text.splitlines()
+    drive_root_guard = LAUNCHER_DRIVE_ROOT_FALLBACK in text
     _add(
         checks,
         "launcher_ocd_project_dir",
-        launcher.exists() and project_ok and not unconditional_workspace,
-        f"{project_evidence}; unconditional_workspace={unconditional_workspace}",
+        launcher.exists() and project_ok and drive_root_guard and not unconditional_workspace,
+        f"{project_evidence}; drive_root_guard={drive_root_guard}; unconditional_workspace={unconditional_workspace}",
         "ocd/caller가 넘긴 작업폴더를 보존하고 위험한 시작 위치만 workspace로 fallback해야 합니다.",
     )
 
 
 def _check_plugins_and_memory(workspace: Path, checks: list[GateCheck]) -> None:
     plugins = workspace / ".opencode" / "plugins"
-    required_files = [
-        "command-guard.ts",
-        "compaction-handoff.ts",
-        "hamster-status.ts",
-        "memory-inject.ts",
-        "session-autosave.ts",
-    ]
-    missing = [name for name in required_files if not (plugins / name).exists()]
+    missing = [name for name in REQUIRED_PLUGIN_FILES if not (plugins / name).exists()]
     launcher = _read_text(workspace / "RUN_OPENCODE_LIG.bat")
-    sync_all_plugins = ".opencode\\plugins\\*.ts" in launcher
+    sync_all_plugins = PLUGIN_SYNC_GLOB in launcher
     pure_one = "OPENCODE_PURE=1" in launcher
     _add(
         checks,
@@ -2265,58 +2389,33 @@ def _check_plugins_and_memory(workspace: Path, checks: list[GateCheck]) -> None:
     )
 
     autosave = _read_text(plugins / "session-autosave.ts")
-    autosave_required = [
-        "memory\", \"wiki\", \"sessions\"",
-        "appendFileSync(sessionFile()",
-        "Object.entries(value)",
-        "log-activity",
-        "session.status",
-        "session.next.step.ended",
-        "session.next.step.failed",
-    ]
-    autosave_ok, autosave_evidence = _markers(autosave, autosave_required)
+    autosave_ok, autosave_evidence = _markers(autosave, list(AUTOSAVE_REQUIRED_MARKERS))
     _add(
         checks,
         "session_autosave_to_wiki",
-        autosave_ok and "(?i:" not in autosave,
-        f"{autosave_evidence}; bad_regex={'(?i:' in autosave}",
-        "세션 이벤트를 wiki\\sessions로 즉시 append하고 event.properties 내부를 재귀 추출해야 합니다.",
+        autosave_ok and "(?i:" not in autosave and "execFileSync" not in autosave,
+        f"{autosave_evidence}; bad_regex={'(?i:' in autosave}; execFileSync={'execFileSync' in autosave}",
+        "세션 이벤트를 wiki\\sessions로 저장하되 delta는 버퍼링 후 ended에서만 flush하고 동기 child 호출은 제거해야 합니다.",
     )
 
     memory = _read_text(plugins / "memory-inject.ts")
-    memory_required = [
-        "fallbackStartupBlock",
-        "refreshStartupRecallAsync",
-        "setTimeout",
-        "process.env.LIG_AGENTOPS_HOME",
-        "session.status",
-    ]
-    memory_ok, memory_evidence = _markers(memory, memory_required)
+    memory_ok, memory_evidence = _markers(memory, list(MEMORY_INJECT_REQUIRED_MARKERS))
     _add(
         checks,
         "memory_inject_nonblocking",
-        memory_ok,
-        memory_evidence,
-        "TUI 시작을 막지 않도록 기억 주입은 fallback 후 백그라운드 refresh 구조여야 합니다.",
+        memory_ok and "execFileSync" not in memory and ("execFile(" in memory or "spawn(" in memory),
+        f"{memory_evidence}; execFileSync={'execFileSync' in memory}; async_exec={'execFile(' in memory or 'spawn(' in memory}",
+        "TUI 시작을 막지 않도록 기억 주입은 fallback 후 백그라운드 refresh 구조여야 하며 동기 child 호출이 남아 있으면 안 됩니다.",
     )
 
     hamster = _read_text(plugins / "hamster-status.ts")
-    hamster_required = [
-        "task.start",
-        "task.end",
-        "subagent",
-        "agent_name",
-        "OpenCode subagent",
-        "opencode-event-types.log",
-        "isSubagentOrTaskStart",
-        "isSubagentOrTaskEnd",
-    ]
-    hamster_ok, hamster_evidence = _markers(hamster, hamster_required)
+    hamster_ok, hamster_evidence = _markers(hamster, list(HAMSTER_EVENT_BRIDGE_MARKERS))
+    hamster_legacy = any(marker in hamster for marker in HAMSTER_LEGACY_MARKERS)
     _add(
         checks,
         "hamster_subagent_status_bridge",
-        hamster_ok,
-        hamster_evidence,
+        hamster_ok and not hamster_legacy,
+        f"{hamster_evidence}; legacy_guess={hamster_legacy}",
         "멀티에이전트/subtask 진행 상태가 햄스터 current_status.json으로 자동 반영되어야 합니다.",
     )
 
@@ -2491,7 +2590,6 @@ def run_quality_gate(workspace: Path | str | None = None, run_commands: bool = T
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(result.to_markdown(), encoding="utf-8")
     result.report_path = report_path
-    report_path.write_text(result.to_markdown(), encoding="utf-8")
     return result
 
 
@@ -2584,6 +2682,7 @@ def main() -> int:
     create_launcher_helpers()
     create_plugin_bridges()
     create_self_improvement()
+    create_release_contracts()
     create_quality_gate()
     patch_agentops_quality_gate_command()
     patch_agentops_self_improve_command()
@@ -2597,6 +2696,7 @@ def main() -> int:
     adapters = WS / "agent_ops" / "adapters" / "__init__.py"
     inject_before_main(pending, PENDING_BLOCK, MARK_PENDING)
     append_once(adapters, ADAPTER_BLOCK, MARK_ADAPTERS)
+    verify_python(WS / "agent_ops" / "release_contracts.py")
     verify_python(pending)
     verify_python(adapters)
     run_pending_check()

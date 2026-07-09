@@ -10,6 +10,13 @@ import sys
 import zipfile
 from pathlib import Path
 
+from patches.build_final_patch import (
+    EMBEDDED_TEXT_SOURCES,
+    END_MARKER,
+    PY_MARKER,
+    WHEEL_MARKER,
+    WHEEL_NAME_MARKER,
+)
 
 WS = Path(__file__).resolve().parents[1]
 REPO = WS.parent
@@ -59,6 +66,7 @@ def _run_hotfix(root: Path, tmp_path: Path, extra_env: dict[str, str] | None = N
 
 def test_existing_install_hotfix_compiles() -> None:
     py_compile.compile(str(HOTFIX), doraise=True)
+    py_compile.compile(str(WS / "patches" / "build_final_patch.py"), doraise=True)
 
 
 def test_patch_entry_bat_is_utf8_crlf_and_sets_codepage() -> None:
@@ -71,30 +79,29 @@ def test_patch_entry_bat_is_utf8_crlf_and_sets_codepage() -> None:
 def test_final_patch_bat_is_self_contained_and_embeds_compilable_payload(tmp_path: Path) -> None:
     raw = FINAL_BAT.read_bytes()
     assert b"\n" not in raw.replace(b"\r\n", b"")
+    assert b"\r\r\n" not in raw
     text = raw.decode("utf-8")
-    py_marker = "__OPENCODELIG_HOTFIX_PY_BASE64__"
-    wheel_name_marker = "__OPENCODELIG_HOTFIX_MSS_WHEEL_NAME__"
-    wheel_marker = "__OPENCODELIG_HOTFIX_MSS_WHEEL_BASE64__"
-    end_marker = "__OPENCODELIG_HOTFIX_END__"
     lines = text.splitlines()
-    assert py_marker in lines
-    assert wheel_name_marker in lines
-    assert wheel_marker in lines
-    assert end_marker in lines
+    assert PY_MARKER in lines
+    assert WHEEL_NAME_MARKER in lines
+    assert WHEEL_MARKER in lines
+    assert END_MARKER in lines
 
     def section(start: str, end: str) -> str:
         return "".join(lines[lines.index(start) + 1 : lines.index(end)])
 
-    payload = section(py_marker, wheel_name_marker)
+    payload = section(PY_MARKER, WHEEL_NAME_MARKER)
     extracted = tmp_path / "embedded_hotfix.py"
-    extracted.write_bytes(base64.b64decode(payload))
+    payload_bytes = base64.b64decode(payload)
+    extracted.write_bytes(payload_bytes)
     py_compile.compile(str(extracted), doraise=True)
+    assert payload_bytes == HOTFIX.read_bytes()
 
-    wheel_name = section(wheel_name_marker, wheel_marker).strip()
+    wheel_name = section(WHEEL_NAME_MARKER, WHEEL_MARKER).strip()
     assert wheel_name.startswith("mss-")
     assert wheel_name.endswith(".whl")
     wheel_path = tmp_path / wheel_name
-    wheel_path.write_bytes(base64.b64decode(section(wheel_marker, end_marker)))
+    wheel_path.write_bytes(base64.b64decode(section(WHEEL_MARKER, END_MARKER)))
     with zipfile.ZipFile(wheel_path) as zf:
         names = zf.namelist()
     assert any(name.endswith("/METADATA") and name.startswith("mss-") for name in names)
@@ -238,3 +245,17 @@ def test_session_autosave_plugin_writes_to_obsidian_sessions(tmp_path: Path) -> 
     assert "rememberSessionActivity" in text
     assert "session.start" in text
     assert "(?i:" not in text
+
+
+def test_hotfix_embedded_sources_match_repo_files() -> None:
+    text = HOTFIX.read_text(encoding="utf-8")
+    for const_name, source_path in EMBEDDED_TEXT_SOURCES.items():
+        token = f"{const_name} = r'''"
+        start = text.find(token)
+        assert start >= 0, const_name
+        body_start = start + len(token)
+        end = text.find("\n'''", body_start)
+        assert end >= 0, const_name
+        embedded = text[body_start:end].replace("\r\n", "\n")
+        source = source_path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").rstrip("\n")
+        assert embedded == source, f"{const_name} drifted from {source_path}"
