@@ -284,7 +284,9 @@ def core_memory(limit: int = 6) -> List[Dict[str, Any]]:
     rows = load_memory(status="active")
     core = [r for r in rows if r.get("source") == "user"
             or (r.get("kind") == "error_pattern"
-                and str(r.get("created_at", ""))[:10] >= _days_ago(14))]
+                and str(r.get("created_at", ""))[:10] >= _days_ago(14))
+            or (r.get("kind") == "lesson" and r.get("source") == "self_fix"
+                and str(r.get("created_at", ""))[:10] >= _days_ago(30))]
     core.sort(key=lambda r: str(r.get("created_at", "")), reverse=True)
     core.sort(key=lambda r: (-float(r.get("importance", 0.4)),
                              0 if r.get("priority") == "high" else 1))
@@ -321,9 +323,13 @@ def pinned_recall(limit: int = 5, error_days: int = 14) -> List[Dict[str, Any]]:
         [r for r in rows if r.get("kind") == "error_pattern"
          and str(r.get("created_at", ""))[:10] >= cutoff],
         key=lambda r: str(r.get("created_at", "")), reverse=True)
+    recent_self_fixes = sorted(
+        [r for r in rows if r.get("kind") == "lesson" and r.get("source") == "self_fix"
+         and str(r.get("created_at", ""))[:10] >= _days_ago(30)],
+        key=lambda r: str(r.get("created_at", "")), reverse=True)
     picked: List[Dict[str, Any]] = []
     seen: set = set()
-    for r in user_prefs[:limit] + recent_errors[:max(2, limit - 2)]:
+    for r in user_prefs[:limit] + recent_errors[:max(2, limit - 2)] + recent_self_fixes[:max(2, limit - 2)]:
         if r.get("id") not in seen:
             seen.add(r.get("id"))
             picked.append(r)

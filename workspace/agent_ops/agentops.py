@@ -613,17 +613,18 @@ def _complete_activity(task: str, outcome: str = "", *, ok: bool = True,
             from agent_ops.memory_manager import record_self_error
             result["logged"] = record_self_error(
                 task, error_detail or outcome, dedupe_day=True) is not None
-        try:
-            from agent_ops.self_improvement import capture_task_result
-            capture_task_result(
-                task,
-                ok=ok,
-                area=str(kind or "activity"),
-                detail=(error_detail or outcome or ""),
-                route=str(route or ""),
-            )
-        except Exception:  # noqa: BLE001 - 자가개선 기록 실패가 본 작업을 막으면 안 된다
-            pass
+        if ok:
+            try:
+                from agent_ops.self_improvement import capture_task_result
+                capture_task_result(
+                    task,
+                    ok=True,
+                    area=str(kind or "activity"),
+                    detail=(error_detail or outcome or ""),
+                    route=str(route or ""),
+                )
+            except Exception:  # noqa: BLE001 - 자가개선 기록 실패가 본 작업을 막으면 안 된다
+                pass
     except Exception:  # noqa: BLE001 - 자동 적재 실패가 작업을 막으면 안 된다
         pass
     return result
@@ -991,13 +992,6 @@ def cmd_recall(args):
                 r["body"] = body[:max_len] + "…(절단)"
             display.append(r)
         out = format_recall_for_prompt(display)
-        try:
-            from agent_ops.self_improvement import format_injection_block
-            block = format_injection_block()
-            if block:
-                out = out + "\n\n" + block
-        except Exception:  # noqa: BLE001
-            pass
         print(out)
         return 0
     keywords = extract_keywords(" ".join(args.keywords))

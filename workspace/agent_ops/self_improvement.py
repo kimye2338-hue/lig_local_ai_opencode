@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
-"""Automatic self-improvement loop for OpenCodeLIG.
+"""Automatic self-improvement loop backed by the main memory ledger.
 
-This is intentionally small and append-only. It records compact observations
-about model/tool mistakes, links a later success in the same task/run to a fix,
-and exposes a tiny set of actionable lessons for the next session.
+Settings/report stay in a small side directory, but failures/lessons use the
+same memory.jsonl pipeline as the rest of OpenCodeLIG so recall/quality/decay
+stay consistent and duplicate ledgers do not diverge.
 """
 from __future__ import annotations
 
 import json
 import os
-import re
-import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -24,16 +22,8 @@ DEFAULT_SETTINGS = {
     "max_injected": 3,
 }
 
-EVENTS = "events.jsonl"
-LESSONS = "lessons.jsonl"
 SETTINGS = "settings.json"
 REPORT = "report.md"
-
-_SECRET_PATTERNS = [
-    re.compile(r"Bearer\s+[A-Za-z0-9._\-+/=]+", re.I),
-    re.compile(r"(api[_-]?key\s*[=:]\s*)[^\s,;]+", re.I),
-    re.compile(r"(password\s*[=:]\s*)[^\s,;]+", re.I),
-]
 
 
 def now_iso() -> str:
@@ -64,13 +54,6 @@ def _ensure() -> None:
         _write_json(_path(SETTINGS), DEFAULT_SETTINGS)
 
 
-def _read_json(path: Path, default: Any) -> Any:
-    try:
-        return json.loads(path.read_text(encoding="utf-8-sig", errors="replace"))
-    except Exception:
-        return default
-
-
 def _write_json(path: Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -78,38 +61,11 @@ def _write_json(path: Path, payload: Dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
+def _read_json(path: Path, default: Any) -> Any:
     try:
-        for line in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
-            if not line.strip():
-                continue
-            item = json.loads(line)
-            if isinstance(item, dict):
-                rows.append(item)
+        return json.loads(path.read_text(encoding="utf-8-sig", errors="replace"))
     except Exception:
-        pass
-    return rows
-
-
-def _append_jsonl(path: Path, item: Dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(item, ensure_ascii=False) + "\n")
-
-
-def _redact(text: Any, limit: int = 500) -> str:
-    value = str(text or "").replace("\r", " ").replace("\n", " ")
-    value = " ".join(value.split())
-    for pat in _SECRET_PATTERNS:
-        value = pat.sub(lambda m: (m.group(1) if m.groups() else "Bearer ") + "<hidden>", value)
-    return value[:limit]
-
-
-def _signature(*parts: str) -> str:
-    import hashlib
-    raw = "|".join(_redact(p, 300).lower() for p in parts)
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+        return default
 
 
 def get_settings() -> Dict[str, Any]:
@@ -135,148 +91,115 @@ def set_enabled(enabled: bool) -> Dict[str, Any]:
 
 
 def enabled() -> bool:
-    s = get_settings()
-    return bool(s.get("enabled", True) and s.get("auto_capture", True))
+    settings = get_settings()
+    return bool(settings.get("enabled", True) and settings.get("auto_capture", True))
 
 
-def record_event(kind: str, area: str, *, failure: str = "", fix: str = "",
-                 next_action: str = "", task: str = "", run_id: str = "",
-                 route: str = "", source: str = "auto",
-                 metadata: Optional[Dict[str, Any]] = None,
-                 force: bool = False) -> Optional[Dict[str, Any]]:
-    """Append one compact self-improvement event. Returns None when disabled."""
-    if not force and not enabled():
-        return None
-    _ensure()
-    item = {
-        "id": "si_" + uuid.uuid4().hex[:10],
-        "created_at": now_iso(),
-        "kind": kind,
-        "status": "active",
-        "area": _redact(area, 80),
-        "failure": _redact(failure, 500),
-        "fix": _redact(fix, 500),
-        "next_action": _redact(next_action, 300),
-        "task": _redact(task, 160),
-        "run_id": _redact(run_id, 80),
-        "route": _redact(route, 80),
-        "source": source,
-        "signature": _signature(kind, area, failure, next_action or fix),
-        "metadata": metadata or {},
-    }
-    _append_jsonl(_path(EVENTS), item)
-    if kind in {"self_fix", "self_lesson"}:
-        _upsert_lesson(item)
-    if get_settings().get("auto_wiki", True):
-        render_report()
-    return item
+def _memory_rows() -> List[Dict[str, Any]]:
+    from .memory_manager import load_memory
+    return [r for r in load_memory(status="active") if isinstance(r, dict)]
+
+
+def _self_errors(area: str = "") -> List[Dict[str, Any]]:
+    want = f"자가 관찰 실수: {area}" if area else ""
+    rows = []
+    for row in _memory_rows():
+        if row.get("kind") != "error_pattern" or row.get("source") != "self_observed":
+            continue
+        if want and row.get("title") != want:
+            continue
+        rows.append(row)
+    rows.sort(key=lambda r: str(r.get("updated_at") or r.get("created_at", "")), reverse=True)
+    return rows
+
+
+def _self_fix_lessons() -> List[Dict[str, Any]]:
+    rows = []
+    for row in _memory_rows():
+        if row.get("kind") == "lesson" and row.get("source") == "self_fix":
+            rows.append(row)
+    rows.sort(key=lambda r: str(r.get("updated_at") or r.get("created_at", "")), reverse=True)
+    return rows
+
+
+def _dedupe_tag(row: Dict[str, Any]) -> str:
+    for tag in row.get("tags") or []:
+        tag = str(tag)
+        if tag.startswith("dedupe:"):
+            return tag
+    return ""
+
+
+def _task_marker(task: str) -> str:
+    value = " ".join(str(task or "").split())[:80]
+    return f"task:{value}" if value else ""
 
 
 def record_error(area: str, detail: str, *, task: str = "", run_id: str = "",
                  route: str = "", source: str = "auto") -> Optional[Dict[str, Any]]:
-    return record_event(
-        "self_error",
-        area,
-        failure=detail,
-        task=task,
-        run_id=run_id,
-        route=route,
-        source=source,
-    )
+    if not enabled():
+        return None
+    from .memory_manager import record_self_error
+    return record_self_error(area, detail or "", task=task or "")
 
 
-def record_fix(area: str, failure: str, fix: str, next_action: str, *,
-               task: str = "", run_id: str = "", route: str = "",
-               source: str = "auto") -> Optional[Dict[str, Any]]:
-    return record_event(
-        "self_fix",
-        area,
-        failure=failure,
-        fix=fix,
-        next_action=next_action,
-        task=task,
-        run_id=run_id,
-        route=route,
-        source=source,
-    )
+def _matching_error(task: str, area: str) -> Optional[Dict[str, Any]]:
+    task_text = " ".join(str(task or "").split())[:80]
+    for row in _self_errors(area):
+        body = str(row.get("body", ""))
+        if task_text and task_text in body:
+            return row
+    errors = _self_errors(area)
+    return errors[0] if errors else None
 
 
-def _matching_unresolved_error(task: str, run_id: str, area: str) -> Optional[Dict[str, Any]]:
-    events = list(reversed(_read_jsonl(_path(EVENTS))))
-    task_norm = _redact(task, 160)
-    run_norm = _redact(run_id, 80)
-    area_norm = _redact(area, 80)
-    for item in events[:40]:
-        if item.get("kind") != "self_error":
+def _existing_lesson(tag: str, action: str) -> Optional[Dict[str, Any]]:
+    for row in _self_fix_lessons():
+        if tag and tag not in [str(t) for t in (row.get("tags") or [])]:
             continue
-        if run_norm and item.get("run_id") == run_norm:
-            return item
-        if task_norm and item.get("task") == task_norm:
-            return item
-        if area_norm and item.get("area") == area_norm:
-            return item
+        if str(row.get("body", "")) == action:
+            return row
     return None
+
+
+def _today() -> str:
+    return datetime.now().strftime("%Y-%m-%d")
 
 
 def capture_task_result(task: str, *, ok: bool, area: str = "task",
                         detail: str = "", run_id: str = "", route: str = "") -> Optional[Dict[str, Any]]:
-    """Record failure, or link a later success to the most recent failure."""
-    if ok:
-        prev = _matching_unresolved_error(task, run_id, area)
-        if not prev:
-            return None
-        fix = detail or route or "later successful path"
-        next_action = (
-            f"다음에는 `{prev.get('area')}` 작업에서 같은 증상('{prev.get('failure')}')이 보이면 "
-            f"방금 성공한 방법({fix})을 먼저 적용한다."
-        )
-        return record_fix(
-            str(prev.get("area") or area),
-            str(prev.get("failure") or detail),
-            fix,
-            next_action,
-            task=task,
-            run_id=run_id,
-            route=route,
-        )
-    return record_error(area, detail, task=task, run_id=run_id, route=route)
+    if not enabled():
+        return None
+    if not ok:
+        return record_error(area, detail, task=task, run_id=run_id, route=route, source="auto")
 
+    error = _matching_error(task, area)
+    if not error:
+        return None
 
-def _upsert_lesson(event: Dict[str, Any]) -> Dict[str, Any]:
-    lessons = _read_jsonl(_path(LESSONS))
-    sig = _signature(str(event.get("area")), str(event.get("failure")), str(event.get("next_action")))
-    for row in lessons:
-        if row.get("signature") == sig:
-            row["count"] = int(row.get("count") or 1) + 1
-            row["updated_at"] = now_iso()
-            row["priority"] = "high" if row["count"] >= 2 else row.get("priority", "normal")
-            row["fix"] = event.get("fix", row.get("fix", ""))
-            _rewrite_jsonl(_path(LESSONS), lessons)
-            return row
-    lesson = {
-        "id": "sil_" + uuid.uuid4().hex[:10],
-        "created_at": now_iso(),
-        "updated_at": now_iso(),
-        "kind": "self_lesson",
-        "status": "active",
-        "priority": "normal",
-        "area": event.get("area", ""),
-        "failure": event.get("failure", ""),
-        "fix": event.get("fix", ""),
-        "next_action": event.get("next_action", "") or event.get("fix", ""),
-        "count": 1,
-        "signature": sig,
-    }
-    lessons.append(lesson)
-    _rewrite_jsonl(_path(LESSONS), lessons)
+    dedupe = _dedupe_tag(error)
+    fix = " ".join(str(detail or route or "성공한 경로를 우선 재사용").split())[:220]
+    failure = " ".join(str(error.get("body", "")).split())[:220]
+    action = f"{area}에서 '{failure}'가 다시 보이면 먼저 '{fix}' 순서로 처리한다."
+    existing = _existing_lesson(dedupe, action)
+    if existing and str(existing.get("created_at", ""))[:10] == _today():
+        return existing
+
+    from .memory_manager import add_memory_event, extract_keywords
+    tags = [t for t in [dedupe, _task_marker(task), f"area:{area}"] if t]
+    tags.extend(extract_keywords(f"{task} {area} {fix}")[:5])
+    lesson = add_memory_event(
+        "lesson",
+        f"자가개선 교훈: {area}",
+        action,
+        status="active",
+        priority="normal",
+        source="self_fix",
+        tags=tags,
+    )
+    if get_settings().get("auto_wiki", True):
+        render_report()
     return lesson
-
-
-def _rewrite_jsonl(path: Path, rows: List[Dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
-    tmp.replace(path)
 
 
 def lessons_for_injection(limit: int | None = None) -> List[Dict[str, Any]]:
@@ -284,13 +207,10 @@ def lessons_for_injection(limit: int | None = None) -> List[Dict[str, Any]]:
     if not settings.get("enabled", True) or not settings.get("auto_inject", True):
         return []
     max_items = int(limit if limit is not None else settings.get("max_injected", 3))
-    rows = [r for r in _read_jsonl(_path(LESSONS)) if r.get("status") == "active"]
-    indexed = list(enumerate(rows))
-    indexed.sort(key=lambda pair: pair[0], reverse=True)
-    indexed.sort(key=lambda pair: str(pair[1].get("updated_at") or pair[1].get("created_at", "")), reverse=True)
-    indexed.sort(key=lambda pair: int(pair[1].get("count") or 1), reverse=True)
-    indexed.sort(key=lambda pair: 0 if pair[1].get("priority") == "high" else 1)
-    return [row for _idx, row in indexed[:max(0, max_items)]]
+    rows = list(reversed(_self_fix_lessons()))
+    rows.sort(key=lambda r: str(r.get("updated_at") or r.get("created_at", "")), reverse=True)
+    rows.sort(key=lambda r: 0 if r.get("priority") == "high" else 1)
+    return rows[:max(0, max_items)]
 
 
 def format_injection_block(limit: int | None = None) -> str:
@@ -299,31 +219,28 @@ def format_injection_block(limit: int | None = None) -> str:
         return ""
     lines = ["## OpenCodeLIG 자가개선 지침", "같은 시행착오를 반복하지 않도록 우선 적용:"]
     for row in lessons:
-        action = _redact(row.get("next_action") or row.get("fix"), 220)
-        if action:
-            lines.append(f"- {action}")
+        lines.append(f"- {str(row.get('body', '')).strip()[:220]}")
     return "\n".join(lines)
 
 
 def render_report() -> Path:
     _ensure()
-    events = _read_jsonl(_path(EVENTS))
-    lessons = _read_jsonl(_path(LESSONS))
+    errors = _self_errors()
+    lessons = _self_fix_lessons()
     lines = [
         "# Self Improvement Report",
         "",
         f"- updated: `{now_iso()}`",
         f"- enabled: `{get_settings().get('enabled', True)}`",
-        f"- events: `{len(events)}`",
+        f"- errors: `{len(errors)}`",
         f"- lessons: `{len(lessons)}`",
         "",
         "## Active Lessons",
     ]
-    active = [r for r in lessons if r.get("status") == "active"]
-    if not active:
+    if not lessons:
         lines.append("- 없음")
-    for row in active[-20:]:
-        lines.append(f"- **{row.get('area')}**: {row.get('next_action')} (count={row.get('count')})")
+    for row in lessons[:20]:
+        lines.append(f"- **{row.get('title')}**: {row.get('body')}")
     path = _path(REPORT)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     if get_settings().get("auto_wiki", True):
@@ -345,6 +262,6 @@ def status() -> Dict[str, Any]:
     return {
         "settings": get_settings(),
         "dir": str(base_dir()),
-        "events": len(_read_jsonl(_path(EVENTS))),
-        "lessons": len(_read_jsonl(_path(LESSONS))),
+        "errors": len(_self_errors()),
+        "lessons": len(_self_fix_lessons()),
     }
