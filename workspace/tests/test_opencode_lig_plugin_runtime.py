@@ -118,18 +118,27 @@ def test_hamster_status_plugin_tracks_current_opencode_events() -> None:
 
     for marker in [
         "session.status",
-        "task.start",
-        "task.end",
-        "subagent",
-        "agent_name",
-        "OpenCode subagent",
         "session.next.text.delta",
         "session.next.step.started",
         "session.next.step.ended",
         "session.next.step.failed",
         "session.next.tool.called",
+        "session.next.tool.success",
+        "session.next.tool.failed",
+        "experimental.session.compacting",
+        'properties?.tool === "task"',
     ]:
         assert marker in text
+    for marker in [
+        "task.start",
+        "task.end",
+        "session.task.",
+        "session.next.task.",
+        "agent_name",
+        "body.includes(\"subagent\")",
+        "body.includes(\"agent_name\")",
+    ]:
+        assert marker not in text
     assert "properties?.status?.type" in text or "properties.status.type" in text
     assert "writeAtomic" in text
     assert "opencode-event-types.log" in text

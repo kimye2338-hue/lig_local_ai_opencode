@@ -81,53 +81,33 @@ function statusFromSessionStatus(event: any): string {
   return String(event?.properties?.status?.type || event?.status?.type || "")
 }
 
-function eventText(event: any): string {
-  try {
-    return JSON.stringify(event || {}).slice(0, 4000)
-  } catch {
-    return ""
-  }
-}
-
-function subagentName(event: any): string {
+function taskToolName(event: any): string {
   return String(
-    event?.properties?.agent_name ||
-    event?.properties?.agent ||
-    event?.agent_name ||
-    event?.agent ||
-    event?.properties?.task?.agent ||
-    "subagent"
+    event?.properties?.taskName ||
+    event?.properties?.task?.name ||
+    event?.properties?.name ||
+    event?.properties?.tool ||
+    "task"
   )
 }
 
-function isSubagentOrTaskStart(type: string, event: any): boolean {
-  const body = eventText(event).toLowerCase()
-  return (
-    type === "task.start" ||
-    type === "task.started" ||
-    type === "task.spawned" ||
-    type === "session.task.started" ||
-    type === "session.next.task.started" ||
-    type === "session.next.tool.called" && body.includes("\"task\"") ||
-    body.includes("subagent") ||
-    body.includes("agent_name") ||
-    body.includes("OpenCode subagent".toLowerCase())
-  )
+function isTaskToolCall(type: string, event: any): boolean {
+  return type === "session.next.tool.called" && event?.properties?.tool === "task"
 }
 
-function isSubagentOrTaskEnd(type: string, event: any): boolean {
-  const body = eventText(event).toLowerCase()
-  return (
-    type === "task.end" ||
-    type === "task.ended" ||
-    type === "task.done" ||
-    type === "session.task.ended" ||
-    type === "session.next.task.ended" ||
-    type === "session.next.tool.success" && body.includes("\"task\"")
-  )
+function isTaskToolSuccess(type: string, event: any): boolean {
+  return type === "session.next.tool.success" && event?.properties?.tool === "task"
+}
+
+function isTaskToolFailure(type: string, event: any): boolean {
+  return type === "session.next.tool.failed" && event?.properties?.tool === "task"
 }
 
 export const HamsterStatus = async (_ctx: any) => {
+  // Binary grep on the patched opencode.exe showed these session events exist:
+  // session.next.*, session.status, session.idle, experimental.session.compacting.
+  // Older guessed task/subagent event families were not present, so this bridge
+  // only trusts structured tool/status fields that are actually emitted.
   // OpenCode 시작 시 지난 세션의 완료/작업 상태가 남아 "완료"로 뜨지 않도록 대기중으로 초기화.
   // (햄스터는 상태 파일 중 가장 최근 것을 표시하므로, 시작 시 최신 idle 을 써서 이전 상태를 덮는다.)
   write("idle", "대기 중입니다. 작업이 시작되면 알려드릴게요.", true)
@@ -140,18 +120,22 @@ export const HamsterStatus = async (_ctx: any) => {
     },
     event: async ({ event }: any) => {
       const t: string = (event && event.type) || ""
-      if (t) logEventType(t, isSubagentOrTaskStart(t, event) ? "subagent_start" : "")
+      if (t) logEventType(t, isTaskToolCall(t, event) ? "task_tool_called" : "")
       const status = statusFromSessionStatus(event)
-      if (isSubagentOrTaskStart(t, event)) {
-        write("working", `OpenCode subagent ${subagentName(event)} 작업 중...`, true)
-      } else if (isSubagentOrTaskEnd(t, event)) {
-        write("done", `OpenCode subagent ${subagentName(event)} 작업 완료`, true)
+      if (isTaskToolCall(t, event)) {
+        write("working", `멀티에이전트 ${taskToolName(event)} 작업 중...`, true)
+      } else if (isTaskToolSuccess(t, event)) {
+        write("done", `멀티에이전트 ${taskToolName(event)} 작업 완료`, true)
+      } else if (isTaskToolFailure(t, event)) {
+        write("error", `멀티에이전트 ${taskToolName(event)} 작업 중 오류가 발생했습니다.`, true)
       } else if (t === "session.status" && status === "idle") {
         write("idle", "대기 중입니다. 작업이 시작되면 알려드릴게요.", true)
       } else if (t === "session.status" && status === "busy") {
         write("working", "OpenCode가 작업 중입니다.")
       } else if (t === "session.status" && status === "retry") {
         write("working", "모델 응답을 재시도 중입니다.", true)
+      } else if (t === "experimental.session.compacting") {
+        write("working", "세션 정리 중...", true)
       } else if (t === "session.idle") {
         write("idle", "대기 중입니다. 작업이 시작되면 알려드릴게요.", true)
       } else if (t === "session.error" || t === "session.next.step.failed" || t === "session.next.tool.failed") {

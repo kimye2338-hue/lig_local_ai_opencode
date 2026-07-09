@@ -215,21 +215,32 @@ def _check_plugins_and_memory(workspace: Path, checks: list[GateCheck]) -> None:
 
     hamster = _read_text(plugins / "hamster-status.ts")
     hamster_required = [
-        "task.start",
-        "task.end",
-        "subagent",
-        "agent_name",
-        "OpenCode subagent",
+        "session.status",
+        "session.next.tool.called",
+        "session.next.tool.success",
+        "session.next.tool.failed",
+        "experimental.session.compacting",
+        'properties?.tool === "task"',
         "opencode-event-types.log",
-        "isSubagentOrTaskStart",
-        "isSubagentOrTaskEnd",
+        "isTaskToolCall",
+        "isTaskToolSuccess",
+        "isTaskToolFailure",
     ]
     hamster_ok, hamster_evidence = _markers(hamster, hamster_required)
+    hamster_legacy = any(marker in hamster for marker in [
+        'type === "task.start"',
+        'type === "task.end"',
+        'type === "session.task.started"',
+        'type === "session.next.task.started"',
+        "event?.properties?.agent_name",
+        'body.includes("subagent")',
+        'body.includes("agent_name")',
+    ])
     _add(
         checks,
         "hamster_subagent_status_bridge",
-        hamster_ok,
-        hamster_evidence,
+        hamster_ok and not hamster_legacy,
+        f"{hamster_evidence}; legacy_guess={hamster_legacy}",
         "멀티에이전트/subtask 진행 상태가 햄스터 current_status.json으로 자동 반영되어야 합니다.",
     )
 
