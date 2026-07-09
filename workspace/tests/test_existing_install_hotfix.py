@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import base64
 import py_compile
 import shutil
 import subprocess
@@ -13,6 +14,7 @@ WS = Path(__file__).resolve().parents[1]
 REPO = WS.parent
 HOTFIX = WS / "patches" / "existing_install_hotfix_20260709.py"
 PATCH_BAT = REPO / "PATCH_EXISTING_INSTALL_LIG_OPENCODE_20260709.bat.txt"
+FINAL_BAT = REPO / "최종_패치파일.bat"
 
 
 def _copy_min_install(tmp_path: Path) -> Path:
@@ -61,6 +63,20 @@ def test_patch_entry_bat_is_utf8_crlf_and_sets_codepage() -> None:
     assert b"\n" not in raw.replace(b"\r\n", b"")
     text = raw.decode("utf-8")
     assert "chcp 65001" in text
+
+
+def test_final_patch_bat_is_self_contained_and_embeds_compilable_payload(tmp_path: Path) -> None:
+    raw = FINAL_BAT.read_bytes()
+    assert b"\n" not in raw.replace(b"\r\n", b"")
+    text = raw.decode("utf-8")
+    marker = "__OPENCODELIG_HOTFIX_PAYLOAD_BASE64__"
+    lines = text.splitlines()
+    assert marker in lines
+    payload = "".join(lines[lines.index(marker) + 1 :])
+    assert len(payload) > 1000
+    extracted = tmp_path / "embedded_hotfix.py"
+    extracted.write_bytes(base64.b64decode(payload))
+    py_compile.compile(str(extracted), doraise=True)
 
 
 def test_hotfix_preserves_user_working_directory_and_detaches_obsidian(tmp_path: Path) -> None:

@@ -32,7 +32,7 @@ WS = ROOT / "workspace"
 USERDATA = Path.home() / "OpenCodeLIG_USERDATA"
 LOG_DIR = USERDATA / "diagnostics" / "patches"
 STAMP = time.strftime("%Y%m%d_%H%M%S")
-PATCH_SOURCE_DIR = Path(__file__).resolve().parents[2]
+PATCH_SOURCE_DIR = _path_from_env("LIG_HOTFIX_PACKAGE_DIR", Path(__file__).resolve().parents[2])
 LOG = LOG_DIR / f"existing_install_hotfix_{STAMP}.log"
 
 
