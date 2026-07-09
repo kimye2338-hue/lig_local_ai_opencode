@@ -11,11 +11,16 @@ rem - opens only OpenCode main window
 
 for %%I in ("%~dp0.") do set "AGENTOPS_HOME=%%~fI"
 for %%I in ("%AGENTOPS_HOME%\..") do set "OC_ROOT=%%~fI"
+if not defined LIG_PROJECT_DIR set "LIG_PROJECT_DIR=%CD%"
+set "LIG_AGENTOPS_HOME=%AGENTOPS_HOME%"
 
 set "OCODE_EXE=%OC_ROOT%\bin\opencode.exe"
 rem USERDATA는 파이썬 런타임 기본값(core.py: %USERPROFILE%\OpenCodeLIG_USERDATA)과
 rem 개별 bat(gateway-smoke/probe-gateway 등)·문서와 반드시 일치시킨다.
 set "OPENCODE_USERDATA=%USERPROFILE%\OpenCodeLIG_USERDATA"
+if not defined AGENTOPS_MEMORY_DIR set "AGENTOPS_MEMORY_DIR=%OPENCODE_USERDATA%\memory"
+set "AGENTOPS_ROOT=%LIG_PROJECT_DIR%"
+set "PYTHONPATH=%AGENTOPS_HOME%;%PYTHONPATH%"
 set "LIG_API_ENV_FILE=%OPENCODE_USERDATA%\secrets\lig-api.env"
 set "LIG_STATE_DIR=%OPENCODE_USERDATA%\state"
 set "LIG_DIAG_DIR=%OPENCODE_USERDATA%\diagnostics"
@@ -92,20 +97,37 @@ cd /d "%AGENTOPS_HOME%"
 rem 구 모드/primary 정리 (best-effort) — 패치 후에도 primary=agent 하나 강제.
 py -3.11 -m agent_ops.clean_stale >nul 2>&1 || python -m agent_ops.clean_stale >nul 2>&1
 
-rem 위키 자동화: 매번 wiki.bat 안 눌러도 되게 — vault 자동 시드 + Obsidian 자동 실행
-rem (설치돼 있고 아직 안 떠 있을 때만). 사용자가 아무것도 안 해도 기억 위키가 알아서 준비/표시.
+rem 위키 자동화: vault 자동 시드 + Obsidian 자동 실행.
+rem BEGIN LIG EXISTING-INSTALL HOTFIX 20260709
+rem Obsidian은 계속 자동으로 띄우되, Electron 로그가 OpenCode TUI에 섞이지 않게 VBS로 분리 실행한다.
 rem 끄고 싶으면 이 창 실행 전에 set LIG_AUTO_WIKI=0.
-if "%LIG_AUTO_WIKI%"=="0" goto :wiki_done
 if not exist "%OPENCODE_USERDATA%\memory\wiki" mkdir "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1
 py -3.11 -m agent_ops.wiki_vault "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1 || python -m agent_ops.wiki_vault "%OPENCODE_USERDATA%\memory\wiki" >nul 2>&1
-rem Obsidian 실행파일을 여러 위치에서 찾는다(workspace\tools / 루트\tools / 표준 설치 / Programs).
-rem 이미 실행 중이어도 start 하면 Obsidian이 단일 인스턴스라 기존 창을 앞으로 가져온다(포커스).
+if "%LIG_AUTO_WIKI%"=="0" goto :wiki_done
 set "OBSEXE="
 for %%P in ("%AGENTOPS_HOME%\tools\Obsidian\Obsidian.exe" "%OC_ROOT%\tools\Obsidian\Obsidian.exe" "%LOCALAPPDATA%\Obsidian\Obsidian.exe" "%LOCALAPPDATA%\Programs\Obsidian\Obsidian.exe" "%PROGRAMFILES%\Obsidian\Obsidian.exe") do if not defined OBSEXE if exist "%%~P" set "OBSEXE=%%~P"
-rem 그래도 못 찾으면 OpenCodeLIG 아래를 재귀 검색(어느 하위폴더에 넣어도 잡히게).
 if not defined OBSEXE for /f "delims=" %%F in ('dir /b /s "%OC_ROOT%\Obsidian.exe" 2^>nul') do if not defined OBSEXE set "OBSEXE=%%F"
-if defined OBSEXE start "" "%OBSEXE%" "%OPENCODE_USERDATA%\memory\wiki"
+if defined OBSEXE if exist "%AGENTOPS_HOME%\launch\obsidian_detached.vbs" wscript "%AGENTOPS_HOME%\launch\obsidian_detached.vbs" "%OBSEXE%" "%OPENCODE_USERDATA%\memory\wiki"
 :wiki_done
+rem END LIG EXISTING-INSTALL HOTFIX 20260709
+
+rem BEGIN LIG PROJECT WORKDIR HOTFIX 20260709
+rem 프로그램 본체는 설치 폴더에서 읽고, 사용자가 cd로 들어온 폴더를 작업 기준으로 사용한다.
+if not exist "%LIG_PROJECT_DIR%" mkdir "%LIG_PROJECT_DIR%" >nul 2>&1
+if /I "%LIG_PROJECT_DIR%"=="%AGENTOPS_HOME%" goto :project_ready
+if not exist "%LIG_PROJECT_DIR%\.opencode" (
+  xcopy /E /I /Y "%AGENTOPS_HOME%\.opencode" "%LIG_PROJECT_DIR%\.opencode" >nul
+)
+if not exist "%LIG_PROJECT_DIR%\agent_ops" mkdir "%LIG_PROJECT_DIR%\agent_ops" >nul 2>&1
+if exist "%AGENTOPS_HOME%\launch\project_agentops_wrapper.py" (
+  copy /Y "%AGENTOPS_HOME%\launch\project_agentops_wrapper.py" "%LIG_PROJECT_DIR%\agent_ops\agentops.py" >nul
+  copy /Y "%AGENTOPS_HOME%\launch\project_agentops_wrapper.py" "%LIG_PROJECT_DIR%\agent_ops\command_guard.py" >nul
+  copy /Y "%AGENTOPS_HOME%\launch\project_agentops_wrapper.py" "%LIG_PROJECT_DIR%\agent_ops\safe_file_writer.py" >nul
+)
+if not exist "%LIG_PROJECT_DIR%\agent_ops\results" mkdir "%LIG_PROJECT_DIR%\agent_ops\results" >nul 2>&1
+:project_ready
+cd /d "%LIG_PROJECT_DIR%"
+rem END LIG PROJECT WORKDIR HOTFIX 20260709
 
 "%OCODE_EXE%" %*
 
