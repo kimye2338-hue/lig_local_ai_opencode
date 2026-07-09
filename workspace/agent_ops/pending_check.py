@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
 """One-shot pending validation report for OpenCodeLIG user packages.
 
-This script is intentionally self-contained and conservative:
-- it does not delete or overwrite USERDATA;
-- it does not print gateway URLs or API keys;
-- it writes a timestamped JSON/Markdown report under USERDATA diagnostics;
-- it checks every currently pending class of feature in one run.
+The target PC is offline and may have company-only applications installed.
+This checker is deliberately broad: one BAT should collect enough evidence to
+finish the remaining integration work without asking the user to run another
+ad-hoc probe.
+
+Safety rules:
+- never delete or overwrite OpenCodeLIG_USERDATA;
+- never print gateway URL or API key;
+- keep live app probes short and non-mutating;
+- write one human-readable Markdown report as the primary output.
 """
 from __future__ import annotations
 
@@ -15,6 +20,7 @@ import importlib.util
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -40,6 +46,18 @@ class Check:
 
 
 STATUSES = ("PASS", "WARN", "PENDING", "FAIL", "SKIP")
+OPTIONAL_MODULE_WHEELS = {
+    "openpyxl": ("openpyxl",),
+    "docx": ("python_docx", "docx"),
+    "pptx": ("python_pptx", "pptx"),
+    "markitdown": ("markitdown",),
+    "rapidocr_onnxruntime": ("rapidocr_onnxruntime", "rapidocr"),
+    "onnxruntime": ("onnxruntime",),
+    "win32com": ("pywin32", "pypiwin32"),
+    "mss": ("mss",),
+    "PIL": ("pillow",),
+    "windows_use": ("windows_use", "windows-use"),
+}
 
 
 def now_stamp() -> str:
@@ -68,32 +86,73 @@ def safe_rel(path: Path) -> str:
         return repr(path)
 
 
+def add(checks: list[Check], section: str, item: str, status: str,
+        evidence: str, next_action: str = "") -> None:
+    if status not in STATUSES:
+        status = "WARN"
+    checks.append(Check(section, item, status, evidence, next_action))
+
+
 def has_module(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
 
-def run_cmd(args: list[str], timeout: int = 10, cwd: Path | None = None) -> dict[str, Any]:
+def run_cmd(args: list[str], timeout: int = 10, cwd: Path | None = None,
+            env: dict[str, str] | None = None) -> dict[str, Any]:
     try:
-        cp = subprocess.run(args, cwd=str(cwd or workspace_root()), capture_output=True,
-                            text=True, encoding="utf-8", errors="replace", timeout=timeout)
+        cp = subprocess.run(
+            args,
+            cwd=str(cwd or workspace_root()),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
         return {
             "ok": cp.returncode == 0,
             "returncode": cp.returncode,
-            "stdout": (cp.stdout or "").strip()[:500],
-            "stderr": (cp.stderr or "").strip()[:500],
+            "stdout": (cp.stdout or "").strip()[-1500:],
+            "stderr": (cp.stderr or "").strip()[-1500:],
+        }
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "ok": False,
+            "returncode": "TIMEOUT",
+            "stdout": str(exc.stdout or "")[-800:],
+            "stderr": str(exc.stderr or "")[-800:],
+            "error": f"TIMEOUT after {timeout}s",
         }
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"[:500]}
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"[:800]}
+
+
+def run_python_probe(code: str, timeout: int = 20, env: dict[str, str] | None = None) -> dict[str, Any]:
+    merged = dict(os.environ)
+    merged.update({"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"})
+    if env:
+        merged.update(env)
+    return run_cmd([sys.executable, "-c", code], timeout=timeout, cwd=workspace_root(), env=merged)
 
 
 def find_existing(paths: Iterable[Path]) -> list[str]:
     found = []
     for p in paths:
         try:
-            if p.exists():
+            if p and p.exists():
                 found.append(str(p))
         except Exception:
             pass
+    return found
+
+
+def which_all(names: Iterable[str]) -> list[str]:
+    found = []
+    for name in names:
+        hit = shutil.which(name)
+        if hit and hit not in found:
+            found.append(hit)
     return found
 
 
@@ -151,20 +210,40 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def add(checks: list[Check], section: str, item: str, status: str,
-        evidence: str, next_action: str = "") -> None:
-    if status not in STATUSES:
-        status = "WARN"
-    checks.append(Check(section, item, status, evidence, next_action))
+def sanitize_evidence(text: Any, limit: int = 700) -> str:
+    value = str(text).replace("|", "/").replace("\r", " ").replace("\n", " ")
+    value = re.sub(r"Bearer\s+[A-Za-z0-9._\-+/=]+", "Bearer <hidden>", value)
+    value = re.sub(r"(?i)(api[_-]?key\s*[=:]\s*)[^,\s;]+", r"\1<hidden>", value)
+    return value[:limit]
+
+
+def wheel_candidates(module: str) -> list[str]:
+    wh = workspace_root() / "tools" / "wheelhouse"
+    if not wh.exists():
+        return []
+    names = OPTIONAL_MODULE_WHEELS.get(module, (module,))
+    out = []
+    for wheel in wh.glob("*.whl"):
+        lower = wheel.name.lower().replace("-", "_")
+        if any(lower.startswith(name.lower().replace("-", "_")) for name in names):
+            out.append(wheel.name)
+    return sorted(out)
 
 
 def check_core(checks: list[Check]) -> None:
     ws = workspace_root()
     root = package_root()
-    add(checks, "필수 설치", "Windows", "PASS" if platform.system() == "Windows" else "WARN",
-        f"{platform.platform()}", "Windows PC에서 실행해야 실제 앱 자동화를 확인할 수 있습니다.")
+    py_launcher = which_all(["py.exe", "py"])
+    powershell = run_cmd(["powershell", "-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()"], timeout=5)
+    add(checks, "필수 설치", "PC/OS", "PASS" if platform.system() == "Windows" else "WARN",
+        f"user={os.environ.get('USERNAME','')}, computer={os.environ.get('COMPUTERNAME','')}, os={platform.platform()}, machine={platform.machine()}",
+        "Windows PC에서 실행해야 실제 앱 자동화를 확인할 수 있습니다.")
+    add(checks, "필수 설치", "PowerShell", "PASS" if powershell.get("ok") else "WARN",
+        powershell.get("stdout") or powershell.get("stderr") or powershell.get("error", ""),
+        "BAT 내부 진단 출력이 깨지면 PowerShell 실행 정책/인코딩을 확인하세요.")
     add(checks, "필수 설치", "Python 3.11", "PASS" if sys.version_info[:2] == (3, 11) else "FAIL",
-        sys.version.replace("\n", " "), "Python 3.11을 설치하고 py -3.11이 잡히는지 확인하세요.")
+        f"{sys.version.replace(chr(10), ' ')}; executable={sys.executable}; py_launcher={py_launcher}",
+        "Python 3.11을 설치하고 py -3.11이 잡히는지 확인하세요.")
     add(checks, "필수 설치", "workspace", "PASS" if (ws / "agent_ops").is_dir() else "FAIL",
         safe_rel(ws), "설치 패키지를 다시 설치하세요.")
     add(checks, "필수 설치", "RUN_OPENCODE_LIG.bat", "PASS" if (ws / "RUN_OPENCODE_LIG.bat").exists() else "FAIL",
@@ -178,6 +257,19 @@ def check_core(checks: list[Check]) -> None:
     add(checks, "필수 설치", "opencode.exe payload", "PASS" if found else "FAIL",
         "; ".join(found) if found else "not found",
         "패키지 payload/opencode.exe 또는 설치된 bin/opencode.exe가 필요합니다.")
+    hashes = {}
+    for p in payloads:
+        if p.exists():
+            try:
+                hashes[str(p)] = sha256(p)
+            except Exception as exc:  # noqa: BLE001
+                hashes[str(p)] = f"hash_error:{exc!r}"
+    if len(hashes) >= 2:
+        values = list(hashes.values())
+        add(checks, "필수 설치", "payload/installed hash match",
+            "PASS" if len(set(values)) == 1 else "WARN",
+            json.dumps(hashes, ensure_ascii=False),
+            "패키지 payload와 설치된 bin이 다르면 설치 BAT를 다시 실행하세요.")
     for p in payloads:
         if p.exists():
             result = run_cmd([str(p), "--version"], timeout=10, cwd=ws)
@@ -190,9 +282,9 @@ def check_core(checks: list[Check]) -> None:
     sums = root / "SHA256SUMS.txt"
     payload = root / "payload" / "opencode.exe"
     if sums.exists() and payload.exists():
-        text = sums.read_text(encoding="utf-8", errors="replace")
+        text = sums.read_text(encoding="utf-8", errors="replace").lower()
         actual = sha256(payload)
-        add(checks, "필수 설치", "payload SHA256", "PASS" if actual in text.lower() else "FAIL",
+        add(checks, "필수 설치", "payload SHA256", "PASS" if actual in text else "FAIL",
             actual, "SHA256SUMS.txt와 payload가 같은 패키지에서 온 것인지 확인하세요.")
 
     path_opencode = shutil.which("opencode")
@@ -201,40 +293,70 @@ def check_core(checks: list[Check]) -> None:
         "일반 셸에서 opencode를 직접 칠 필요가 있으면 %USERPROFILE%\\OpenCodeLIG\\bin을 PATH에 추가하세요.")
 
 
+def check_opencode_patch(checks: list[Check]) -> None:
+    exe = package_root() / "payload" / "opencode.exe"
+    if not exe.exists():
+        exe = Path.home() / "OpenCodeLIG" / "bin" / "opencode.exe"
+    if not exe.exists():
+        add(checks, "OpenCode 패치", "permission badge payload", "FAIL", "opencode.exe not found",
+            "payload 또는 설치 bin을 확인하세요.")
+        return
+    blob = exe.read_bytes()
+    tokens = {token: (token.encode("utf-8") in blob) for token in ["ASK", "AUTO", "FULL", "Permission approval", "/permission"]}
+    add(checks, "OpenCode 패치", "ASK/AUTO/FULL 표시 문자열", "PASS" if all(tokens.values()) else "WARN",
+        json.dumps(tokens, ensure_ascii=False),
+        "ASK/AUTO/FULL 모드 표시 패치가 payload에 포함됐는지 확인하세요.")
+    for args in (["--help"], ["run", "--help"], ["models", "--help"]):
+        res = run_cmd([str(exe), *args], timeout=12, cwd=workspace_root())
+        add(checks, "OpenCode 패치", "opencode " + " ".join(args),
+            "PASS" if res.get("ok") else "WARN",
+            res.get("stdout") or res.get("stderr") or res.get("error", ""),
+            "기본 명령 help가 실패하면 빌드 산출물/런타임 DLL 차단 여부를 확인하세요.")
+
+
 def check_config_and_loop(checks: list[Check]) -> None:
     ws = workspace_root()
     try:
-        from agent_ops.lig_providers import build_providers, load_lig_env, validate_config
+        from agent_ops.lig_providers import SECRET_ENV_PATH, build_providers, load_lig_env, validate_config
         env = load_lig_env()
         cfg = validate_config()
-        add(checks, "모델/설정", "게이트웨이 설정", "PASS" if cfg.get("ready") else "FAIL",
-            json.dumps({k: cfg.get(k) for k in ("profile", "secret_file_found", "gateway_url_set", "api_key_set", "default_provider", "missing")}, ensure_ascii=False),
-            "USERDATA\\secrets\\lig-api.env를 확인하세요.")
+        secret_meta = {
+            "secret_file": str(SECRET_ENV_PATH),
+            "secret_exists": SECRET_ENV_PATH.exists(),
+            "key_present": bool(env.get("LIG_API_KEY")),
+            "key_length": len(env.get("LIG_API_KEY", "")) if env.get("LIG_API_KEY") else 0,
+            "url_present": bool(env.get("LIG_GATEWAY_BASE_URL") or env.get("LIG_LOCAL_BASE_URL")),
+            "profile": cfg.get("profile"),
+        }
+        add(checks, "모델/설정", "게이트웨이 secret 형식", "PASS" if cfg.get("ready") else "FAIL",
+            json.dumps(secret_meta, ensure_ascii=False),
+            "USERDATA\\secrets\\lig-api.env를 확인하세요. URL/API 키 값은 보고서에 숨깁니다.")
         providers = build_providers()
         ready_routes = [name for name, p in providers.items() if p.get("base_url") and p.get("model")]
         add(checks, "모델/설정", "provider routes", "PASS" if ready_routes else "FAIL",
             ", ".join(ready_routes), "config/lig-api.env.example 및 USERDATA secret을 확인하세요.")
-        # Optional live gateway probe. Secret and host are never printed.
+        route_results = []
         ok_count = 0
-        tried = 0
-        for p in providers.values():
+        for name, p in providers.items():
             base = str(p.get("base_url", "")).rstrip("/")
             if not base:
+                route_results.append({"route": name, "status": "missing_base"})
                 continue
-            tried += 1
             try:
                 req = urllib.request.Request(
                     base + "/models",
                     headers={"Authorization": "Bearer " + str(env.get("LIG_API_KEY", ""))},
                 )
                 with urllib.request.urlopen(req, timeout=5) as resp:
-                    if 200 <= int(resp.status) < 500:
-                        ok_count += 1
-            except Exception:
-                pass
-        add(checks, "모델/설정", "게이트웨이 live probe", "PASS" if ok_count else "PENDING",
-            f"reachable_routes={ok_count}, tried={tried} (URL/API key hidden)",
-            "사내망에서 실행했는데 0이면 게이트웨이/프록시/키를 확인하세요.")
+                    ok = 200 <= int(resp.status) < 500
+                    ok_count += 1 if ok else 0
+                    route_results.append({"route": name, "http": int(resp.status), "model": p.get("model")})
+            except Exception as exc:  # noqa: BLE001
+                route_results.append({"route": name, "error": type(exc).__name__, "model": p.get("model")})
+        add(checks, "모델/설정", "게이트웨이 /models live probe",
+            "PASS" if ok_count else "PENDING",
+            json.dumps(route_results, ensure_ascii=False),
+            "사내망에서 실행했는데 reachable 0이면 게이트웨이/프록시/키를 확인하세요.")
     except Exception as exc:  # noqa: BLE001
         add(checks, "모델/설정", "게이트웨이 설정", "FAIL", repr(exc)[:500],
             "agent_ops.lig_providers import 오류를 확인하세요.")
@@ -243,22 +365,31 @@ def check_config_and_loop(checks: list[Check]) -> None:
     try:
         data = json.loads(opencode_json.read_text(encoding="utf-8-sig"))
         model = str(data.get("model", ""))
+        providers_cfg = sorted((data.get("provider") or {}).keys())
         add(checks, "모델/설정", "opencode.json", "PASS" if "/" in model else "FAIL",
-            f"default_model={model}", "opencode.json JSON 및 provider/model 형식을 확인하세요.")
+            f"default_model={model}, providers={providers_cfg}", "opencode.json JSON 및 provider/model 형식을 확인하세요.")
     except Exception as exc:  # noqa: BLE001
-        add(checks, "모델/설정", "opencode.json", "FAIL", repr(exc)[:500],
-            "opencode.json을 복구하세요.")
+        add(checks, "모델/설정", "opencode.json", "FAIL", repr(exc)[:500], "opencode.json을 복구하세요.")
 
     try:
         from agent_ops.intelligence_map import all_items, coverage_summary
         items = all_items()
         pending = [asdict(i) for i in items if i.status == "pending"]
+        auto = [asdict(i) for i in items if i.status == "auto"]
         add(checks, "자동지능 루프", "intelligence map", "PASS",
-            f"items={len(items)}, pending={len(pending)}, summary={json.dumps(coverage_summary(), ensure_ascii=False, sort_keys=True)}")
+            f"items={len(items)}, auto={len(auto)}, pending={len(pending)}, summary={json.dumps(coverage_summary(), ensure_ascii=False, sort_keys=True)}")
     except Exception as exc:  # noqa: BLE001
         add(checks, "자동지능 루프", "intelligence map", "FAIL", repr(exc)[:500],
             "agent_ops.intelligence_map 오류를 확인하세요.")
 
+    tasks = [
+        ("browser", "크롬으로 회사 포털 확인해줘"),
+        ("memory", "이 내용 기억해: 사내 점검은 한번에 끝내야 한다"),
+        ("wiki", "위키 정리해줘"),
+        ("document", "회의록을 워드 보고서로 정리해줘"),
+        ("engineering", "알루미늄 피로 설계 기준을 교수처럼 설명해줘"),
+        ("danger", "C 드라이브의 모든 파일을 삭제해줘"),
+    ]
     with tempfile.TemporaryDirectory(prefix="agentops_pending_") as td:
         env = dict(os.environ)
         env.update({
@@ -268,21 +399,35 @@ def check_config_and_loop(checks: list[Check]) -> None:
             "AGENTOPS_MEMORY_DIR": str(Path(td) / "memory"),
             "LIG_DIAG_DIR": str(Path(td) / "diag"),
         })
-        cmd = [sys.executable, str(ws / "agent_ops" / "agentops.py"), "auto",
-               "--task", "크롬으로 회사 포털 확인해줘", "--dry-run"]
-        try:
+        matrix = []
+        ok_rows = 0
+        for label, task in tasks:
+            task_file = Path(td) / f"task_{label}.txt"
+            task_file.write_text(task, encoding="utf-8")
+            cmd = [sys.executable, str(ws / "agent_ops" / "agentops.py"), "auto", "--task-file", str(task_file), "--dry-run"]
             cp = subprocess.run(cmd, cwd=str(ws), env=env, capture_output=True,
                                 text=True, encoding="utf-8", errors="replace", timeout=30)
             trace = Path(td) / "diag" / "auto-route-last.json"
             trace_data = json.loads(trace.read_text(encoding="utf-8")) if trace.exists() else {}
             has_fields = all(k in trace_data for k in ("capability_ids", "policy", "route_hints", "evaluation", "memory_hooks"))
-            add(checks, "자동지능 루프", "/auto trace dry-run",
-                "PASS" if cp.returncode == 0 and has_fields else "FAIL",
-                f"returncode={cp.returncode}, fields={sorted(trace_data.keys())}",
-                "trace에 capability/policy/tools/evaluation/memory hook 필드가 모두 있어야 합니다.")
-        except Exception as exc:  # noqa: BLE001
-            add(checks, "자동지능 루프", "/auto trace dry-run", "FAIL", repr(exc)[:500],
-                "agentops.py auto 실행 경로를 확인하세요.")
+            ok_rows += 1 if cp.returncode == 0 and has_fields else 0
+            matrix.append({
+                "case": label,
+                "returncode": cp.returncode,
+                "command": trace_data.get("command"),
+                "path": trace_data.get("selected_path"),
+                "policy": (trace_data.get("policy") or {}).get("mode"),
+                "caps": trace_data.get("capability_ids", [])[:3],
+                "blocked": (trace_data.get("policy") or {}).get("blocked"),
+            })
+        matrix_summary = "; ".join(
+            f"{row['case']}=>rc{row['returncode']}/{row['command']}/{row['path']}/policy={row['policy']}/blocked={row['blocked']}/caps={','.join(row['caps'])}"
+            for row in matrix
+        )
+        add(checks, "자동지능 루프", "/auto dry-run 시나리오 매트릭스",
+            "PASS" if ok_rows == len(tasks) else "FAIL",
+            matrix_summary,
+            "각 케이스에 capability/policy/route/evaluation/memory hook이 기록되어야 합니다.")
 
 
 def check_optional_modules(checks: list[Check]) -> None:
@@ -298,13 +443,81 @@ def check_optional_modules(checks: list[Check]) -> None:
         "PIL": "이미지 처리",
         "windows_use": "Desktop UI 자동화",
     }
+    module_state = {}
     for mod, purpose in modules.items():
-        add(checks, "오프라인 의존성", mod, "PASS" if has_module(mod) else "PENDING",
-            purpose, f"필요하면 workspace\\launch\\install-tools.bat 또는 wheelhouse로 오프라인 설치하세요.")
+        installed = has_module(mod)
+        candidates = wheel_candidates(mod)
+        module_state[mod] = {"installed": installed, "wheel_candidates": candidates}
+        status = "PASS" if installed else ("PENDING" if candidates else "WARN")
+        next_action = "이미 import 가능합니다." if installed else (
+            "wheelhouse 후보가 있으므로 install-tools.bat로 오프라인 설치 가능성을 확인하세요."
+            if candidates else "필요 기능이면 해당 wheel을 tools\\wheelhouse에 반입하세요."
+        )
+        add(checks, "오프라인 의존성", mod, status,
+            f"{purpose}; wheels={candidates}", next_action)
     wh = workspace_root() / "tools" / "wheelhouse"
     wheels = list(wh.glob("*.whl")) if wh.exists() else []
     add(checks, "오프라인 의존성", "wheelhouse", "PASS" if wheels else "WARN",
         f"{len(wheels)} wheel(s) at {wh}", "오프라인 추가 설치가 필요하면 wheelhouse를 채우세요.")
+
+    smoke_code = r"""
+import json, tempfile
+from pathlib import Path
+out = {}
+try:
+    import openpyxl
+    p = Path(tempfile.mkdtemp()) / "probe.xlsx"
+    wb = openpyxl.Workbook(); wb.active["A1"] = 42; wb.save(p)
+    out["openpyxl"] = {"ok": p.exists(), "size": p.stat().st_size}
+except Exception as exc:
+    out["openpyxl"] = {"ok": False, "error": type(exc).__name__}
+try:
+    import docx
+    p = Path(tempfile.mkdtemp()) / "probe.docx"
+    d = docx.Document(); d.add_paragraph("probe"); d.save(p)
+    out["docx"] = {"ok": p.exists(), "size": p.stat().st_size}
+except Exception as exc:
+    out["docx"] = {"ok": False, "error": type(exc).__name__}
+try:
+    import pptx
+    p = Path(tempfile.mkdtemp()) / "probe.pptx"
+    prs = pptx.Presentation(); prs.slides.add_slide(prs.slide_layouts[0]); prs.save(p)
+    out["pptx"] = {"ok": p.exists(), "size": p.stat().st_size}
+except Exception as exc:
+    out["pptx"] = {"ok": False, "error": type(exc).__name__}
+print(json.dumps(out, ensure_ascii=False))
+"""
+    smoke = run_python_probe(smoke_code, timeout=25)
+    add(checks, "오프라인 의존성", "문서 생성 라이브러리 smoke",
+        "PASS" if smoke.get("ok") else "PENDING",
+        smoke.get("stdout") or smoke.get("stderr") or smoke.get("error", ""),
+        "docx/xlsx/pptx 생성 실패 항목은 해당 wheel 설치 상태를 확인하세요.")
+
+
+def com_activation_probe(progid: str) -> dict[str, Any]:
+    code = f"""
+import json
+out={{"progid": {progid!r}}}
+try:
+    import win32com.client
+    app = win32com.client.Dispatch({progid!r})
+    out["ok"] = True
+    out["type"] = str(type(app))
+    try:
+        app.Visible = False
+    except Exception:
+        pass
+    try:
+        app.Quit()
+    except Exception:
+        pass
+except Exception as exc:
+    out["ok"] = False
+    out["error"] = type(exc).__name__
+    out["detail"] = str(exc)[:200]
+print(json.dumps(out, ensure_ascii=False))
+"""
+    return run_python_probe(code, timeout=20)
 
 
 def check_apps_and_pending(checks: list[Check]) -> None:
@@ -319,33 +532,50 @@ def check_apps_and_pending(checks: list[Check]) -> None:
         "autocad": "ACCORECONSOLE_EXE",
         "fluent": "FLUENT_EXE",
     }
+    path_names = {
+        "matlab": ["matlab.exe", "matlab"],
+        "autocad": ["accoreconsole.exe", "accoreconsole"],
+        "fluent": ["fluent.exe", "fluent"],
+    }
+    executable_hits: dict[str, list[str]] = {}
     for key, env_path in env_paths.items():
         candidates = ([Path(env_path)] if env_path else []) + paths.get(key, [])
-        found = find_existing(candidates)
+        found = find_existing(candidates) + which_all(path_names[key])
+        executable_hits[key] = found
         add(checks, "앱/도구 pending", f"{key} executable", "PASS" if found else "PENDING",
             "; ".join(found) if found else "not found",
-            f"{env_names[key]} 환경변수 또는 표준 설치 경로를 확인하세요.")
+            f"{env_names[key]} 환경변수, PATH, 또는 표준 설치 경로를 확인하세요.")
 
-    chrome_found = find_existing(paths["chrome"]) or ([shutil.which("chrome")] if shutil.which("chrome") else [])
+    cli_probes = {
+        "autocad": (["/?"], 20),
+        "fluent": (["-help"], 20),
+    }
+    for key, (extra, timeout) in cli_probes.items():
+        if not executable_hits.get(key):
+            continue
+        res = run_cmd([executable_hits[key][0], *extra], timeout=timeout)
+        add(checks, "앱/도구 pending", f"{key} cli probe",
+            "PASS" if res.get("ok") else "WARN",
+            res.get("stdout") or res.get("stderr") or res.get("error", ""),
+            "help/version probe만 실행했습니다. 실제 파일 실행은 사용자 작업 요청 때 사본/임시파일 기준으로 수행합니다.")
+
+    chrome_found = find_existing(paths["chrome"]) + which_all(["chrome.exe", "chrome"])
     add(checks, "앱/도구 pending", "Chrome", "PASS" if chrome_found else "PENDING",
-        "; ".join(str(x) for x in chrome_found) if chrome_found else "not found",
+        "; ".join(chrome_found) if chrome_found else "not found",
         "Chrome 설치 및 launch\\chrome-debug.bat 실행 여부를 확인하세요.")
     try:
         with urllib.request.urlopen("http://127.0.0.1:9222/json/version", timeout=2) as resp:
-            cdp_ok = 200 <= int(resp.status) < 500
-    except Exception:
+            version = json.loads(resp.read().decode("utf-8", errors="replace"))
+        with urllib.request.urlopen("http://127.0.0.1:9222/json/list", timeout=2) as resp:
+            tabs = json.loads(resp.read().decode("utf-8", errors="replace"))
+        cdp_evidence = {"browser": version.get("Browser"), "webSocketDebuggerUrl": bool(version.get("webSocketDebuggerUrl")), "tabs": len(tabs)}
+        cdp_ok = True
+    except Exception as exc:  # noqa: BLE001
+        cdp_evidence = {"reachable": False, "error": type(exc).__name__}
         cdp_ok = False
     add(checks, "앱/도구 pending", "Chrome CDP 9222", "PASS" if cdp_ok else "PENDING",
-        "reachable" if cdp_ok else "not reachable",
+        json.dumps(cdp_evidence, ensure_ascii=False),
         "브라우저 자동화 검증 전 launch\\chrome-debug.bat로 디버그 크롬을 여세요.")
-
-    obsidian_found = find_existing(paths["obsidian"]) or ([shutil.which("obsidian")] if shutil.which("obsidian") else [])
-    wiki_dir = Path.home() / "OpenCodeLIG_USERDATA" / "memory" / "wiki"
-    add(checks, "Obsidian/위키", "Obsidian", "PASS" if obsidian_found else "PENDING",
-        "; ".join(str(x) for x in obsidian_found) if obsidian_found else "not found",
-        "Obsidian을 설치하고 USERDATA\\memory\\wiki를 vault로 열 수 있게 준비하세요.")
-    add(checks, "Obsidian/위키", "wiki vault directory", "PASS" if wiki_dir.exists() else "WARN",
-        str(wiki_dir), "첫 기억/위키 실행 후 자동 생성됩니다.")
 
     progids = {
         "Excel COM": "Excel.Application",
@@ -356,15 +586,22 @@ def check_apps_and_pending(checks: list[Check]) -> None:
         "SolidWorks COM": "SldWorks.Application",
     }
     for label, progid in progids.items():
-        add(checks, "앱/도구 pending", label, "PASS" if registry_progid_exists(progid) else "PENDING",
+        exists = registry_progid_exists(progid)
+        add(checks, "앱/도구 pending", f"{label} registry", "PASS" if exists else "PENDING",
             f"ProgID={progid}", f"{label} 등록/설치 상태를 확인하세요.")
+        if exists and has_module("win32com"):
+            res = com_activation_probe(progid)
+            add(checks, "앱/도구 pending", f"{label} activation",
+                "PASS" if res.get("ok") and '"ok": true' in (res.get("stdout") or "").lower() else "WARN",
+                res.get("stdout") or res.get("stderr") or res.get("error", ""),
+                "COM 객체 생성 단계입니다. 실제 문서/모델 파일 조작은 사본 정책으로 별도 수행됩니다.")
 
     try:
         from agent_ops.adapters import ADAPTERS
         for adapter_id, spec in ADAPTERS.items():
             pending = str(spec.get("pending", "") or "")
             available = bool(spec.get("available"))
-            validated = str(spec.get("validated", "") or "")
+            validated = str(spec.get("validated", "") or spec.get("home_smoke", "") or "")
             if pending:
                 status = "WARN" if available else "PENDING"
                 evidence = f"available={available}, validated={'yes' if validated else 'no'}, pending={pending}"
@@ -375,6 +612,80 @@ def check_apps_and_pending(checks: list[Check]) -> None:
             "agent_ops.adapters import 오류를 확인하세요.")
 
 
+def check_screen_ocr(checks: list[Check]) -> None:
+    if has_module("mss"):
+        code = r"""
+import json
+try:
+    import mss
+    with mss.mss() as sct:
+        mon = sct.monitors[0]
+        img = sct.grab({"left": mon["left"], "top": mon["top"], "width": min(80, mon["width"]), "height": min(80, mon["height"])})
+    print(json.dumps({"ok": True, "size": [img.width, img.height], "monitors": len(sct.monitors) if hasattr(sct, "monitors") else None}, ensure_ascii=False))
+except Exception as exc:
+    print(json.dumps({"ok": False, "error": type(exc).__name__, "detail": str(exc)[:200]}, ensure_ascii=False))
+    raise SystemExit(1)
+"""
+        res = run_python_probe(code, timeout=15)
+        add(checks, "화면/OCR", "mss screenshot smoke", "PASS" if res.get("ok") else "WARN",
+            res.get("stdout") or res.get("stderr") or res.get("error", ""),
+            "화면 캡처 권한 또는 보안 프로그램 차단 여부를 확인하세요.")
+    else:
+        add(checks, "화면/OCR", "mss screenshot smoke", "PENDING", "mss module missing",
+            "화면 인식 자동화가 필요하면 mss/Pillow wheel을 반입하세요.")
+
+    if has_module("rapidocr_onnxruntime"):
+        code = r"""
+import json
+try:
+    from rapidocr_onnxruntime import RapidOCR
+    engine = RapidOCR()
+    print(json.dumps({"ok": True, "engine": str(type(engine))}, ensure_ascii=False))
+except Exception as exc:
+    print(json.dumps({"ok": False, "error": type(exc).__name__, "detail": str(exc)[:200]}, ensure_ascii=False))
+    raise SystemExit(1)
+"""
+        res = run_python_probe(code, timeout=30)
+        add(checks, "화면/OCR", "RapidOCR instantiate", "PASS" if res.get("ok") else "WARN",
+            res.get("stdout") or res.get("stderr") or res.get("error", ""),
+            "OCR 모델 파일/onnxruntime wheel 호환성을 확인하세요.")
+    else:
+        add(checks, "화면/OCR", "RapidOCR instantiate", "PENDING", "rapidocr_onnxruntime missing",
+            "OCR이 필요하면 RapidOCR/onnxruntime wheel 및 모델을 반입하세요.")
+
+
+def check_obsidian_wiki(checks: list[Check]) -> None:
+    paths = common_program_paths()
+    obsidian_found = find_existing(paths["obsidian"]) + which_all(["obsidian.exe", "obsidian"])
+    wiki_dir = Path.home() / "OpenCodeLIG_USERDATA" / "memory" / "wiki"
+    add(checks, "Obsidian/위키", "Obsidian executable", "PASS" if obsidian_found else "PENDING",
+        "; ".join(obsidian_found) if obsidian_found else "not found",
+        "Obsidian을 설치하고 USERDATA\\memory\\wiki를 vault로 열 수 있게 준비하세요.")
+    add(checks, "Obsidian/위키", "실 USERDATA wiki vault", "PASS" if wiki_dir.exists() else "WARN",
+        f"{wiki_dir}; obsidian_config={(wiki_dir / '.obsidian').exists()}",
+        "첫 기억/위키 실행 후 자동 생성됩니다. 직접 쓰는 노트는 wiki\\manual에 둡니다.")
+
+    with tempfile.TemporaryDirectory(prefix="agentops_wiki_probe_") as td:
+        env = dict(os.environ)
+        env.update({
+            "PYTHONUTF8": "1",
+            "PYTHONIOENCODING": "utf-8",
+            "AGENTOPS_ROOT": str(Path(td) / "workspace"),
+            "AGENTOPS_MEMORY_DIR": str(Path(td) / "memory"),
+            "LIG_DIAG_DIR": str(Path(td) / "diag"),
+        })
+        cmd1 = [sys.executable, str(workspace_root() / "agent_ops" / "agentops.py"), "remember", "--title", "pending-check", "위키 점검용 격리 메모리"]
+        r1 = run_cmd(cmd1, timeout=20, cwd=workspace_root(), env=env)
+        cmd2 = [sys.executable, str(workspace_root() / "agent_ops" / "agentops.py"), "wiki"]
+        r2 = run_cmd(cmd2, timeout=30, cwd=workspace_root(), env=env)
+        memory = Path(td) / "memory"
+        generated = sorted(str(p.relative_to(memory)) for p in memory.rglob("*.md")) if memory.exists() else []
+        add(checks, "Obsidian/위키", "격리 remember→wiki smoke",
+            "PASS" if r1.get("ok") and r2.get("ok") and generated else "FAIL",
+            json.dumps({"remember_rc": r1.get("returncode"), "wiki_rc": r2.get("returncode"), "generated": generated[:8]}, ensure_ascii=False),
+            "격리 smoke 실패 시 memory_manager/wiki_manager 경로를 확인하세요. 실제 USERDATA는 건드리지 않았습니다.")
+
+
 def check_docs_package(checks: list[Check]) -> None:
     ws = workspace_root()
     required_docs = [
@@ -383,14 +694,30 @@ def check_docs_package(checks: list[Check]) -> None:
         ws / "docs" / "운영" / "INTELLIGENCE_COVERAGE_REPORT.md",
     ]
     for p in required_docs:
-        add(checks, "문서/패키지", p.name, "PASS" if p.exists() else "FAIL",
-            safe_rel(p), "사용자용 패키지에 문서가 포함되어야 합니다.")
+        text = p.read_text(encoding="utf-8", errors="replace") if p.exists() else ""
+        add(checks, "문서/패키지", p.name, "PASS" if p.exists() and len(text) > 500 else "FAIL",
+            f"{safe_rel(p)}; chars={len(text)}", "사용자용 패키지에 충분한 문서가 포함되어야 합니다.")
     tests_dir = ws / "tests"
     add(checks, "문서/패키지", "사용자 패키지 테스트폴더", "WARN" if tests_dir.exists() else "PASS",
         f"tests_dir_exists={tests_dir.exists()}",
         "배포 패키지에서는 tests 폴더가 제외되는 것이 정상입니다.")
-    add(checks, "문서/패키지", "점검 BAT", "PASS" if (ws / "점검용_전체확인.bat").exists() else "WARN",
-        safe_rel(ws / "점검용_전체확인.bat"), "패키지 루트와 설치 workspace에 점검 BAT가 있어야 합니다.")
+    for p in [package_root() / "점검용_전체확인.bat", ws / "점검용_전체확인.bat"]:
+        if p.exists():
+            raw = p.read_bytes()
+            crlf_ok = b"\n" not in raw.replace(b"\r\n", b"")
+            chcp_ok = b"chcp 65001" in raw
+            ok = chcp_ok and crlf_ok
+            add(checks, "문서/패키지", f"점검 BAT: {p.name}", "PASS" if ok else "FAIL",
+                f"{p}; crlf={crlf_ok}; chcp={chcp_ok}",
+                ".bat는 CRLF + chcp 65001이어야 합니다.")
+        else:
+            add(checks, "문서/패키지", f"점검 BAT: {p.name}", "WARN", str(p), "패키지 루트와 설치 workspace에 점검 BAT가 있어야 합니다.")
+    guard = ws / ".opencode" / "plugins" / "command-guard.ts"
+    guard_text = guard.read_text(encoding="utf-8", errors="replace") if guard.exists() else ""
+    deny_hits = [term for term in ["reset --hard", "Remove-Item", "format", "rmdir"] if term.lower() in guard_text.lower()]
+    add(checks, "문서/패키지", "command guard plugin", "PASS" if guard.exists() and deny_hits else "FAIL",
+        f"{guard}; deny_hits={deny_hits}",
+        "ASK/AUTO/FULL 어느 모드에서도 위험 명령 가드는 유지되어야 합니다.")
 
 
 def build_report(checks: list[Check], report_id: str) -> tuple[dict[str, Any], str]:
@@ -406,13 +733,22 @@ def build_report(checks: list[Check], report_id: str) -> tuple[dict[str, Any], s
         "pending_or_warning": [asdict(c) for c in pending],
         "checks": [asdict(c) for c in checks],
     }
+    verdict = "핵심 실패 없음" if not blocking else "핵심 실패 있음"
     lines = [
-        f"# OpenCodeLIG pending validation report",
+        "# OpenCodeLIG 사내 PC 미결항목 통합 점검 보고서",
+        "",
+        "## 보내줄 파일",
+        "",
+        f"- 이 파일 하나만 보내면 됩니다: `{report_id}.md` 또는 같은 폴더의 `pending-check-last.md`",
+        "- API 키와 게이트웨이 URL은 의도적으로 숨겼습니다.",
+        "",
+        "## 요약",
         "",
         f"- report_id: `{report_id}`",
         f"- timestamp: `{payload['timestamp']}`",
         f"- workspace: `{payload['workspace']}`",
-        f"- summary: PASS {counts['PASS']} / WARN {counts['WARN']} / PENDING {counts['PENDING']} / FAIL {counts['FAIL']} / SKIP {counts['SKIP']}",
+        f"- verdict: **{verdict}**",
+        f"- counts: PASS {counts['PASS']} / WARN {counts['WARN']} / PENDING {counts['PENDING']} / FAIL {counts['FAIL']} / SKIP {counts['SKIP']}",
         "",
         "## 판정 기준",
         "",
@@ -422,13 +758,20 @@ def build_report(checks: list[Check], report_id: str) -> tuple[dict[str, Any], s
         "- PASS: 현재 PC에서 확인된 항목입니다.",
         "",
     ]
+    if blocking:
+        lines += ["## 먼저 봐야 할 FAIL", "", "| section | item | evidence | next action |", "|---|---|---|---|"]
+        for c in blocking:
+            lines.append(f"| {sanitize_evidence(c.section)} | {sanitize_evidence(c.item)} | {sanitize_evidence(c.evidence)} | {sanitize_evidence(c.next_action, 240)} |")
+        lines.append("")
+    if pending:
+        lines += ["## 미결/WARN 빠른 목록", "", "| status | section | item | next action |", "|---|---|---|---|"]
+        for c in pending:
+            lines.append(f"| {c.status} | {sanitize_evidence(c.section)} | {sanitize_evidence(c.item)} | {sanitize_evidence(c.next_action, 240)} |")
+        lines.append("")
     for section in sorted({c.section for c in checks}):
-        lines += [f"## {section}", "", "| status | item | evidence | next action |",
-                  "|---|---|---|---|"]
+        lines += [f"## {section}", "", "| status | item | evidence | next action |", "|---|---|---|---|"]
         for c in [x for x in checks if x.section == section]:
-            ev = c.evidence.replace("|", "/").replace("\n", " ")[:300]
-            nxt = c.next_action.replace("|", "/").replace("\n", " ")[:240]
-            lines.append(f"| {c.status} | {c.item} | {ev} | {nxt} |")
+            lines.append(f"| {c.status} | {sanitize_evidence(c.item)} | {sanitize_evidence(c.evidence)} | {sanitize_evidence(c.next_action, 240)} |")
         lines.append("")
     return payload, "\n".join(lines)
 
@@ -443,9 +786,12 @@ def main(argv: list[str] | None = None) -> int:
 
     checks: list[Check] = []
     check_core(checks)
+    check_opencode_patch(checks)
     check_config_and_loop(checks)
     check_optional_modules(checks)
     check_apps_and_pending(checks)
+    check_screen_ocr(checks)
+    check_obsidian_wiki(checks)
     check_docs_package(checks)
 
     payload, markdown = build_report(checks, report_id)
@@ -461,8 +807,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print(markdown)
     print("")
-    print(f"[REPORT_JSON] {json_path}")
     print(f"[REPORT_MD]   {md_path}")
+    print(f"[REPORT_JSON] {json_path}")
     return 1 if payload["counts"]["FAIL"] else 0
 
 

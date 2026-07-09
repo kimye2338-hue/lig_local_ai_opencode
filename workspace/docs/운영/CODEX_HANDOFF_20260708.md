@@ -313,3 +313,42 @@ python agent_ops\agentops.py doctor
 ### 주의
 - 빌드 시 한글 사용자 TEMP 경로에서 Bun compile ENOENT가 발생했다. `C:\oc_build`처럼 ASCII 경로와 `TEMP/TMP/BUN_TMPDIR`를 쓰면 통과한다.
 - Web UI까지 embed한 빌드로 교체했다. 단, 실제 브라우저에서 `opencode web`을 띄우는 상호작용 검증은 별도 수동 확인 대상이다.
+
+---
+
+## 11. 2026-07-09 사내 PC 원샷 미결 점검기 고도화
+
+### 완료한 변경
+- `workspace/agent_ops/pending_check.py`를 단순 상태표에서 사내 PC용 통합 진단서로 확장했다.
+- BAT 하나로 다음 항목을 한 번에 확인한다:
+  필수 설치/Python/OpenCode hash, permission badge 패치 문자열, OpenCode help 명령, 게이트웨이 `/models`,
+  provider route, `/auto` dry-run 시나리오 6종(browser/memory/wiki/document/engineering/danger),
+  wheelhouse 설치 후보, docx/xlsx/pptx 생성 smoke, Office/HWP/Outlook/SolidWorks COM registry/activation,
+  MATLAB/AutoCAD/Fluent 실행파일 탐색, Chrome CDP, 화면캡처/OCR, Obsidian wiki 격리 smoke,
+  사용자 문서/점검 BAT/command guard 상태.
+- `/auto` 시나리오는 `--task-file`을 사용해 Windows 한글 argv 인코딩 변수를 줄였다.
+- 결과 Markdown 상단에 “보내줄 파일”을 명확히 넣었다. 사용자는
+  `%USERPROFILE%\OpenCodeLIG_USERDATA\diagnostics\pending_checks\pending-check-last.md` 하나만 보내면 된다.
+- URL/API 키는 출력하지 않는다. key 존재 여부와 길이만 기록한다.
+- 실제 USERDATA 기억/위키 원본은 건드리지 않는다. remember→wiki 검증은 임시 격리 메모리에서 수행한다.
+
+### 새 패키지
+- 폴더: `dist/OpenCodeLIG_USER_PACKAGE_20260709_093955/`
+- ZIP: `dist/OpenCodeLIG_USER_PACKAGE_20260709_093955.zip`
+- ZIP 크기: `489.08 MB`
+- ZIP SHA256: `6f10d88f9a0702ac5e820c09c249ff62c7ddeb79186928d7adba6a1e96e42697`
+
+### 검증
+- `py -3.11 -m py_compile workspace\agent_ops\pending_check.py` 통과.
+- 소스 기준 `py -3.11 workspace\agent_ops\pending_check.py --out-dir dist\_pending_check_deep_test3` → FAIL 0.
+- 패키지 폴더 기준 `py -3.11 dist\OpenCodeLIG_USER_PACKAGE_20260709_093955\workspace\agent_ops\pending_check.py --out-dir dist\_pending_check_package_final_093955` → PASS 45 / WARN 7 / PENDING 15 / FAIL 0.
+- `pending-check-last.md`에 `danger=>.../policy=ask_user`가 포함되는 것 확인.
+- `py -3.11 workspace\tests\test_launch_bats.py` → 101 checks passed.
+- `py -3.11 workspace\tests\test_opencode_permission_badge_patch.py` → 4 checks passed.
+- `py -3.11 workspace\tests\test_knowledge_routing.py` → 42/42 passed.
+- 새 ZIP 내부에 `workspace/tests`, `workspace/docs/archive`, `__pycache__`, `.pytest_cache` 없음 확인.
+
+### 다음 작업자 주의
+- 패키지 폴더에서 직접 Python 점검기를 실행하면 실행 후 `__pycache__`가 생긴다. ZIP 내부는 생성 전 상태라 깨끗하다.
+- Outlook COM activation은 회사 Outlook 프로필/보안 대화상자 때문에 timeout WARN이 날 수 있다. 이 경우 registry PASS와 함께 해석한다.
+- `PENDING`은 결함 단정이 아니라 대상 PC 실앱/망/선택 wheel 확인 항목이다. `FAIL`이 0이면 기본 구조는 다음 분석 단계로 넘어갈 수 있다.
