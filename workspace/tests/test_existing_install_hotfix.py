@@ -105,7 +105,7 @@ def test_final_patch_bat_extracts_and_runs_against_min_install(tmp_path: Path) -
     fake_lib = tmp_path / "fake_lib"
     fake_lib.mkdir()
     (fake_lib / "mss.py").write_text("# fake existing mss for hotfix skip test\n", encoding="utf-8")
-    env = os.environ.copy()
+    env = {k: v for k, v in os.environ.items() if k.upper() != "NODEFAULTCURRENTDIRECTORYINEXEPATH"}
     env["OPENCODELIG_ROOT"] = str(root)
     env["USERPROFILE"] = str(tmp_path)
     env["LIG_SKIP_PENDING_CHECK_AFTER_HOTFIX"] = "1"
@@ -114,9 +114,10 @@ def test_final_patch_bat_extracts_and_runs_against_min_install(tmp_path: Path) -
     env["PYTHONPATH"] = str(fake_lib)
 
     result = subprocess.run(
-        ["cmd", "/c", "call 최종_패치파일.bat <nul"],
+        f'cmd /c call "{FINAL_BAT}" <nul',
         cwd=str(REPO),
         env=env,
+        shell=False,
         text=True,
         encoding="utf-8",
         errors="replace",
