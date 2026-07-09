@@ -118,6 +118,8 @@ if /I "%LIG_PROJECT_DIR%"=="%AGENTOPS_HOME%" goto :project_ready
 if not exist "%LIG_PROJECT_DIR%\.opencode" (
   xcopy /E /I /Y "%AGENTOPS_HOME%\.opencode" "%LIG_PROJECT_DIR%\.opencode" >nul
 )
+if not exist "%LIG_PROJECT_DIR%\.opencode\plugins" mkdir "%LIG_PROJECT_DIR%\.opencode\plugins" >nul 2>&1
+if exist "%AGENTOPS_HOME%\.opencode\plugins\session-autosave.ts" if not exist "%LIG_PROJECT_DIR%\.opencode\plugins\session-autosave.ts" copy /Y "%AGENTOPS_HOME%\.opencode\plugins\session-autosave.ts" "%LIG_PROJECT_DIR%\.opencode\plugins\session-autosave.ts" >nul
 if not exist "%LIG_PROJECT_DIR%\agent_ops" mkdir "%LIG_PROJECT_DIR%\agent_ops" >nul 2>&1
 if exist "%AGENTOPS_HOME%\launch\project_agentops_wrapper.py" (
   copy /Y "%AGENTOPS_HOME%\launch\project_agentops_wrapper.py" "%LIG_PROJECT_DIR%\agent_ops\agentops.py" >nul

@@ -143,11 +143,13 @@ def test_hotfix_preserves_user_working_directory_and_detaches_obsidian(tmp_path:
     assert 'set "AGENTOPS_MEMORY_DIR=%OPENCODE_USERDATA%\\memory"' in text
     assert 'cd /d "%LIG_PROJECT_DIR%"' in text
     assert "project_agentops_wrapper.py" in text
+    assert "session-autosave.ts" in text
     assert "obsidian_detached.vbs" in text
     assert 'start "" "%OBSEXE%"' not in text
 
     assert (root / "workspace" / "launch" / "obsidian_detached.vbs").exists()
     assert (root / "workspace" / "launch" / "project_agentops_wrapper.py").exists()
+    assert (root / "workspace" / ".opencode" / "plugins" / "session-autosave.ts").exists()
     assert (root / "bin" / "ocd.bat").exists()
     assert "agent_ops\\ocd.py" in (root / "bin" / "ocd.bat").read_text(encoding="utf-8")
     assert (root / "bin" / "probe-gateway.bat").exists()
@@ -179,3 +181,11 @@ def test_hotfix_skips_current_files_and_existing_mss(tmp_path: Path) -> None:
     assert "root check BAT already current" in combined
     assert "command wrapper already current" in combined
     assert "ocd wrapper already current" in combined
+
+
+def test_session_autosave_plugin_writes_to_obsidian_sessions(tmp_path: Path) -> None:
+    plugin = WS / ".opencode" / "plugins" / "session-autosave.ts"
+    text = plugin.read_text(encoding="utf-8")
+    assert "memory\", \"wiki\", \"sessions\"" in text
+    assert "appendFileSync(sessionFile()" in text
+    assert "session.start" in text
