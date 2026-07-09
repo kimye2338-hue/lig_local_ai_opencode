@@ -188,4 +188,7 @@ def test_session_autosave_plugin_writes_to_obsidian_sessions(tmp_path: Path) -> 
     text = plugin.read_text(encoding="utf-8")
     assert "memory\", \"wiki\", \"sessions\"" in text
     assert "appendFileSync(sessionFile()" in text
+    assert "log-activity" in text
+    assert "rememberSessionActivity" in text
     assert "session.start" in text
+    assert "(?i:" not in text

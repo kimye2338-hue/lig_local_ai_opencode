@@ -694,6 +694,21 @@ def check_obsidian_wiki(checks: list[Check]) -> None:
             json.dumps({"remember_rc": r1.get("returncode"), "wiki_rc": r2.get("returncode"), "generated": generated[:8]}, ensure_ascii=False),
             "격리 smoke 실패 시 memory_manager/wiki_manager 경로를 확인하세요. 실제 USERDATA는 건드리지 않았습니다.")
 
+    autosave = workspace_root() / ".opencode" / "plugins" / "session-autosave.ts"
+    autosave_text = autosave.read_text(encoding="utf-8", errors="replace") if autosave.exists() else ""
+    autosave_ok = (
+        autosave.exists()
+        and "wiki\", \"sessions\"" in autosave_text
+        and "appendFileSync(sessionFile()" in autosave_text
+        and "log-activity" in autosave_text
+        and "(?i:" not in autosave_text
+    )
+    autosave_sessions = "wiki\", \"sessions\"" in autosave_text
+    autosave_promote = "log-activity" in autosave_text
+    add(checks, "Obsidian/위키", "세션 자동저장 플러그인", "PASS" if autosave_ok else "WARN",
+        f"{autosave}; exists={autosave.exists()}; sessions={autosave_sessions}; memory_promote={autosave_promote}",
+        "대화 중 창을 닫아도 Obsidian wiki\\sessions 노트에 남고, 일부는 저우선순위 기억으로 승격되어야 합니다.")
+
 
 def check_command_surfaces(checks: list[Check]) -> None:
     """Smoke-test user-visible command surfaces in an isolated workspace.

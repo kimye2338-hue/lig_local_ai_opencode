@@ -45,3 +45,22 @@
 - Obsidian 창은 계속 자동으로 뜨는지 확인.
 - 작업 후 산출물이 `%USERPROFILE%\OpenCodeLIG\workspace`가 아니라 해당 작업폴더 또는 그 하위 결과 폴더에 쌓이는지 확인.
 
+## 2026-07-09 추가 보강: 세션 자동저장
+
+사용자 지적: 일반 대화 중 창을 닫으면 Obsidian에 내용이 쌓이지 않았다. 기존 구현은 `/remember`, `/auto`, `/work`, compaction 요약처럼 명령 완료 또는 요약 이벤트 중심이었다. “사용자는 그냥 사용하고, 시스템이 알아서 축적한다”는 원칙 기준으로는 부족했다.
+
+조치:
+
+- `.opencode/plugins/session-autosave.ts` 추가.
+- OpenCode 세션 이벤트를 `%USERPROFILE%\OpenCodeLIG_USERDATA\memory\wiki\sessions\YYYY-MM-DD-opencode-session.md`에 즉시 append.
+- 일정량 이상 쌓이면 `agentops.py log-activity`로 저우선순위 활동 기억에도 자동 승격.
+- 잘못된 JS 정규식 문법 `(?i:...)` 제거.
+- `RUN_OPENCODE_LIG.bat`가 기존 작업폴더 `.opencode`에도 `session-autosave.ts`를 보강 복사하도록 수정.
+- `pending_check.py`에 `세션 자동저장 플러그인` 점검 항목 추가.
+
+검증:
+
+- `py -3.11 -m pytest workspace\tests\test_existing_install_hotfix.py workspace\tests\test_autocad_gui_fallback.py -q`
+  - 결과: 8 passed
+- `py -3.11 -m py_compile workspace\agent_ops\pending_check.py workspace\patches\existing_install_hotfix_20260709.py`
+  - 결과: 통과

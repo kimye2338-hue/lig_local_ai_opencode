@@ -4,14 +4,19 @@
 // Best-effort and offline-safe: failure must never affect the chat path.
 
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "fs"
+import { execFileSync } from "child_process"
 import { join } from "path"
 
 const MAX_TEXT_CHARS = 1600
 const MAX_EVENT_CHARS = 2400
 const MIN_USEFUL_CHARS = 8
+const FLUSH_INTERVAL_MS = 60000
+const FLUSH_MIN_CHARS = 80
 
 let lastSignature = ""
 let lastWriteMs = 0
+let lastFlushMs = 0
+let sessionBuffer: string[] = []
 
 function userdataDir(): string {
   const explicit = process.env.OPENCODE_USERDATA
@@ -58,8 +63,8 @@ function compact(value: string): string {
 function redact(value: string): string {
   return value
     .replace(/Bearer\s+[A-Za-z0-9._\-+/=]+/g, "Bearer <hidden>")
-    .replace(/(?i:api[_-]?key\s*[=:]\s*)[^\s,;]+/g, "$1<hidden>")
-    .replace(/(?i:password\s*[=:]\s*)[^\s,;]+/g, "$1<hidden>")
+    .replace(/(api[_-]?key\s*[=:]\s*)[^\s,;]+/gi, "$1<hidden>")
+    .replace(/(password\s*[=:]\s*)[^\s,;]+/gi, "$1<hidden>")
 }
 
 function collectText(value: any, out: string[], depth = 0): void {
@@ -91,7 +96,65 @@ function usefulText(event: any): string {
   return redact(unique.join("\n\n")).slice(0, MAX_EVENT_CHARS)
 }
 
-function writeEvent(event: any): void {
+function baseDir(ctx?: any): string {
+  const explicit = process.env.LIG_AGENTOPS_HOME || process.env.AGENTOPS_HOME
+  if (explicit && explicit.trim()) return explicit
+  return ctx?.directory || ctx?.worktree?.path || process.cwd()
+}
+
+function agentopsPath(base: string): string {
+  return join(base, "agent_ops", "agentops.py")
+}
+
+function activityTitle(date = new Date()): string {
+  const bucket = Math.floor(date.getMinutes() / 10) * 10
+  return `OpenCode session autosave ${dayStamp(date)} ${String(date.getHours()).padStart(2, "0")}:${String(bucket).padStart(2, "0")}`
+}
+
+function runAgentOps(base: string, args: string[]): void {
+  const script = agentopsPath(base)
+  if (!existsSync(script)) return
+  const env = {
+    ...process.env,
+    PYTHONUTF8: process.env.PYTHONUTF8 || "1",
+    PYTHONIOENCODING: process.env.PYTHONIOENCODING || "utf-8",
+  }
+  const runners: Array<[string, string[]]> = [
+    ["py", ["-3.11", script, ...args]],
+    ["python", [script, ...args]],
+  ]
+  for (const [exe, exeArgs] of runners) {
+    try {
+      execFileSync(exe, exeArgs, {
+        cwd: base,
+        env,
+        encoding: "utf-8",
+        stdio: ["ignore", "ignore", "ignore"],
+        timeout: 8000,
+      })
+      return
+    } catch {
+      // try next runner
+    }
+  }
+}
+
+function rememberSessionActivity(base: string, force = false): void {
+  try {
+    const now = Date.now()
+    const body = compact(sessionBuffer.join("\n"))
+    if (body.length < FLUSH_MIN_CHARS && !force) return
+    if (!force && now - lastFlushMs < FLUSH_INTERVAL_MS) return
+    lastFlushMs = now
+    sessionBuffer = []
+    if (!body) return
+    runAgentOps(base, ["log-activity", body.slice(0, MAX_EVENT_CHARS), "--title", activityTitle()])
+  } catch {
+    // Memory promotion is best-effort; raw Obsidian autosave is already written.
+  }
+}
+
+function writeEvent(event: any, base: string): void {
   try {
     ensureSessionFile()
     const type = String(event?.type || "event")
@@ -107,12 +170,15 @@ function writeEvent(event: any): void {
     const heading = `\n## ${timeStamp()} ${type}\n`
     const body = text ? `${text}\n` : "(상태 이벤트)\n"
     appendFileSync(sessionFile(), heading + body, "utf-8")
+    if (text) sessionBuffer.push(`[${type}] ${text}`)
+    rememberSessionActivity(base, type === "session.idle" || type === "session.error" || type === "session.compacting")
   } catch {
     // Autosave must never interrupt the user's session.
   }
 }
 
-export const SessionAutosave = async (_ctx: any) => {
+export const SessionAutosave = async (ctx: any) => {
+  const base = baseDir(ctx)
   try {
     ensureSessionFile()
     appendFileSync(sessionFile(), `\n## ${timeStamp()} session.start\nOpenCode 세션 시작\n`, "utf-8")
@@ -121,10 +187,10 @@ export const SessionAutosave = async (_ctx: any) => {
   }
   return {
     event: async ({ event }: any) => {
-      writeEvent(event)
+      writeEvent(event, base)
     },
     "experimental.session.compacting": async (input: any, output: any) => {
-      writeEvent({ type: "session.compacting", input, output })
+      writeEvent({ type: "session.compacting", input, output }, base)
     },
   }
 }
