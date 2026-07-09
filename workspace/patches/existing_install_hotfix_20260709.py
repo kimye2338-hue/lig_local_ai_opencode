@@ -11,6 +11,7 @@ It is intentionally additive:
 from __future__ import annotations
 
 import os
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -51,10 +52,34 @@ def write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
+def _crlf_bytes(text: str) -> bytes:
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return normalized.replace("\n", "\r\n").encode("utf-8")
+
+
 def write_crlf(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    path.write_text(normalized, encoding="utf-8", newline="\r\n")
+    path.write_bytes(_crlf_bytes(text))
+
+
+def write_crlf_if_changed(path: Path, text: str) -> bool:
+    desired = _crlf_bytes(text)
+    if path.exists() and path.read_bytes() == desired:
+        return False
+    backup(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(desired)
+    return True
+
+
+def write_text_if_changed(path: Path, text: str) -> bool:
+    desired = text.encode("utf-8")
+    if path.exists() and path.read_bytes() == desired:
+        return False
+    backup(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(desired)
+    return True
 
 
 def backup(path: Path) -> Path | None:
@@ -84,6 +109,9 @@ def copy_root_check_bat() -> None:
     if not src.exists():
         log(f"[WARN] workspace check BAT not found: {src}")
         return
+    if dst.exists() and dst.read_bytes() == src.read_bytes():
+        log(f"[SKIP] root check BAT already current: {dst}")
+        return
     backup(dst)
     shutil.copy2(src, dst)
     log(f"[OK] root check BAT copied: {dst}")
@@ -100,7 +128,6 @@ def create_gateway_wrappers() -> None:
     }
     for wrapper_name, launch_name in wrappers.items():
         target = bin_dir / wrapper_name
-        backup(target)
         body = (
             "@echo off\r\n"
             "chcp 65001 >nul\r\n"
@@ -115,8 +142,10 @@ def create_gateway_wrappers() -> None:
             "call \"%TARGET%\" %*\r\n"
             "exit /b %ERRORLEVEL%\r\n"
         )
-        write_crlf(target, body)
-        log(f"[OK] command wrapper created: {target}")
+        if write_crlf_if_changed(target, body):
+            log(f"[OK] command wrapper created/updated: {target}")
+        else:
+            log(f"[SKIP] command wrapper already current: {target}")
 
 
 def create_ocd_wrapper() -> None:
@@ -124,7 +153,6 @@ def create_ocd_wrapper() -> None:
     bin_dir = ROOT / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     target = bin_dir / "ocd.bat"
-    backup(target)
     body = (
         "@echo off\n"
         "chcp 65001 >nul\n"
@@ -146,8 +174,10 @@ def create_ocd_wrapper() -> None:
         ")\n"
         "exit /b %ERRORLEVEL%\n"
     )
-    write_crlf(target, body)
-    log(f"[OK] ocd wrapper created: {target}")
+    if write_crlf_if_changed(target, body):
+        log(f"[OK] ocd wrapper created/updated: {target}")
+    else:
+        log(f"[SKIP] ocd wrapper already current: {target}")
 
 
 def create_launcher_helpers() -> None:
@@ -155,7 +185,6 @@ def create_launcher_helpers() -> None:
     launch_dir.mkdir(parents=True, exist_ok=True)
 
     obsidian_vbs = launch_dir / "obsidian_detached.vbs"
-    backup(obsidian_vbs)
     obsidian_body = (
         "Option Explicit\n"
         "Dim shell, exePath, vaultPath, cmd\n"
@@ -166,11 +195,12 @@ def create_launcher_helpers() -> None:
         "cmd = Chr(34) & exePath & Chr(34) & \" \" & Chr(34) & vaultPath & Chr(34)\n"
         "shell.Run cmd, 1, False\n"
     )
-    write_crlf(obsidian_vbs, obsidian_body)
-    log(f"[OK] detached Obsidian launcher created: {obsidian_vbs}")
+    if write_crlf_if_changed(obsidian_vbs, obsidian_body):
+        log(f"[OK] detached Obsidian launcher created/updated: {obsidian_vbs}")
+    else:
+        log(f"[SKIP] detached Obsidian launcher already current: {obsidian_vbs}")
 
     wrapper = launch_dir / "project_agentops_wrapper.py"
-    backup(wrapper)
     wrapper_body = '''# -*- coding: utf-8 -*-
 from __future__ import annotations
 
@@ -199,8 +229,10 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 '''
-    write_text(wrapper, wrapper_body)
-    log(f"[OK] project agent_ops wrapper created: {wrapper}")
+    if write_text_if_changed(wrapper, wrapper_body):
+        log(f"[OK] project agent_ops wrapper created/updated: {wrapper}")
+    else:
+        log(f"[SKIP] project agent_ops wrapper already current: {wrapper}")
 
 
 def wheel_dirs() -> list[Path]:
@@ -219,7 +251,17 @@ def wheel_dirs() -> list[Path]:
     return out
 
 
+def module_available(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except Exception:
+        return False
+
+
 def try_install_optional_wheels() -> None:
+    if module_available("mss"):
+        log("[SKIP] mss already importable. Offline wheel install not needed.")
+        return
     dirs = wheel_dirs()
     mss_found = any(list(d.glob("mss-*.whl")) for d in dirs)
     if not dirs:

@@ -36,13 +36,15 @@ def _copy_min_install(tmp_path: Path) -> Path:
     return root
 
 
-def _run_hotfix(root: Path, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+def _run_hotfix(root: Path, tmp_path: Path, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["OPENCODELIG_ROOT"] = str(root)
     env["USERPROFILE"] = str(tmp_path)
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
     env["LIG_SKIP_PENDING_CHECK_AFTER_HOTFIX"] = "1"
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run(
         [sys.executable, str(HOTFIX)],
         cwd=str(REPO),
@@ -128,3 +130,22 @@ def test_hotfix_preserves_user_working_directory_and_detaches_obsidian(tmp_path:
     ]:
         raw = bat.read_bytes()
         assert b"\n" not in raw.replace(b"\r\n", b""), str(bat)
+
+
+def test_hotfix_skips_current_files_and_existing_mss(tmp_path: Path) -> None:
+    root = _copy_min_install(tmp_path)
+    fake_lib = tmp_path / "fake_lib"
+    fake_lib.mkdir()
+    (fake_lib / "mss.py").write_text("# fake existing mss for hotfix skip test\n", encoding="utf-8")
+    env = {"PYTHONPATH": str(fake_lib)}
+
+    first = _run_hotfix(root, tmp_path, env)
+    assert first.returncode == 0, first.stdout + first.stderr
+    second = _run_hotfix(root, tmp_path, env)
+
+    assert second.returncode == 0, second.stdout + second.stderr
+    combined = second.stdout + second.stderr
+    assert "mss already importable" in combined
+    assert "root check BAT already current" in combined
+    assert "command wrapper already current" in combined
+    assert "ocd wrapper already current" in combined
