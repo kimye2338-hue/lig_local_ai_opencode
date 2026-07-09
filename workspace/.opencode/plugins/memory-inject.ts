@@ -1,14 +1,19 @@
 // OpenCodeLIG memory bridge.
-// Best-effort, offline-safe plugin: injects pinned AgentOps memory during
-// compaction, and leaves a local session recall file at startup for fallback
-// commands/agent instructions. Never throws into the chat path.
+// Best-effort, offline-safe plugin: injects cached AgentOps memory during
+// compaction, and refreshes the durable recall file in the background.
+// Never throws into the chat path and never blocks TUI startup on a sync child.
 
-import { execFileSync } from "child_process"
-import { existsSync, mkdirSync, writeFileSync } from "fs"
+import { execFile } from "child_process"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 
 const MAX_RECALL_CHARS = 6000
 const MAX_SUMMARY_CHARS = 1200
+const STARTUP_REFRESH_COOLDOWN_MS = 60_000
+const COMPACTION_REFRESH_COOLDOWN_MS = 60_000
+const IDLE_REFRESH_COOLDOWN_MS = 60_000
+
+let lastRefreshAt = 0
 
 function baseDir(ctx) {
   const explicit = process.env.LIG_AGENTOPS_HOME || process.env.AGENTOPS_HOME
@@ -26,9 +31,12 @@ function stateDir(base) {
   return join(base, "agent_ops", "state")
 }
 
-function runAgentOps(base, args) {
+function runAgentOpsAsync(base, args, onDone) {
   const script = agentopsPath(base)
-  if (!existsSync(script)) return ""
+  if (!existsSync(script)) {
+    if (onDone) onDone("")
+    return
+  }
   const env = {
     ...process.env,
     PYTHONUTF8: process.env.PYTHONUTF8 || "1",
@@ -38,24 +46,34 @@ function runAgentOps(base, args) {
     ["python", [script, ...args]],
     ["py", ["-3.11", script, ...args]],
   ]
-  for (const [exe, exeArgs] of runners) {
+  const attempt = (index) => {
+    if (index >= runners.length) {
+      if (onDone) onDone("")
+      return
+    }
+    const [exe, exeArgs] = runners[index]
     try {
-      return String(execFileSync(exe, exeArgs, {
+      execFile(exe, exeArgs, {
         cwd: base,
         env,
         encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
         timeout: 10000,
-      }) || "").trim()
+        windowsHide: true,
+      }, (error, stdout) => {
+        if (error) {
+          attempt(index + 1)
+          return
+        }
+        if (onDone) onDone(String(stdout || "").trim())
+      })
     } catch {
-      // Try the next runner. Memory is helpful context, not a hard dependency.
+      attempt(index + 1)
     }
   }
-  return ""
+  attempt(0)
 }
 
-function pinnedRecallBlock(base) {
-  const recalled = runAgentOps(base, ["recall", "--pinned"])
+function pinnedRecallBlockFromText(recalled) {
   if (!recalled) {
     return [
       "## OpenCodeLIG memory",
@@ -71,6 +89,16 @@ function pinnedRecallBlock(base) {
     "Use these durable user rules, project facts, recent lessons, and activity hints before answering.",
     body,
   ].join("\n")
+}
+
+function cachedRecallBlock(base) {
+  try {
+    const cached = readFileSync(join(stateDir(base), "SESSION_RECALL.md"), "utf-8").trim()
+    if (cached) return cached
+  } catch {
+    // fallback below
+  }
+  return fallbackStartupBlock()
 }
 
 function pushContext(output, block) {
@@ -99,13 +127,18 @@ function fallbackStartupBlock() {
   ].join("\n")
 }
 
-function refreshStartupRecallAsync(base) {
+function refreshStartupRecallAsync(base, cooldownMs = STARTUP_REFRESH_COOLDOWN_MS) {
+  const now = Date.now()
+  if (now - lastRefreshAt < cooldownMs) return
+  lastRefreshAt = now
   setTimeout(() => {
-    try {
-      writeStartupRecall(base, pinnedRecallBlock(base))
-    } catch {
-      // Background recall must never delay or break TUI startup.
-    }
+    runAgentOpsAsync(base, ["recall", "--pinned"], (recalled) => {
+      try {
+        writeStartupRecall(base, pinnedRecallBlockFromText(recalled))
+      } catch {
+        // Background recall must never delay or break TUI startup.
+      }
+    })
   }, 1)
 }
 
@@ -133,26 +166,34 @@ function logCompactionActivity(base, input, output) {
   // most one entry per day.
   const summary = compactSummary(input, output)
   if (!summary) return
-  runAgentOps(base, ["log-activity", summary, "--title", "OpenCode TUI 세션 요약"])
+  runAgentOpsAsync(base, ["log-activity", summary, "--title", "OpenCode TUI 세션 요약"])
 }
 
 export const MemoryInject = async (ctx) => {
-  const base = baseDir(ctx)
-  writeStartupRecall(base, fallbackStartupBlock())
-  refreshStartupRecallAsync(base)
+  try {
+    const base = baseDir(ctx)
+    writeStartupRecall(base, fallbackStartupBlock())
+    refreshStartupRecallAsync(base, STARTUP_REFRESH_COOLDOWN_MS)
 
-  return {
-    "experimental.session.compacting": async (input, output) => {
-      const freshBlock = pinnedRecallBlock(base)
-      pushContext(output, freshBlock)
-      logCompactionActivity(base, input, output)
-    },
-    event: async ({ event }) => {
-      const t = String((event && event.type) || "")
-      const status = String(event?.properties?.status?.type || event?.status?.type || "")
-      if (t === "session.idle" || t === "session.error" || (t === "session.status" && status === "idle")) {
-        refreshStartupRecallAsync(base)
-      }
-    },
+    return {
+      "experimental.session.compacting": async (input, output) => {
+        try {
+          pushContext(output, cachedRecallBlock(base))
+          refreshStartupRecallAsync(base, COMPACTION_REFRESH_COOLDOWN_MS)
+          logCompactionActivity(base, input, output)
+        } catch {
+          // Compaction hook is additive only.
+        }
+      },
+      event: async ({ event }) => {
+        const t = String((event && event.type) || "")
+        const status = String(event?.properties?.status?.type || event?.status?.type || "")
+        if (t === "session.idle" || t === "session.error" || (t === "session.status" && status === "idle")) {
+          refreshStartupRecallAsync(base, IDLE_REFRESH_COOLDOWN_MS)
+        }
+      },
+    }
+  } catch {
+    return {}
   }
 }

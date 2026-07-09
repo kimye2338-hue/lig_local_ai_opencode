@@ -67,7 +67,9 @@ def main() -> None:
           '"remember"' not in text and "'remember'" not in text
           and "rememberCompaction" not in text)
     check("compaction records via log-activity",
-          re.search(r'runAgentOps\(\s*base,\s*\[\s*"log-activity"', text) is not None)
+          re.search(r'runAgentOpsAsync\(\s*base,\s*\[\s*"log-activity"', text) is not None)
+    check("pinned recall refresh is asynchronous",
+          "execFileSync" not in text and "runAgentOpsAsync" in text)
     check("fixed title enables same-day dedupe", '"OpenCode TUI 세션 요약"' in text)
     check("compacting hook calls logCompactionActivity",
           re.search(r'session\.compacting[\s\S]{0,400}logCompactionActivity\(', text) is not None)

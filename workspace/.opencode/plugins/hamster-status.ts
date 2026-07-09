@@ -6,8 +6,12 @@
 // during generation and "대기 중" when the session goes idle.
 // No external imports (offline / 망분리 safe). Best-effort: never throws.
 
-import { appendFileSync, renameSync, writeFileSync, mkdirSync } from "fs"
+import { appendFileSync, renameSync, writeFileSync, mkdirSync, statSync, truncateSync } from "fs"
 import { join } from "path"
+
+const ENABLE_EVENT_LOG = process.env.LIG_DIAG_EVENTS === "1"
+const EVENT_LOG_MAX_BYTES = 1024 * 1024
+const seenEventTypes = new Set<string>()
 
 function stateDir(): string {
   const explicit = process.env.LIG_STATE_DIR
@@ -53,11 +57,21 @@ function eventLogPath(): string {
 }
 
 function logEventType(type: string, marker = ""): void {
+  if (!ENABLE_EVENT_LOG) return
   try {
     const home = process.env.USERPROFILE || process.env.HOME || "."
     const diag = process.env.LIG_DIAG_DIR || join(home, "OpenCodeLIG_USERDATA", "diagnostics")
+    const path = eventLogPath()
+    const key = `${type} ${marker}`.trim()
+    if (seenEventTypes.has(key)) return
+    seenEventTypes.add(key)
     mkdirSync(diag, { recursive: true })
-    appendFileSync(eventLogPath(), `${new Date().toISOString()} ${type}${marker ? " " + marker : ""}\n`, "utf-8")
+    try {
+      if (statSync(path).size > EVENT_LOG_MAX_BYTES) truncateSync(path, 0)
+    } catch {
+      // first write
+    }
+    appendFileSync(path, `${new Date().toISOString()} ${type}${marker ? " " + marker : ""}\n`, "utf-8")
   } catch {
     // 진단 로그는 부가 기능이다.
   }

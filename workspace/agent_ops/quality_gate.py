@@ -176,14 +176,20 @@ def _check_plugins_and_memory(workspace: Path, checks: list[GateCheck]) -> None:
         "session.status",
         "session.next.step.ended",
         "session.next.step.failed",
+        "bufferEventText",
+        "takeBufferedText",
+        "session.next.text.delta",
+        "token",
+        "secret",
+        "credential",
     ]
     autosave_ok, autosave_evidence = _markers(autosave, autosave_required)
     _add(
         checks,
         "session_autosave_to_wiki",
-        autosave_ok and "(?i:" not in autosave,
-        f"{autosave_evidence}; bad_regex={'(?i:' in autosave}",
-        "세션 이벤트를 wiki\\sessions로 즉시 append하고 event.properties 내부를 재귀 추출해야 합니다.",
+        autosave_ok and "(?i:" not in autosave and "execFileSync" not in autosave,
+        f"{autosave_evidence}; bad_regex={'(?i:' in autosave}; execFileSync={'execFileSync' in autosave}",
+        "세션 이벤트를 wiki\\sessions로 저장하되 delta는 버퍼링 후 ended에서만 flush하고 동기 child 호출은 제거해야 합니다.",
     )
 
     memory = _read_text(plugins / "memory-inject.ts")
@@ -193,14 +199,18 @@ def _check_plugins_and_memory(workspace: Path, checks: list[GateCheck]) -> None:
         "setTimeout",
         "process.env.LIG_AGENTOPS_HOME",
         "session.status",
+        "STARTUP_REFRESH_COOLDOWN_MS",
+        "COMPACTION_REFRESH_COOLDOWN_MS",
+        "IDLE_REFRESH_COOLDOWN_MS",
+        "cachedRecallBlock",
     ]
     memory_ok, memory_evidence = _markers(memory, memory_required)
     _add(
         checks,
         "memory_inject_nonblocking",
-        memory_ok,
-        memory_evidence,
-        "TUI 시작을 막지 않도록 기억 주입은 fallback 후 백그라운드 refresh 구조여야 합니다.",
+        memory_ok and "execFileSync" not in memory and ("execFile(" in memory or "spawn(" in memory),
+        f"{memory_evidence}; execFileSync={'execFileSync' in memory}; async_exec={'execFile(' in memory or 'spawn(' in memory}",
+        "TUI 시작을 막지 않도록 기억 주입은 fallback 후 백그라운드 refresh 구조여야 하며 동기 child 호출이 남아 있으면 안 됩니다.",
     )
 
     hamster = _read_text(plugins / "hamster-status.ts")

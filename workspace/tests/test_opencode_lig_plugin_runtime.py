@@ -150,6 +150,12 @@ def test_session_autosave_extracts_current_event_properties() -> None:
         assert marker in text
     assert "for (const [key, child] of Object.entries(value))" in text
     assert "rememberSessionActivity(base, shouldFlush" in text
+    assert "execFileSync" not in text
+    assert "session.next.text.delta" in text
+    assert "bufferEventText" in text
+    assert "token" in text
+    assert "secret" in text
+    assert "credential" in text
 
 
 def test_memory_and_handoff_use_installed_agentops_home() -> None:
@@ -159,6 +165,12 @@ def test_memory_and_handoff_use_installed_agentops_home() -> None:
     assert "process.env.LIG_AGENTOPS_HOME" in memory
     assert "process.env.LIG_AGENTOPS_HOME" in handoff
     assert "session.status" in memory
+    assert "execFileSync" not in memory
+    assert "execFile(" in memory or "spawn(" in memory
+    assert "STARTUP_REFRESH_COOLDOWN_MS" in memory
+    assert "COMPACTION_REFRESH_COOLDOWN_MS" in memory
+    assert "try {" in handoff
+    assert "} catch {" in handoff
 
 
 def test_pending_check_flags_plugin_runtime_not_just_file_presence() -> None:

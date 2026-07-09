@@ -4,7 +4,7 @@
 // Best-effort and offline-safe: failure must never affect the chat path.
 
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "fs"
-import { execFileSync } from "child_process"
+import { execFile } from "child_process"
 import { join } from "path"
 
 const MAX_TEXT_CHARS = 1600
@@ -17,6 +17,11 @@ let lastSignature = ""
 let lastWriteMs = 0
 let lastFlushMs = 0
 let sessionBuffer: string[] = []
+let streamBuffer = {
+  text: "",
+  reasoning: "",
+  toolInput: "",
+}
 
 function userdataDir(): string {
   const explicit = process.env.OPENCODE_USERDATA
@@ -61,10 +66,18 @@ function compact(value: string): string {
 }
 
 function redact(value: string): string {
-  return value
+  let redacted = value
     .replace(/Bearer\s+[A-Za-z0-9._\-+/=]+/g, "Bearer <hidden>")
     .replace(/(api[_-]?key\s*[=:]\s*)[^\s,;]+/gi, "$1<hidden>")
     .replace(/(password\s*[=:]\s*)[^\s,;]+/gi, "$1<hidden>")
+    .replace(/((?:token|secret|credential)\s*[=:]\s*)[^\s,;]+/gi, "$1<hidden>")
+  for (const [key, raw] of Object.entries(process.env)) {
+    if (!/(api.*key|token|secret|credential|password)/i.test(key)) continue
+    const value = String(raw || "").trim()
+    if (value.length < 8) continue
+    redacted = redacted.split(value).join("<hidden>")
+  }
+  return redacted
 }
 
 function collectText(value: any, out: string[], depth = 0): void {
@@ -130,7 +143,7 @@ function activityTitle(date = new Date()): string {
   return `OpenCode session autosave ${dayStamp(date)} ${String(date.getHours()).padStart(2, "0")}:${String(bucket).padStart(2, "0")}`
 }
 
-function runAgentOps(base: string, args: string[]): void {
+function runAgentOpsAsync(base: string, args: string[]): void {
   const script = agentopsPath(base)
   if (!existsSync(script)) return
   const env = {
@@ -142,20 +155,24 @@ function runAgentOps(base: string, args: string[]): void {
     ["py", ["-3.11", script, ...args]],
     ["python", [script, ...args]],
   ]
-  for (const [exe, exeArgs] of runners) {
+  const attempt = (index: number): void => {
+    if (index >= runners.length) return
+    const [exe, exeArgs] = runners[index]
     try {
-      execFileSync(exe, exeArgs, {
+      execFile(exe, exeArgs, {
         cwd: base,
         env,
         encoding: "utf-8",
-        stdio: ["ignore", "ignore", "ignore"],
         timeout: 8000,
+        windowsHide: true,
+      }, (error) => {
+        if (error) attempt(index + 1)
       })
-      return
     } catch {
-      // try next runner
+      attempt(index + 1)
     }
   }
+  attempt(0)
 }
 
 function rememberSessionActivity(base: string, force = false): void {
@@ -167,10 +184,32 @@ function rememberSessionActivity(base: string, force = false): void {
     lastFlushMs = now
     sessionBuffer = []
     if (!body) return
-    runAgentOps(base, ["log-activity", body.slice(0, MAX_EVENT_CHARS), "--title", activityTitle()])
+    runAgentOpsAsync(base, ["log-activity", body.slice(0, MAX_EVENT_CHARS), "--title", activityTitle()])
   } catch {
     // Memory promotion is best-effort; raw Obsidian autosave is already written.
   }
+}
+
+function streamBucket(type: string): "text" | "reasoning" | "toolInput" | "" {
+  if (type.includes(".text.")) return "text"
+  if (type.includes(".reasoning.")) return "reasoning"
+  if (type.includes(".tool.input.")) return "toolInput"
+  return ""
+}
+
+function bufferEventText(type: string, text: string): void {
+  const bucket = streamBucket(type)
+  if (!bucket || !text) return
+  const prior = streamBuffer[bucket]
+  streamBuffer[bucket] = compact(`${prior}\n${text}`).slice(0, MAX_EVENT_CHARS)
+}
+
+function takeBufferedText(type: string): string {
+  const bucket = streamBucket(type)
+  if (!bucket) return ""
+  const text = streamBuffer[bucket]
+  streamBuffer[bucket] = ""
+  return text
 }
 
 function writeEvent(event: any, base: string): void {
@@ -178,6 +217,16 @@ function writeEvent(event: any, base: string): void {
     ensureSessionFile()
     const type = String(event?.type || "event")
     const text = usefulText(event)
+    if (
+      type === "session.next.text.delta" ||
+      type === "session.next.reasoning.delta" ||
+      type === "session.next.tool.input.delta"
+    ) {
+      bufferEventText(type, text)
+      return
+    }
+    const buffered = takeBufferedText(type)
+    const mergedText = compact([buffered, text].filter(Boolean).join("\n\n")).slice(0, MAX_EVENT_CHARS)
     const statusType = String(event?.properties?.status?.type || event?.status?.type || "")
     const shouldFlush = (
       type === "session.idle" ||
@@ -185,20 +234,23 @@ function writeEvent(event: any, base: string): void {
       type === "session.status" && statusType === "idle" ||
       type === "session.next.step.ended" ||
       type === "session.next.step.failed" ||
-      type === "session.compacting"
+      type === "session.compacting" ||
+      type === "session.next.text.ended" ||
+      type === "session.next.reasoning.ended" ||
+      type === "session.next.tool.input.ended"
     )
-    if (!text && !shouldFlush) return
+    if (!mergedText && !shouldFlush) return
 
     const now = Date.now()
-    const signature = `${type}:${text.slice(0, 400)}`
+    const signature = `${type}:${mergedText.slice(0, 400)}`
     if (signature === lastSignature && now - lastWriteMs < 3000) return
     lastSignature = signature
     lastWriteMs = now
 
     const heading = `\n## ${timeStamp()} ${type}\n`
-    const body = text ? `${text}\n` : "(상태 이벤트)\n"
+    const body = mergedText ? `${mergedText}\n` : "(상태 이벤트)\n"
     appendFileSync(sessionFile(), heading + body, "utf-8")
-    if (text) sessionBuffer.push(`[${type}] ${text}`)
+    if (mergedText) sessionBuffer.push(`[${type}] ${mergedText}`)
     rememberSessionActivity(base, shouldFlush)
   } catch {
     // Autosave must never interrupt the user's session.
