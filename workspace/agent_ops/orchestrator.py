@@ -99,15 +99,51 @@ def run_task(task: Dict[str, Any]) -> Dict[str, Any]:
                 record_success_lesson(task, result.get("result", {}))
             except Exception as exc:
                 append_jsonl(LOGS / "memory_errors.jsonl", {"timestamp": now(), "error": repr(exc)})
+            try:
+                from .self_improvement import capture_task_result
+                capture_task_result(
+                    str(task.get("title", "")),
+                    ok=True,
+                    area=str(task.get("kind", "orchestrator")),
+                    detail=str((result.get("result") or {}).get("outcome") or "orchestrator task succeeded")[:300],
+                    run_id=str(task.get("task_id", "")),
+                    route="orchestrator",
+                )
+            except Exception:
+                pass
             update_checkpoint(f"task done {task.get('task_id')}")
             return {"ok": True, "status": "done", "task": task, "result": result}
         failure = log_failure(str(result.get("error", result)), source="orchestrator", task_id=task.get("task_id", ""))
         mark_task_failed(task, str(result.get("error", result)), failure.get("type", "UNKNOWN"))
+        try:
+            from .self_improvement import capture_task_result
+            capture_task_result(
+                str(task.get("title", "")),
+                ok=False,
+                area=str(task.get("kind", "orchestrator")),
+                detail=str(result.get("error", result))[:300],
+                run_id=str(task.get("task_id", "")),
+                route="orchestrator",
+            )
+        except Exception:
+            pass
         update_checkpoint(f"task failed {task.get('task_id')}")
         return {"ok": False, "status": "failed", "task": task, "failure": failure}
     except Exception as exc:
         failure = log_failure(repr(exc), source="orchestrator_exception", task_id=task.get("task_id", ""))
         mark_task_failed(task, repr(exc), failure.get("type", "UNKNOWN"))
+        try:
+            from .self_improvement import capture_task_result
+            capture_task_result(
+                str(task.get("title", "")),
+                ok=False,
+                area=str(task.get("kind", "orchestrator_exception")),
+                detail=repr(exc)[:300],
+                run_id=str(task.get("task_id", "")),
+                route="orchestrator",
+            )
+        except Exception:
+            pass
         update_checkpoint(f"task exception {task.get('task_id')}")
         return {"ok": False, "status": "exception", "task": task, "failure": failure}
 
@@ -127,9 +163,27 @@ def run_task_parallel(task: Dict[str, Any]) -> Dict[str, Any]:
                 record_success_lesson(task, result.get("result", {}))
             except Exception as exc:
                 append_jsonl(LOGS / "memory_errors.jsonl", {"timestamp": now(), "error": repr(exc)})
+            try:
+                from .self_improvement import capture_task_result
+                capture_task_result(str(task.get("title", "")), ok=True,
+                                    area=str(task.get("kind", "orchestrator_parallel")),
+                                    detail="parallel task succeeded",
+                                    run_id=str(task.get("task_id", "")),
+                                    route="orchestrator_parallel")
+            except Exception:
+                pass
             return {"ok": True, "status": "done", "task": task, "result": result}
         failure = log_failure(str(result.get("error", result)), source="orchestrator", task_id=task.get("task_id", ""))
         mark_task_failed(task, str(result.get("error", result)), failure.get("type", "UNKNOWN"))
+        try:
+            from .self_improvement import capture_task_result
+            capture_task_result(str(task.get("title", "")), ok=False,
+                                area=str(task.get("kind", "orchestrator_parallel")),
+                                detail=str(result.get("error", result))[:300],
+                                run_id=str(task.get("task_id", "")),
+                                route="orchestrator_parallel")
+        except Exception:
+            pass
         return {"ok": False, "status": "failed", "task": task, "failure": failure}
     except Exception as exc:
         failure = log_failure(repr(exc), source="orchestrator_exception", task_id=task.get("task_id", ""))

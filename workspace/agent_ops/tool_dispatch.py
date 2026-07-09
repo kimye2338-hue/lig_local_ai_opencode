@@ -526,6 +526,18 @@ class ToolDispatcher:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception:
             pass  # diagnostics must never break dispatch
+        if not result.get("ok"):
+            try:
+                from .self_improvement import record_error
+                record_error(
+                    "tool_dispatch",
+                    "%s: %s" % (call.get("name", ""), result.get("error", result.get("root_cause_category", ""))),
+                    task=str(call.get("name", "")),
+                    route="tool_dispatch",
+                    source="tool_dispatch",
+                )
+            except Exception:
+                pass
 
     def _audit(self, call: Dict[str, Any], result: Dict[str, Any]) -> None:
         try:
@@ -806,6 +818,29 @@ def run_agent_loop(
             from .memory_manager import record_self_error
             record_self_error(f"에이전트 루프 {outcome}",
                               (final_content or outcome)[:200], task=prompt[:80])
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from .self_improvement import record_error
+            record_error(
+                f"agent_loop:{outcome}",
+                (final_content or outcome)[:300],
+                task=prompt[:120],
+                route="agent_loop",
+                source="agent_loop",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+    elif outcome == "completed":
+        try:
+            from .self_improvement import capture_task_result
+            capture_task_result(
+                prompt,
+                ok=True,
+                area="agent_loop",
+                detail=(final_content or "completed")[:300],
+                route="agent_loop",
+            )
         except Exception:  # noqa: BLE001
             pass
     try:

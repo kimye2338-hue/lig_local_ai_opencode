@@ -7,6 +7,13 @@ import os
 import sys
 from pathlib import Path
 
+# LiteLLM tries to fetch a model cost map from GitHub at import time unless this
+# is set first. OpenCodeLIG is deployed for offline company PCs, so force local
+# bundled metadata before any optional dependency can import LiteLLM.
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+os.environ.setdefault("LITELLM_LOCAL_POLICY_TEMPLATES", "True")
+os.environ.setdefault("LITELLM_LOCAL_BLOG_POSTS", "True")
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -606,6 +613,17 @@ def _complete_activity(task: str, outcome: str = "", *, ok: bool = True,
             from agent_ops.memory_manager import record_self_error
             result["logged"] = record_self_error(
                 task, error_detail or outcome, dedupe_day=True) is not None
+        try:
+            from agent_ops.self_improvement import capture_task_result
+            capture_task_result(
+                task,
+                ok=ok,
+                area=str(kind or "activity"),
+                detail=(error_detail or outcome or ""),
+                route=str(route or ""),
+            )
+        except Exception:  # noqa: BLE001 - 자가개선 기록 실패가 본 작업을 막으면 안 된다
+            pass
     except Exception:  # noqa: BLE001 - 자동 적재 실패가 작업을 막으면 안 된다
         pass
     return result
@@ -972,7 +990,15 @@ def cmd_recall(args):
                 r = dict(r)
                 r["body"] = body[:max_len] + "…(절단)"
             display.append(r)
-        print(format_recall_for_prompt(display))
+        out = format_recall_for_prompt(display)
+        try:
+            from agent_ops.self_improvement import format_injection_block
+            block = format_injection_block()
+            if block:
+                out = out + "\n\n" + block
+        except Exception:  # noqa: BLE001
+            pass
+        print(out)
         return 0
     keywords = extract_keywords(" ".join(args.keywords))
     items = recall(task_kind=args.kind or "", keywords=keywords, limit=args.limit)
@@ -1485,6 +1511,40 @@ def cmd_wiki(args):
     return 0
 
 
+def cmd_quality_gate(args):
+    from agent_ops.quality_gate import run_quality_gate
+    result = run_quality_gate(
+        ROOT,
+        run_commands=not getattr(args, "no_commands", False),
+        out=Path(args.out) if getattr(args, "out", "") else None,
+    )
+    print(result.to_markdown())
+    if result.report_path:
+        print(f"Report: {result.report_path}")
+    return 0 if result.ok else 1
+
+
+def cmd_self_improve(args):
+    from agent_ops import self_improvement as si
+    op = getattr(args, "op", "status")
+    if op == "on":
+        print(json.dumps(si.set_enabled(True), ensure_ascii=False, indent=2))
+        return 0
+    if op == "off":
+        print(json.dumps(si.set_enabled(False), ensure_ascii=False, indent=2))
+        return 0
+    if op == "report":
+        path = si.render_report()
+        print(path.read_text(encoding="utf-8", errors="replace"))
+        print(f"Report: {path}")
+        return 0
+    if op == "inject":
+        print(si.format_injection_block())
+        return 0
+    print(json.dumps(si.status(), ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_weekly(args):
     from agent_ops.secretary import build_weekly_report
     path, text = build_weekly_report()
@@ -1541,6 +1601,8 @@ def main(argv=None):
     sub.add_parser("weekly").set_defaults(func=cmd_weekly)
     p = sub.add_parser("book"); p.add_argument("--open", action="store_true"); p.set_defaults(func=cmd_book)
     p = sub.add_parser("wiki"); p.add_argument("--curate", action="store_true"); p.add_argument("--open", action="store_true"); p.set_defaults(func=cmd_wiki)
+    p = sub.add_parser("quality-gate"); p.add_argument("--no-commands", action="store_true"); p.add_argument("--out", default=""); p.set_defaults(func=cmd_quality_gate)
+    p = sub.add_parser("self-improve"); p.add_argument("op", choices=["status", "on", "off", "report", "inject"], nargs="?", default="status"); p.set_defaults(func=cmd_self_improve)
     p = sub.add_parser("safety-check"); p.add_argument("text", nargs="*"); p.set_defaults(func=cmd_safety_check)
     p = sub.add_parser("safe-write"); p.add_argument("target"); p.add_argument("content_file"); p.set_defaults(func=cmd_safe_write)
     args = parser.parse_args(argv)
