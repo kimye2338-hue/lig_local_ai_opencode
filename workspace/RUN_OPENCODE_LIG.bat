@@ -21,6 +21,7 @@ if not defined LIG_PROJECT_DIR (
 if /I "%LIG_PROJECT_DIR%"=="%USERPROFILE%" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
 if /I "%LIG_PROJECT_DIR%"=="%WINDIR%\System32" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
 if /I "%LIG_PROJECT_DIR%"=="%WINDIR%\SysWOW64" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
+for %%I in ("%LIG_PROJECT_DIR%") do if /I "%%~fI"=="%%~dI\\" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
 
 set "LIG_AGENTOPS_HOME=%AGENTOPS_HOME%"
 set "OCODE_EXE=%OC_ROOT%\bin\opencode.exe"
@@ -79,9 +80,6 @@ for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%LIG_API_ENV_FILE%") do (
   if not "%%A"=="" set "%%A=%%B"
 )
 
-rem First-run convenience: keep a copy of workspace config under userdata config.
-if exist "%AGENTOPS_HOME%\config" xcopy /D /E /I /Y "%AGENTOPS_HOME%\config\*" "%OPENCODE_USERDATA%\config\" >nul
-
 rem 햄스터 시작 전 상태 리셋.
 >"%LIG_STATE_DIR%\current_status.json" echo {"status":"idle","task":"idle"}
 del /q "%LIG_DIAG_DIR%\agent-loop-last.json" >nul 2>&1
@@ -113,12 +111,11 @@ if defined HAMSTER_PY (
   rem Make sure hamster can import agent_ops from the real workspace.
   set "LIG_AGENTOPS_HOME=%LIG_WORKSPACE_HOME%"
   set "PYTHONPATH=%LIG_WORKSPACE_HOME%;%PYTHONPATH%"
-
-  where py >nul 2>nul
-  if not errorlevel 1 (
-    start "OpenCodeLIG Hamster" /MIN /D "%LIG_WORKSPACE_HOME%" py -3.11 "%HAMSTER_PY%"
+  if exist "%AGENTOPS_HOME%\launch\_pyw.bat" (
+    call "%AGENTOPS_HOME%\launch\_pyw.bat"
+    if not errorlevel 1 start "OpenCodeLIG Hamster" /B /MIN /D "%LIG_WORKSPACE_HOME%" %PYW% "%HAMSTER_PY%"
   ) else (
-    start "OpenCodeLIG Hamster" /MIN /D "%LIG_WORKSPACE_HOME%" python "%HAMSTER_PY%"
+    start "OpenCodeLIG Hamster" /B /MIN /D "%LIG_WORKSPACE_HOME%" pythonw "%HAMSTER_PY%"
   )
 ) else (
   >>"%LIG_LAUNCH_LOG%" echo [%time%] hamster_overlay.py not found
@@ -167,10 +164,19 @@ set "OPENCODE_FAST_BASE=%OPENCODE_USERDATA%\opencode_fast_runtime"
 set "OPENCODE_FAST_CONFIG=%OPENCODE_FAST_BASE%\config"
 set "OPENCODE_FAST_DATA=%OPENCODE_FAST_BASE%\data"
 set "OPENCODE_FAST_CACHE=%OPENCODE_FAST_BASE%\cache"
+set "OPENCODE_LEGACY_CONFIG=%OPENCODE_USERDATA%\config"
+set "OPENCODE_LEGACY_DATA=%OPENCODE_USERDATA%\data"
+set "OPENCODE_LEGACY_CACHE=%OPENCODE_USERDATA%\cache"
 
 if not exist "%OPENCODE_FAST_CONFIG%" mkdir "%OPENCODE_FAST_CONFIG%" >nul 2>&1
 if not exist "%OPENCODE_FAST_DATA%" mkdir "%OPENCODE_FAST_DATA%" >nul 2>&1
 if not exist "%OPENCODE_FAST_CACHE%" mkdir "%OPENCODE_FAST_CACHE%" >nul 2>&1
+if not exist "%OPENCODE_FAST_BASE%\.migrated" (
+  if exist "%OPENCODE_LEGACY_CONFIG%" robocopy "%OPENCODE_LEGACY_CONFIG%" "%OPENCODE_FAST_CONFIG%" /E >nul
+  if exist "%OPENCODE_LEGACY_DATA%" robocopy "%OPENCODE_LEGACY_DATA%" "%OPENCODE_FAST_DATA%" /E >nul
+  if exist "%OPENCODE_LEGACY_CACHE%" robocopy "%OPENCODE_LEGACY_CACHE%" "%OPENCODE_FAST_CACHE%" /E >nul
+  >"%OPENCODE_FAST_BASE%\.migrated" echo migrated
+)
 
 set "OPENCODE_CONFIG_DIR=%OPENCODE_FAST_CONFIG%"
 set "XDG_CONFIG_HOME=%OPENCODE_FAST_CONFIG%"

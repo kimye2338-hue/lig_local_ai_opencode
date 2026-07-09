@@ -62,6 +62,8 @@ def test_launcher_uses_fast_runtime_and_blocks_external_startup_waits() -> None:
         assert marker in text
         assert text.index(marker) < run_idx
     assert "set \"OPENCODE_PURE=1\"" not in text
+    assert "%OPENCODE_USERDATA%\\data" in text
+    assert "robocopy" in text
 
 
 def test_launcher_preserves_project_dir_and_only_falls_back_for_unsafe_starts() -> None:
@@ -71,6 +73,7 @@ def test_launcher_preserves_project_dir_and_only_falls_back_for_unsafe_starts() 
     assert "if /I \"%LIG_PROJECT_DIR%\"==\"%USERPROFILE%\" set \"LIG_PROJECT_DIR=%AGENTOPS_HOME%\"" in text
     assert "if /I \"%LIG_PROJECT_DIR%\"==\"%WINDIR%\\System32\" set \"LIG_PROJECT_DIR=%AGENTOPS_HOME%\"" in text
     assert "if /I \"%LIG_PROJECT_DIR%\"==\"%WINDIR%\\SysWOW64\" set \"LIG_PROJECT_DIR=%AGENTOPS_HOME%\"" in text
+    assert 'for %%I in ("%LIG_PROJECT_DIR%") do if /I "%%~fI"=="%%~dI\\\\" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"' in text
     assert 'set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"' not in text.splitlines()
 
 
@@ -83,8 +86,8 @@ def test_launcher_starts_hamster_directly_from_real_ui_path() -> None:
     assert "hamster_overlay_start.log" in text
     assert "set \"LIG_AGENTOPS_HOME=%LIG_WORKSPACE_HOME%\"" in text
     assert "set \"PYTHONPATH=%LIG_WORKSPACE_HOME%;%PYTHONPATH%\"" in text
-    assert "start \"OpenCodeLIG Hamster\" /MIN /D \"%LIG_WORKSPACE_HOME%\" py -3.11 \"%HAMSTER_PY%\"" in text
-    assert "start \"OpenCodeLIG Hamster\" /MIN /D \"%LIG_WORKSPACE_HOME%\" python \"%HAMSTER_PY%\"" in text
+    assert "call \"%AGENTOPS_HOME%\\launch\\_pyw.bat\"" in text
+    assert "start \"OpenCodeLIG Hamster\" /B /MIN /D \"%LIG_WORKSPACE_HOME%\" %PYW% \"%HAMSTER_PY%\"" in text
 
 
 def test_ocd_wrapper_passes_current_folder_when_no_argument() -> None:
@@ -92,8 +95,10 @@ def test_ocd_wrapper_passes_current_folder_when_no_argument() -> None:
     ocd = read(WS / "agent_ops" / "ocd.py")
     hotfix = read(WS / "patches" / "existing_install_hotfix_20260709.py")
 
+    assert "setlocal EnableExtensions" in bat
     assert "if \"%~1\"==\"\" (" in bat
     assert "if not defined LIG_PROJECT_DIR set \"LIG_PROJECT_DIR=%CD%\"" in bat
+    assert "set \"LIG_PROJECT_DIR=%CD%\"" not in bat.replace("if not defined LIG_PROJECT_DIR set \"LIG_PROJECT_DIR=%CD%\"", "")
     assert "env.setdefault(\"LIG_PROJECT_DIR\", str(cwd))" in ocd
     assert "if not defined LIG_PROJECT_DIR set \\\"LIG_PROJECT_DIR=%CD%\\\"" in hotfix
 

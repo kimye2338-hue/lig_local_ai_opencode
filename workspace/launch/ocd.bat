@@ -1,5 +1,6 @@
 @echo off
 chcp 65001 >nul
+setlocal EnableExtensions
 set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 rem ocd - 현재 폴더에서 OpenCodeLIG 를 연다(폴더-로컬 프로필 + 전역 기억).
@@ -15,9 +16,9 @@ if "%~1"=="" (
 )
 rem py 런처가 있으면 3.11 로, 없으면 python 으로 (이중 실행 방지: 한 쪽만).
 where py >nul 2>nul
-if %errorlevel%==0 (
+if not errorlevel 1 (
   set "PY_CMD=py -3.11 -X utf8"
-  %PY_CMD% "%OCDPY%" %*
 ) else (
-  python -X utf8 "%OCDPY%" %*
+  set "PY_CMD=python -X utf8"
 )
+%PY_CMD% "%OCDPY%" %*
