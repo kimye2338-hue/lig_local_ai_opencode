@@ -372,3 +372,29 @@ python agent_ops\agentops.py doctor
 - `py -3.11 workspace\agent_ops\pending_check.py --out-dir dist\_pending_check_full_review4` → PASS 72 / WARN 8 / PENDING 15 / FAIL 0.
 - 명령/산출물 smoke: commands_ok=25/25.
 - 패키지 기준 점검도 PASS 73 / WARN 7 / PENDING 15 / FAIL 0, commands_ok=25/25로 확인했다.
+
+---
+
+## 13. 2026-07-09 현재 단일 패치본 기준
+
+### 반드시 기억할 위치
+- 사내 PC에 적용할 단일 파일: `최종_패치파일.bat`
+- 패치 로직 원본: `workspace/patches/existing_install_hotfix_20260709.py`
+- 상세 작업 로그: `workspace/docs/운영/WORK_LOG_20260709_HOTFIX.md`
+- 세션 자동저장 플러그인: `workspace/.opencode/plugins/session-autosave.ts`
+- AutoCAD 어댑터: `workspace/agent_ops/adapters/autocad_batch.py`
+
+### 현재 패치에 누적된 식별사항
+- `mss` wheel 내장, 이미 설치된 경우 skip.
+- Obsidian은 OpenCode 시작 시 자동 실행하되, 폐쇄망 업데이트 실패 로그가 TUI에 섞이지 않도록 VBS로 분리 실행.
+- `probe-gateway` 미인식 문제는 설치 루트 `bin` wrapper로 보완.
+- `cd 작업폴더` 후 `ocd` 실행 시 작업 기준과 산출물 기준은 해당 폴더, 전역 기억은 `%USERPROFILE%\OpenCodeLIG_USERDATA\memory`.
+- 작업폴더에 `.opencode`/`agent_ops` wrapper가 없으면 자동 초기화.
+- 일반 세션 이벤트도 Obsidian wiki `sessions`에 자동 append하고, 누적분은 활동 기억으로 승격.
+- 회사 AutoCAD 실행 방식은 `"C:\AutoCAD 2019\acad.exe" /p LIGNEX1 /product ACADM`이며, `accoreconsole`이 없으면 GUI `acad.exe ... /b <script.scr>` fallback을 사용.
+
+### 다음 보강 시 원칙
+- 새 패치 파일을 늘리지 말고 `최종_패치파일.bat`와 `existing_install_hotfix_20260709.py`에 누적한다.
+- 사용자가 별도 저장/선택/경로 지정을 하지 않아도 기억, 위키, 산출물 위치, 도구 선택이 자동으로 맞아야 한다.
+- `PASS`처럼 보이는 점검만 추가하지 말고 실제 실행 경로 파일도 같이 갱신해야 한다.
+- 실사용 확인이 필요한 항목은 `PENDING/WARN`으로 남기되, 사용자가 한 번의 점검 파일로 판단할 수 있게 증거와 다음 행동을 구체화한다.

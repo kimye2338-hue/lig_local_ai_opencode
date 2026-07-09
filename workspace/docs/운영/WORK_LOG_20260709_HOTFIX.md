@@ -87,3 +87,44 @@
 - `py -3.11 -m pytest workspace\tests\test_existing_install_hotfix.py workspace\tests\test_autocad_gui_fallback.py -q`
   - 결과: 8 passed
 - `test_final_patch_bat_extracts_and_runs_against_min_install`로 최종 BAT 직접 실행 검증 포함.
+
+## 2026-07-09 현재 패치본 위치와 이어작업 기준
+
+현재 사용해야 하는 단일 패치본:
+
+- 루트 파일: `최종_패치파일.bat`
+- 실제 보강 로직 원본: `workspace/patches/existing_install_hotfix_20260709.py`
+- 세션 자동저장 플러그인 원본: `workspace/.opencode/plugins/session-autosave.ts`
+- AutoCAD 실행 어댑터 원본: `workspace/agent_ops/adapters/autocad_batch.py`
+
+이전 보조 파일 `PATCH_EXISTING_INSTALL_LIG_OPENCODE_20260709.bat.txt`는 이력 확인용이다. 사내 PC에 적용할 때는 `최종_패치파일.bat` 하나만 실행하는 기준으로 유지한다.
+
+현재 단일 패치본에 포함된 사항:
+
+- `mss-10.2.0-py3-none-any.whl` 내장 및 이미 설치된 경우 건너뛰기.
+- Obsidian 자동 실행 유지, 단 OpenCode TUI와 콘솔 출력이 섞이지 않도록 VBS 분리 실행.
+- `probe-gateway`, `probe_gateway`, `gateway-smoke`, `ocd` wrapper 생성.
+- `cd 작업폴더` 후 `ocd` 실행 시 그 폴더를 작업 기준점으로 보존.
+- 작업폴더에 `.opencode`와 `agent_ops` wrapper가 없으면 자동 생성.
+- 산출물 저장 기준은 작업폴더, 장기 기억과 위키 기준은 `%USERPROFILE%\OpenCodeLIG_USERDATA\memory`로 분리.
+- 일반 대화/세션 이벤트를 Obsidian wiki `sessions` 폴더에 즉시 append하는 `session-autosave.ts` 설치.
+- 일정량 이상 쌓인 세션 내용을 `agentops.py log-activity`로 활동 기억에도 자동 승격.
+- AutoCAD 회사 실행 방식 `"C:\AutoCAD 2019\acad.exe" /p LIGNEX1 /product ACADM` 인식.
+- `accoreconsole.exe`가 없을 때 `acad.exe <사본.dwg> /p LIGNEX1 /product ACADM /b <script.scr>` 방식으로 fallback.
+- `pending_check.py`가 위 항목들을 PASS/WARN/PENDING으로 더 정확히 판정하도록 보강.
+
+철학 기준으로 식별된 추가 점검 사항:
+
+- 사용자는 수동 저장을 하지 않아도 기억이 쌓여야 한다. 따라서 OpenCode 재시작 후 `pending_check`의 `세션 자동저장 플러그인` 항목이 PASS여야 한다.
+- OpenCode 창을 닫는 순간까지 모든 대화가 완벽히 보존된다고 단정하지 않는다. 플러그인은 이벤트 수신 즉시 append하므로 대부분의 손실을 줄이지만, 실제 OpenCode 이벤트 형태는 실사용으로 확인해야 한다.
+- 작업 산출물은 설치 workspace로 쏠리면 안 된다. `cd 임의폴더 && ocd` 후 파일 생성 명령을 실행했을 때 해당 임의폴더 아래에 결과가 생기는지 확인한다.
+- Obsidian은 자동으로 떠야 하지만, 폐쇄망 업데이트 실패 로그가 OpenCode 화면에 겹치면 안 된다.
+- AutoCAD는 실행파일 탐색 PASS만으로 충분하지 않다. 실제 `.dwg` 사본과 `.scr` 파일 기준으로 GUI fallback 명령이 구성되는지 계속 확인한다.
+- `최종_패치파일.bat`는 계속 단일 진입점이어야 한다. 이후 보강도 새 파일을 늘리지 말고 이 BAT와 `existing_install_hotfix_20260709.py`에 누적한다.
+
+다음 작업자가 먼저 확인할 명령:
+
+```cmd
+py -3.11 -m pytest workspace\tests\test_existing_install_hotfix.py workspace\tests\test_autocad_gui_fallback.py -q
+py -3.11 -m py_compile workspace\agent_ops\adapters\autocad_batch.py workspace\agent_ops\pending_check.py workspace\patches\existing_install_hotfix_20260709.py
+```
