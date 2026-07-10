@@ -144,6 +144,69 @@ python -m pytest tests\test_work_command.py tests\test_quality_gate.py tests\tes
 - .bat CRLF+chcp 65001. command_guard/approval 우회 금지. GitHub push 금지(로컬 커밋만).
 - 미검증을 "완료"로 기록 금지 — 사내망 필요 항목은 아래 체크리스트에 남겨라.
 
+---
+
+# 2차 검증 결과 (2026-07-10, Fable중간 R1/R2/R3 + 직접 게이트) — CF-7 후속수정 필요
+
+Codex 커밋 13개(CF-0~6 대응) 검증. **판정: CF-0/1/2/6 이행 ✅, CF-3/4/5 부분 이행 ⚠️ — HIGH 3건이
+"테스트는 green인데 실동작이 죽은" 상태.** 전 회귀 게이트는 green이나 test_memory_inject_plugin 1건 FAIL(실측).
+
+| CF | 판정 | 요약 |
+|---|---|---|
+| CF-0 | ✅ | env 스크럽+절대경로 문자열 — 계획 그대로, 이전 FAIL 테스트 통과 실측 |
+| CF-1 | ✅ 5/5 | execFileSync 전 플러그인 0건(진짜 비동기), delta 버퍼, redact, 로그 상한(3안 모두), try/catch |
+| CF-2 | ✅ 3/3 | dead-branch 이벤트 삭제, substring 폴백→구조적 판정, 근거 주석 |
+| CF-3 | ⚠️ | 구조 통합(원장 폐기·훅/주입 단일화·승격 위임)은 됐으나 **본기능 dead** (아래 F1) |
+| CF-4 | ⚠️ | ocd/config/CRLF OK. **햄스터 pythonw 미동작 + 루트가드 불능** (F2/F3), 마이그레이션 가드 편차(F8) |
+| CF-5 | ⚠️ | release_contracts 3소비자 단일화 OK. agent.md 변경의 테스트 미갱신 **FAIL 회귀**(F4), hotfix 복제 1곳 잔존(F7) |
+| CF-6 | ✅ | sync 테스트+build_final_patch.py+CRCRLF 교정+재생성 마지막 순서 |
+
+## CF-7. 후속수정 목록 (심각도순 — 각 항목 검증 후 커밋, 마지막에 최종_패치파일 재생성)
+
+**F1 [HIGH·실측] self_fix lesson이 전 프로덕션 경로에서 생성 0건.** 실패 기록 area(=task 문자열 또는
+"에이전트 루프 X")와 성공 capture 조회 area(=kind "activity"/"auto")가 절대 불일치 —
+`자가 관찰 실수: {area}` 제목 필터에 안 걸림(self_improvement.py:103-113, agentops.py:613-627, tool_dispatch:803-809).
+테스트는 area를 인위로 맞춰서만 green. 수정: 실패/성공 양쪽이 같은 키(권장: task 기반 정규화 키를 tags에
+`task:<hash>`로 심고 매칭은 그 태그로)를 쓰도록 정렬 + **실경로 회귀 테스트**(cmd_agent 실패→성공 tmp 실측으로
+lesson 1건 생성) 추가. 함께: area 단독 `errors[0]` fallback 삭제, 매칭된 error에 resolved 마킹(F6).
+
+**F2 [HIGH·실측] RUN bat 햄스터 `%PYW%` 파스타임 확장 → 빈 값, pythonw 미실행**(RUN bat :114-118,
+`if defined HAMSTER_PY (...)` 블록 안 — ocd.bat에서 고친 그 함정 재도입, cmd 프로브 실측 빈 문자열).
+수정: 블록 해체(flat if+goto) 또는 call 서브루틴. 함께 "HAMSTER_PY 해석 홈 기준 /D·LIG_AGENTOPS_HOME 분기"
+미구현분(:112,116 고정경로) 완성.
+
+**F3 [HIGH·실측] 드라이브 루트 denylist 불능**: `if /I "%%~fI"=="%%~dI\\"`가 `C:\` vs `C:\\` 비교로 영구 false
+(백슬래시 1개여야 함). release_contracts·테스트가 깨진 리터럴을 계약으로 고정해 green — **계약·quality_gate·
+테스트 3곳 동반 수정.** `%WINDIR%` 접두 일치도 미구현(등호 3개 그대로) — 함께.
+
+**F4 [MED-HIGH·실측 FAIL] test_memory_inject_plugin.py:62** — CF-5에서 agent.md의 SESSION_RECALL 언급을
+제거했는데 테스트 미갱신 → 현재 스크립트 FAIL(exit 1). 택한 규약(플러그인 절대경로 기록, agent.md 미언급)에 맞게
+테스트를 갱신하고, SESSION_RECALL 폴백을 누가 소비하는지(플러그인만인지) 주석으로 명시.
+
+**F5 [MED·실측] agent 실패 1건 = 원장 2건**: tool_dispatch:803-809("에이전트 루프 X")와 `_complete_activity`
+(area=task) 이중 record_self_error — 제목 상이로 dedupe 불가. 한 곳으로 통일(권장: _complete_activity만,
+tool_dispatch 쪽은 kind 힌트만 전달) + 계획이 요구한 "실패1→기록1·주입1" 회귀 테스트 추가.
+
+**F6 [MED] F1과 동일 커밋 권장**: area 단독 fallback 매칭 삭제, run_id 활용 또는 제거, resolved 마킹.
+
+**F7 [MED] hotfix `PENDING_BLOCK`(existing_install_hotfix_20260709.py:1569, fast_markers :1711-1724)이
+구버전 하드코딩 잔존 + EMBEDDED_TEXT_SOURCES 밖이라 sync 테스트 미커버** — release_contracts import로 교체
+(불가하면 생성 시 주입)하고 sync 대상에 포함. 이거 안 하면 재빌드해도 낡은 검사 배포.
+
+**F8 [MED] fast_runtime 마이그레이션 `.migrated` 플래그 방식**: 이미 fast_runtime을 쓰던 설치본에서 첫 실행 시
+legacy가 최신 fast를 덮어쓸 수 있음(robocopy 기본이 Older도 복사). "fast data가 비어 있을 때만" 조건 병행 +
+robocopy /XO 검토.
+
+**F9 [MED-LOW] delta 버퍼 유실**: `session.error`/`session.idle`/`step.ended`로 스트림이 끝나면 버퍼 미플러시 —
+해당 이벤트에서도 플러시 추가(session-autosave.ts).
+
+**F10 [LOW 묶음]** quality_gate 비-CLI 테스트 작업트리 오염(out=tmp), launcher_ocd_project_dir 정확일치 매칭,
+memory-inject 쿨다운 선점 레이스, lesson 생성 시 render_report 비용, 구 si 원장(events/lessons.jsonl) 미이관 안내,
+사내망 체크리스트에 `LIG_DIAG_EVENTS=1` 선행 조건 명시.
+
+**완료 후**: `python patches\build_final_patch.py`로 최종_패치파일.bat 재생성(반드시 마지막) + 전체 게이트
+(이 문서 회귀 게이트 + `py -3.11 tests\test_memory_inject_plugin.py` 추가) green 확인 후 커밋.
+
 ## 사내망 확인 체크리스트 (코드로 해결 불가 — 수정 후 사용자 확인)
 1. TUI 시작 속도(CF-1 이후 execFileSync 제거 효과) + 햄스터 표시.
 2. fast_runtime 마이그레이션 후 기존 세션 이력(/resume)·인증 보존 여부.
