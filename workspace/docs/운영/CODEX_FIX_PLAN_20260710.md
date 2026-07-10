@@ -207,6 +207,24 @@ memory-inject 쿨다운 선점 레이스, lesson 생성 시 render_report 비용
 **완료 후**: `python patches\build_final_patch.py`로 최종_패치파일.bat 재생성(반드시 마지막) + 전체 게이트
 (이 문서 회귀 게이트 + `py -3.11 tests\test_memory_inject_plugin.py` 추가) green 확인 후 커밋.
 
+## CF-7 3차 검증 결과 (2026-07-10, 커밋 3fb62b8) — **전 항목 통과 ✅**
+
+직접 실측 검증(diff 정독 + cmd 프로브 + 테스트 실행):
+- **F1 ✅** self_fix 실경로 회귀 테스트 신설(`_complete_activity` 실패→성공 → error resolved + lesson source=self_fix 생성) — 인위 area 아닌 프로덕션 진입점 사용 확인.
+- **F2 ✅** 햄스터 블록 flat if로 해체(각 줄 실행 직전 파싱 → `%PYW%` 정상 확장), `_pyw.bat` 선호출, `HAMSTER_HOME` 해석 홈 기준 `/D`/PYTHONPATH 분기 구현.
+- **F3 ✅** 루트가드 `"%%~dI\"` 백슬래시 1개 교정 + `findstr /B` WINDIR 접두 추가 — **cmd 프로브 실측**: `C:\`→치환, 일반경로→보존, `%WINDIR%\Temp`→치환.
+- **F4 ✅** test_memory_inject_plugin 24 PASS(테스트 규약 갱신).
+- **F5 ✅** tool_dispatch record_self_error grep 0건 — 실패 1건=원장 1건.
+- **F6 ✅** errors[0] fallback 제거, 매칭 error에 `update_memory_status(..., "resolved", note=self_fix:id)` 마킹.
+- **F7 ✅** hotfix가 `create_release_contracts()` 생성 + PENDING_BLOCK이 release_contracts import.
+- **F8 ✅** (커밋 diff 내 마이그레이션 가드 보강 — 사내망 실검증은 체크리스트 유지)
+- **F9 ✅** session.idle/error/step.ended에서 버퍼 플러시.
+- **F10/재생성 ✅** build_final_patch.py 갱신 + 최종_패치파일.bat 같은 커밋에서 재생성.
+
+게이트 전체 green: pytest 5스위트 **37 passed**(신규 F1 테스트 포함) + 스크립트식(tool_dispatch 28,
+auto_learning_hooks 18, memory_quality 35, recall_stemming 9, launch_bats 101, intelligence_map 168,
+memory_inject_plugin 24). **오프라인에서 검증 가능한 것은 전부 닫힘 — 남은 것은 아래 사내망 체크리스트뿐.**
+
 ## 사내망 확인 체크리스트 (코드로 해결 불가 — 수정 후 사용자 확인)
 1. TUI 시작 속도(CF-1 이후 execFileSync 제거 효과) + 햄스터 표시.
 2. fast_runtime 마이그레이션 후 기존 세션 이력(/resume)·인증 보존 여부.
