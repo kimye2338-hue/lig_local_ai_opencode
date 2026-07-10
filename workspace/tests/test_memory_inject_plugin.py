@@ -59,7 +59,8 @@ def main() -> None:
           "experimental.session.compacting" in text and "pushContext" in text)
     check("/start runs recall pinned first",
           "python agent_ops/agentops.py recall --pinned" in start)
-    check("agent instructions mention SESSION_RECALL fallback", "SESSION_RECALL.md" in agent)
+    check("agent instructions rely on pinned memory instead of SESSION_RECALL path",
+          "OpenCodeLIG pinned memory" in agent and "SESSION_RECALL.md" not in agent)
     check("agent instructions ask to remember useful lesson", "agentops.py remember" in agent)
 
     # --- compaction 요약은 remember(규칙) 아닌 log-activity(활동)로 ---

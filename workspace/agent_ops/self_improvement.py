@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -131,8 +132,19 @@ def _dedupe_tag(row: Dict[str, Any]) -> str:
 
 
 def _task_marker(task: str) -> str:
-    value = " ".join(str(task or "").split())[:80]
-    return f"task:{value}" if value else ""
+    value = " ".join(str(task or "").split())
+    if not value:
+        return ""
+    return "task:" + hashlib.sha1(value.encode("utf-8")).hexdigest()[:12]
+
+
+def _run_marker(run_id: str) -> str:
+    value = " ".join(str(run_id or "").split())[:80]
+    return f"run:{value}" if value else ""
+
+
+def _tags(row: Dict[str, Any]) -> List[str]:
+    return [str(tag) for tag in (row.get("tags") or []) if str(tag).strip()]
 
 
 def record_error(area: str, detail: str, *, task: str = "", run_id: str = "",
@@ -140,17 +152,24 @@ def record_error(area: str, detail: str, *, task: str = "", run_id: str = "",
     if not enabled():
         return None
     from .memory_manager import record_self_error
-    return record_self_error(area, detail or "", task=task or "")
+    tags = [tag for tag in [_task_marker(task), _run_marker(run_id), f"area:{area}" if area else ""] if tag]
+    return record_self_error(area, detail or "", task=task or "", extra_tags=tags)
 
 
-def _matching_error(task: str, area: str) -> Optional[Dict[str, Any]]:
-    task_text = " ".join(str(task or "").split())[:80]
-    for row in _self_errors(area):
-        body = str(row.get("body", ""))
-        if task_text and task_text in body:
+def _matching_error(task: str, area: str, run_id: str = "") -> Optional[Dict[str, Any]]:
+    task_tag = _task_marker(task)
+    run_tag = _run_marker(run_id)
+    for row in _self_errors():
+        tags = _tags(row)
+        if run_tag and run_tag in tags:
             return row
-    errors = _self_errors(area)
-    return errors[0] if errors else None
+        if task_tag and task_tag in tags:
+            return row
+    for row in _self_errors(area):
+        tags = _tags(row)
+        if task_tag and task_tag in tags:
+            return row
+    return None
 
 
 def _existing_lesson(tag: str, action: str) -> Optional[Dict[str, Any]]:
@@ -173,7 +192,7 @@ def capture_task_result(task: str, *, ok: bool, area: str = "task",
     if not ok:
         return record_error(area, detail, task=task, run_id=run_id, route=route, source="auto")
 
-    error = _matching_error(task, area)
+    error = _matching_error(task, area, run_id)
     if not error:
         return None
 
@@ -185,8 +204,11 @@ def capture_task_result(task: str, *, ok: bool, area: str = "task",
     if existing and str(existing.get("created_at", ""))[:10] == _today():
         return existing
 
-    from .memory_manager import add_memory_event, extract_keywords
+    from .memory_manager import add_memory_event, extract_keywords, update_memory_status
     tags = [t for t in [dedupe, _task_marker(task), f"area:{area}"] if t]
+    run_tag = _run_marker(run_id)
+    if run_tag:
+        tags.append(run_tag)
     tags.extend(extract_keywords(f"{task} {area} {fix}")[:5])
     lesson = add_memory_event(
         "lesson",
@@ -197,6 +219,7 @@ def capture_task_result(task: str, *, ok: bool, area: str = "task",
         source="self_fix",
         tags=tags,
     )
+    update_memory_status(str(error.get("id", "")), "resolved", note=f"self_fix:{lesson.get('id', '')}")
     if get_settings().get("auto_wiki", True):
         render_report()
     return lesson

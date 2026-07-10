@@ -37,7 +37,7 @@ LAUNCHER_HAMSTER_MARKERS = (
     "agent_ops\\ui\\hamster_overlay.py",
     "hamster_overlay_start.log",
     'start "OpenCodeLIG Hamster"',
-    "LIG_AGENTOPS_HOME=%LIG_WORKSPACE_HOME%",
+    "HAMSTER_HOME=%LIG_WORKSPACE_HOME%",
 )
 
 LAUNCHER_PROJECT_DIR_MARKERS = (
@@ -49,7 +49,7 @@ LAUNCHER_PROJECT_DIR_MARKERS = (
 )
 
 LAUNCHER_DRIVE_ROOT_FALLBACK = (
-    'for %%I in ("%LIG_PROJECT_DIR%") do if /I "%%~fI"=="%%~dI\\\\" '
+    'for %%I in ("%LIG_PROJECT_DIR%") do if /I "%%~fI"=="%%~dI\\" '
     'set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"'
 )
 

@@ -63,6 +63,22 @@ def upsert_raw_constant(doc: str, name: str, body: str, *, anchor: str) -> str:
     return doc[:idx] + block + doc[idx:]
 
 
+def replace_patch_run_launcher_body(doc: str, launcher_body: str) -> str:
+    fn_marker = "def patch_run_launcher() -> None:"
+    start = doc.find(fn_marker)
+    if start < 0:
+        raise RuntimeError("patch_run_launcher function not found")
+    text_marker = "    text = r'''"
+    text_start = doc.find(text_marker, start)
+    if text_start < 0:
+        raise RuntimeError("patch_run_launcher launcher body start not found")
+    body_start = text_start + len(text_marker)
+    body_end = doc.find("\n'''\n    write_crlf(launcher, text)", body_start)
+    if body_end < 0:
+        raise RuntimeError("patch_run_launcher launcher body end not found")
+    return doc[:text_start] + text_marker + launcher_body.rstrip("\n") + doc[body_end:]
+
+
 def ensure_release_contracts_function(doc: str) -> str:
     marker = "def create_release_contracts() -> None:"
     if marker in doc:
@@ -117,6 +133,7 @@ def sync_hotfix_sources() -> str:
     doc = ensure_release_contracts_function(doc)
     doc = ensure_release_contracts_main_call(doc)
     doc = ensure_release_contracts_verification(doc)
+    doc = replace_patch_run_launcher_body(doc, normalize_text(read_text(WS / "RUN_OPENCODE_LIG.bat")))
     HOTFIX.write_text(doc, encoding="utf-8", newline="\n")
     return doc
 

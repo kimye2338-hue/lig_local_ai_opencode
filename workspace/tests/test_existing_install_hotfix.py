@@ -259,3 +259,19 @@ def test_hotfix_embedded_sources_match_repo_files() -> None:
         embedded = text[body_start:end].replace("\r\n", "\n")
         source = source_path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").rstrip("\n")
         assert embedded == source, f"{const_name} drifted from {source_path}"
+
+
+def test_hotfix_canonical_launcher_body_matches_repo_launcher() -> None:
+    text = HOTFIX.read_text(encoding="utf-8")
+    fn_marker = "def patch_run_launcher() -> None:"
+    start = text.find(fn_marker)
+    assert start >= 0
+    body_marker = "    text = r'''"
+    body_start = text.find(body_marker, start)
+    assert body_start >= 0
+    body_start += len(body_marker)
+    body_end = text.find("\n'''\n    write_crlf(launcher, text)", body_start)
+    assert body_end >= 0
+    embedded = text[body_start:body_end].replace("\r\n", "\n").rstrip("\n")
+    source = (WS / "RUN_OPENCODE_LIG.bat").read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").rstrip("\n")
+    assert embedded == source

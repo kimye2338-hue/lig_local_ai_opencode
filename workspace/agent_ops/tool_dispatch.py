@@ -798,15 +798,6 @@ def run_agent_loop(
                       message=(final_content or outcome)[:120], task=prompt[:60])
     except Exception:  # noqa: BLE001
         pass
-    # 시행착오의 기계적 학습: 루프가 비정상 종료하면 그 패턴을 기억에 남긴다.
-    # 다음 작업에서 pinned_recall 이 이 교훈을 '반드시' 주입한다.
-    if outcome in ("tool_loop_cutoff", "llm_failed", "max_turns_exceeded"):
-        try:
-            from .memory_manager import record_self_error
-            record_self_error(f"에이전트 루프 {outcome}",
-                              (final_content or outcome)[:200], task=prompt[:80])
-        except Exception:  # noqa: BLE001
-            pass
     try:
         diag = Path(diag_dir) if diag_dir else DIAG_DIR
         diag.mkdir(parents=True, exist_ok=True)

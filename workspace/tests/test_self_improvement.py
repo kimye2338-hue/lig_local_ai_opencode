@@ -130,3 +130,26 @@ def test_agentops_self_improve_cli_status_on_off_and_report(tmp_path: Path) -> N
     assert report.returncode == 0
     assert (tmp_path / "report.md").exists()
     assert "Self Improvement Report" in report.stdout
+
+
+def test_complete_activity_failure_then_success_creates_self_fix_lesson(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("LIG_SELF_IMPROVEMENT_DIR", str(tmp_path))
+    monkeypatch.setenv("AGENTOPS_MEMORY_DIR", str(tmp_path / "memory"))
+    _reload_modules()
+    from agent_ops.agentops import _complete_activity
+
+    _complete_activity("햄스터 상태 표시 수정", ok=False, error_detail="subagent 작업 중 상태가 보이지 않음")
+    _complete_activity(
+        "햄스터 상태 표시 수정",
+        "hamster-status.ts에서 task/subagent 이벤트를 working으로 기록",
+        ok=True,
+        kind="activity",
+        route="plugin",
+    )
+
+    rows = _read_jsonl(tmp_path / "memory" / "memory.jsonl")
+    kinds = [row["kind"] for row in rows]
+    assert kinds == ["error_pattern", "activity", "lesson"]
+    assert rows[2]["source"] == "self_fix"
+    assert "working" in rows[2]["body"]
+    assert rows[0]["status"] == "resolved"

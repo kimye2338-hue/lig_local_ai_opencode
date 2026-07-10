@@ -610,9 +610,14 @@ def _complete_activity(task: str, outcome: str = "", *, ok: bool = True,
                 body = f"{body} / {extra}" if body else extra
             result["logged"] = add_activity(task, body) is not None
         else:
-            from agent_ops.memory_manager import record_self_error
-            result["logged"] = record_self_error(
-                task, error_detail or outcome, dedupe_day=True) is not None
+            from agent_ops.self_improvement import capture_task_result
+            result["logged"] = capture_task_result(
+                task,
+                ok=False,
+                area=str(kind or "activity"),
+                detail=(error_detail or outcome or ""),
+                route=str(route or ""),
+            ) is not None
         if ok:
             try:
                 from agent_ops.self_improvement import capture_task_result

@@ -21,7 +21,8 @@ if not defined LIG_PROJECT_DIR (
 if /I "%LIG_PROJECT_DIR%"=="%USERPROFILE%" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
 if /I "%LIG_PROJECT_DIR%"=="%WINDIR%\System32" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
 if /I "%LIG_PROJECT_DIR%"=="%WINDIR%\SysWOW64" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
-for %%I in ("%LIG_PROJECT_DIR%") do if /I "%%~fI"=="%%~dI\\" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
+echo(%LIG_PROJECT_DIR%| findstr /I /B /C:"%WINDIR%\\" >nul && set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
+for %%I in ("%LIG_PROJECT_DIR%") do if /I "%%~fI"=="%%~dI\" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
 
 set "LIG_AGENTOPS_HOME=%AGENTOPS_HOME%"
 set "OCODE_EXE=%OC_ROOT%\bin\opencode.exe"
@@ -94,33 +95,36 @@ rem ============================================================
 
 set "LIG_WORKSPACE_HOME=%USERPROFILE%\OpenCodeLIG\workspace"
 set "HAMSTER_PY="
+set "HAMSTER_HOME="
 set "HAMSTER_LOG=%LIG_DIAG_DIR%\hamster_overlay_start.log"
 
 if exist "%LIG_WORKSPACE_HOME%\agent_ops\ui\hamster_overlay.py" set "HAMSTER_PY=%LIG_WORKSPACE_HOME%\agent_ops\ui\hamster_overlay.py"
+if exist "%LIG_WORKSPACE_HOME%\agent_ops\ui\hamster_overlay.py" set "HAMSTER_HOME=%LIG_WORKSPACE_HOME%"
 if not defined HAMSTER_PY if exist "%AGENTOPS_HOME%\agent_ops\ui\hamster_overlay.py" set "HAMSTER_PY=%AGENTOPS_HOME%\agent_ops\ui\hamster_overlay.py"
+if not defined HAMSTER_HOME if exist "%AGENTOPS_HOME%\agent_ops\ui\hamster_overlay.py" set "HAMSTER_HOME=%AGENTOPS_HOME%"
+if not defined HAMSTER_PY goto :hamster_not_found
 
-if defined HAMSTER_PY (
-  >>"%LIG_LAUNCH_LOG%" echo [%time%] Starting hamster_overlay.py
-  >>"%LIG_LAUNCH_LOG%" echo HAMSTER_PY=%HAMSTER_PY%
-  >"%HAMSTER_LOG%" echo [%date% %time%] starting hamster
-  >>"%HAMSTER_LOG%" echo HAMSTER_PY=%HAMSTER_PY%
-  >>"%HAMSTER_LOG%" echo LIG_WORKSPACE_HOME=%LIG_WORKSPACE_HOME%
-  >>"%HAMSTER_LOG%" echo AGENTOPS_HOME=%AGENTOPS_HOME%
-  >>"%HAMSTER_LOG%" echo OPENCODE_USERDATA=%OPENCODE_USERDATA%
+>>"%LIG_LAUNCH_LOG%" echo [%time%] Starting hamster_overlay.py
+>>"%LIG_LAUNCH_LOG%" echo HAMSTER_PY=%HAMSTER_PY%
+>"%HAMSTER_LOG%" echo [%date% %time%] starting hamster
+>>"%HAMSTER_LOG%" echo HAMSTER_PY=%HAMSTER_PY%
+>>"%HAMSTER_LOG%" echo HAMSTER_HOME=%HAMSTER_HOME%
+>>"%HAMSTER_LOG%" echo LIG_WORKSPACE_HOME=%LIG_WORKSPACE_HOME%
+>>"%HAMSTER_LOG%" echo AGENTOPS_HOME=%AGENTOPS_HOME%
+>>"%HAMSTER_LOG%" echo OPENCODE_USERDATA=%OPENCODE_USERDATA%
 
-  rem Make sure hamster can import agent_ops from the real workspace.
-  set "LIG_AGENTOPS_HOME=%LIG_WORKSPACE_HOME%"
-  set "PYTHONPATH=%LIG_WORKSPACE_HOME%;%PYTHONPATH%"
-  if exist "%AGENTOPS_HOME%\launch\_pyw.bat" (
-    call "%AGENTOPS_HOME%\launch\_pyw.bat"
-    if not errorlevel 1 start "OpenCodeLIG Hamster" /B /MIN /D "%LIG_WORKSPACE_HOME%" %PYW% "%HAMSTER_PY%"
-  ) else (
-    start "OpenCodeLIG Hamster" /B /MIN /D "%LIG_WORKSPACE_HOME%" pythonw "%HAMSTER_PY%"
-  )
-) else (
-  >>"%LIG_LAUNCH_LOG%" echo [%time%] hamster_overlay.py not found
-  >"%HAMSTER_LOG%" echo [%date% %time%] hamster_overlay.py not found
-)
+rem Make sure hamster can import agent_ops from the selected home.
+set "LIG_AGENTOPS_HOME=%HAMSTER_HOME%"
+set "PYTHONPATH=%HAMSTER_HOME%;%PYTHONPATH%"
+if exist "%AGENTOPS_HOME%\launch\_pyw.bat" call "%AGENTOPS_HOME%\launch\_pyw.bat"
+if defined PYW start "OpenCodeLIG Hamster" /B /MIN /D "%HAMSTER_HOME%" %PYW% "%HAMSTER_PY%"
+if not defined PYW start "OpenCodeLIG Hamster" /B /MIN /D "%HAMSTER_HOME%" pythonw "%HAMSTER_PY%"
+goto :hamster_done
+
+:hamster_not_found
+>>"%LIG_LAUNCH_LOG%" echo [%time%] hamster_overlay.py not found
+>"%HAMSTER_LOG%" echo [%date% %time%] hamster_overlay.py not found
+:hamster_done
 
 cd /d "%AGENTOPS_HOME%"
 
@@ -172,9 +176,9 @@ if not exist "%OPENCODE_FAST_CONFIG%" mkdir "%OPENCODE_FAST_CONFIG%" >nul 2>&1
 if not exist "%OPENCODE_FAST_DATA%" mkdir "%OPENCODE_FAST_DATA%" >nul 2>&1
 if not exist "%OPENCODE_FAST_CACHE%" mkdir "%OPENCODE_FAST_CACHE%" >nul 2>&1
 if not exist "%OPENCODE_FAST_BASE%\.migrated" (
-  if exist "%OPENCODE_LEGACY_CONFIG%" robocopy "%OPENCODE_LEGACY_CONFIG%" "%OPENCODE_FAST_CONFIG%" /E >nul
-  if exist "%OPENCODE_LEGACY_DATA%" robocopy "%OPENCODE_LEGACY_DATA%" "%OPENCODE_FAST_DATA%" /E >nul
-  if exist "%OPENCODE_LEGACY_CACHE%" robocopy "%OPENCODE_LEGACY_CACHE%" "%OPENCODE_FAST_CACHE%" /E >nul
+  if not exist "%OPENCODE_FAST_CONFIG%\*" if exist "%OPENCODE_LEGACY_CONFIG%" robocopy "%OPENCODE_LEGACY_CONFIG%" "%OPENCODE_FAST_CONFIG%" /E /XO >nul
+  if not exist "%OPENCODE_FAST_DATA%\*" if exist "%OPENCODE_LEGACY_DATA%" robocopy "%OPENCODE_LEGACY_DATA%" "%OPENCODE_FAST_DATA%" /E /XO >nul
+  if not exist "%OPENCODE_FAST_CACHE%\*" if exist "%OPENCODE_LEGACY_CACHE%" robocopy "%OPENCODE_LEGACY_CACHE%" "%OPENCODE_FAST_CACHE%" /E /XO >nul
   >"%OPENCODE_FAST_BASE%\.migrated" echo migrated
 )
 

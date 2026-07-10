@@ -36,6 +36,30 @@
   - `22ea48c centralize release runtime contracts`
   - `5df9726 rebuild offline hotfix and final patch bat`
 
+## 2026-07-10 - CF-7 follow-up closed
+
+- 자가개선 매칭 키를 task/run 태그 기준으로 정렬했다.
+  `_complete_activity` 실패 후 같은 작업이 성공하면 `self_fix` lesson이 실제 경로에서 생성되고,
+  원래 error는 `resolved`로 바뀐다.
+- agent 실패의 이중 error 기록을 제거했다.
+  이제 루프 비정상 종료는 `_complete_activity` 경로 1회만 기록한다.
+- 런처의 햄스터 시작 블록을 평탄화했다.
+  `%PYW%` 파스타임 확장 문제를 없앴고, `HAMSTER_HOME` 기준으로 pythonw/작업경로/env를 맞춘다.
+- 드라이브 루트 가드는 실제로 동작하도록 수정했다.
+  `C:\` 비교 문자열을 바로잡고 `%WINDIR%\` 접두 경로도 설치 workspace로 되돌린다.
+- fast runtime 마이그레이션은 fast 디렉터리가 비어 있을 때만 수행하고, `robocopy /XO`로 기존 fast 쪽을 덮어쓰지 않게 했다.
+- 기존 설치본 핫픽스는 `release_contracts.py`를 import해 진단 계약을 본 코드와 공유한다.
+- `build_final_patch.py`가 이제 `patch_run_launcher()` 내부의 canonical launcher 본문까지 현재 `RUN_OPENCODE_LIG.bat`와 동기화한다.
+
+검증:
+
+- `py -3.11 -m pytest tests\test_existing_install_hotfix.py tests\test_quality_gate.py tests\test_self_improvement.py tests\test_opencode_lig_plugin_runtime.py -q`
+  - 결과: `33 passed`
+- `py -3.11 tests\test_launch_bats.py`
+  - 결과: `ALL 101 CHECKS PASSED`
+- `py -3.11 tests\test_memory_inject_plugin.py`
+  - 결과: `ALL 24 CHECKS PASSED`
+
 ## 2026-07-05 - FULL (완전 오토) permission tier
 
 - TUI patch: permission policy is now a 3-way cycle ASK → AUTO → FULL

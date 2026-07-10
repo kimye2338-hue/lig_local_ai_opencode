@@ -568,6 +568,8 @@ function pinnedRecallBlockFromText(recalled) {
 
 function cachedRecallBlock(base) {
   try {
+    // SESSION_RECALL.md is a plugin-owned durable cache. Agent instructions
+    // rely on injected "pinned memory" text, not on this path directly.
     const cached = readFileSync(join(stateDir(base), "SESSION_RECALL.md"), "utf-8").trim()
     if (cached) return cached
   } catch {
@@ -1373,6 +1375,8 @@ if not defined LIG_PROJECT_DIR (
 if /I "%LIG_PROJECT_DIR%"=="%USERPROFILE%" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
 if /I "%LIG_PROJECT_DIR%"=="%WINDIR%\System32" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
 if /I "%LIG_PROJECT_DIR%"=="%WINDIR%\SysWOW64" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
+echo(%LIG_PROJECT_DIR%| findstr /I /B /C:"%WINDIR%\\" >nul && set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
+for %%I in ("%LIG_PROJECT_DIR%") do if /I "%%~fI"=="%%~dI\" set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"
 
 set "LIG_AGENTOPS_HOME=%AGENTOPS_HOME%"
 set "OCODE_EXE=%OC_ROOT%\bin\opencode.exe"
@@ -1431,9 +1435,6 @@ for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%LIG_API_ENV_FILE%") do (
   if not "%%A"=="" set "%%A=%%B"
 )
 
-rem First-run convenience: keep a copy of workspace config under userdata config.
-if exist "%AGENTOPS_HOME%\config" xcopy /D /E /I /Y "%AGENTOPS_HOME%\config\*" "%OPENCODE_USERDATA%\config\" >nul
-
 rem 햄스터 시작 전 상태 리셋.
 >"%LIG_STATE_DIR%\current_status.json" echo {"status":"idle","task":"idle"}
 del /q "%LIG_DIAG_DIR%\agent-loop-last.json" >nul 2>&1
@@ -1448,34 +1449,36 @@ rem ============================================================
 
 set "LIG_WORKSPACE_HOME=%USERPROFILE%\OpenCodeLIG\workspace"
 set "HAMSTER_PY="
+set "HAMSTER_HOME="
 set "HAMSTER_LOG=%LIG_DIAG_DIR%\hamster_overlay_start.log"
 
 if exist "%LIG_WORKSPACE_HOME%\agent_ops\ui\hamster_overlay.py" set "HAMSTER_PY=%LIG_WORKSPACE_HOME%\agent_ops\ui\hamster_overlay.py"
+if exist "%LIG_WORKSPACE_HOME%\agent_ops\ui\hamster_overlay.py" set "HAMSTER_HOME=%LIG_WORKSPACE_HOME%"
 if not defined HAMSTER_PY if exist "%AGENTOPS_HOME%\agent_ops\ui\hamster_overlay.py" set "HAMSTER_PY=%AGENTOPS_HOME%\agent_ops\ui\hamster_overlay.py"
+if not defined HAMSTER_HOME if exist "%AGENTOPS_HOME%\agent_ops\ui\hamster_overlay.py" set "HAMSTER_HOME=%AGENTOPS_HOME%"
+if not defined HAMSTER_PY goto :hamster_not_found
 
-if defined HAMSTER_PY (
-  >>"%LIG_LAUNCH_LOG%" echo [%time%] Starting hamster_overlay.py
-  >>"%LIG_LAUNCH_LOG%" echo HAMSTER_PY=%HAMSTER_PY%
-  >"%HAMSTER_LOG%" echo [%date% %time%] starting hamster
-  >>"%HAMSTER_LOG%" echo HAMSTER_PY=%HAMSTER_PY%
-  >>"%HAMSTER_LOG%" echo LIG_WORKSPACE_HOME=%LIG_WORKSPACE_HOME%
-  >>"%HAMSTER_LOG%" echo AGENTOPS_HOME=%AGENTOPS_HOME%
-  >>"%HAMSTER_LOG%" echo OPENCODE_USERDATA=%OPENCODE_USERDATA%
+>>"%LIG_LAUNCH_LOG%" echo [%time%] Starting hamster_overlay.py
+>>"%LIG_LAUNCH_LOG%" echo HAMSTER_PY=%HAMSTER_PY%
+>"%HAMSTER_LOG%" echo [%date% %time%] starting hamster
+>>"%HAMSTER_LOG%" echo HAMSTER_PY=%HAMSTER_PY%
+>>"%HAMSTER_LOG%" echo HAMSTER_HOME=%HAMSTER_HOME%
+>>"%HAMSTER_LOG%" echo LIG_WORKSPACE_HOME=%LIG_WORKSPACE_HOME%
+>>"%HAMSTER_LOG%" echo AGENTOPS_HOME=%AGENTOPS_HOME%
+>>"%HAMSTER_LOG%" echo OPENCODE_USERDATA=%OPENCODE_USERDATA%
 
-  rem Make sure hamster can import agent_ops from the real workspace.
-  set "LIG_AGENTOPS_HOME=%LIG_WORKSPACE_HOME%"
-  set "PYTHONPATH=%LIG_WORKSPACE_HOME%;%PYTHONPATH%"
+rem Make sure hamster can import agent_ops from the selected home.
+set "LIG_AGENTOPS_HOME=%HAMSTER_HOME%"
+set "PYTHONPATH=%HAMSTER_HOME%;%PYTHONPATH%"
+if exist "%AGENTOPS_HOME%\launch\_pyw.bat" call "%AGENTOPS_HOME%\launch\_pyw.bat"
+if defined PYW start "OpenCodeLIG Hamster" /B /MIN /D "%HAMSTER_HOME%" %PYW% "%HAMSTER_PY%"
+if not defined PYW start "OpenCodeLIG Hamster" /B /MIN /D "%HAMSTER_HOME%" pythonw "%HAMSTER_PY%"
+goto :hamster_done
 
-  where py >nul 2>nul
-  if not errorlevel 1 (
-    start "OpenCodeLIG Hamster" /MIN /D "%LIG_WORKSPACE_HOME%" py -3.11 "%HAMSTER_PY%"
-  ) else (
-    start "OpenCodeLIG Hamster" /MIN /D "%LIG_WORKSPACE_HOME%" python "%HAMSTER_PY%"
-  )
-) else (
-  >>"%LIG_LAUNCH_LOG%" echo [%time%] hamster_overlay.py not found
-  >"%HAMSTER_LOG%" echo [%date% %time%] hamster_overlay.py not found
-)
+:hamster_not_found
+>>"%LIG_LAUNCH_LOG%" echo [%time%] hamster_overlay.py not found
+>"%HAMSTER_LOG%" echo [%date% %time%] hamster_overlay.py not found
+:hamster_done
 
 cd /d "%AGENTOPS_HOME%"
 
@@ -1519,10 +1522,19 @@ set "OPENCODE_FAST_BASE=%OPENCODE_USERDATA%\opencode_fast_runtime"
 set "OPENCODE_FAST_CONFIG=%OPENCODE_FAST_BASE%\config"
 set "OPENCODE_FAST_DATA=%OPENCODE_FAST_BASE%\data"
 set "OPENCODE_FAST_CACHE=%OPENCODE_FAST_BASE%\cache"
+set "OPENCODE_LEGACY_CONFIG=%OPENCODE_USERDATA%\config"
+set "OPENCODE_LEGACY_DATA=%OPENCODE_USERDATA%\data"
+set "OPENCODE_LEGACY_CACHE=%OPENCODE_USERDATA%\cache"
 
 if not exist "%OPENCODE_FAST_CONFIG%" mkdir "%OPENCODE_FAST_CONFIG%" >nul 2>&1
 if not exist "%OPENCODE_FAST_DATA%" mkdir "%OPENCODE_FAST_DATA%" >nul 2>&1
 if not exist "%OPENCODE_FAST_CACHE%" mkdir "%OPENCODE_FAST_CACHE%" >nul 2>&1
+if not exist "%OPENCODE_FAST_BASE%\.migrated" (
+  if not exist "%OPENCODE_FAST_CONFIG%\*" if exist "%OPENCODE_LEGACY_CONFIG%" robocopy "%OPENCODE_LEGACY_CONFIG%" "%OPENCODE_FAST_CONFIG%" /E /XO >nul
+  if not exist "%OPENCODE_FAST_DATA%\*" if exist "%OPENCODE_LEGACY_DATA%" robocopy "%OPENCODE_LEGACY_DATA%" "%OPENCODE_FAST_DATA%" /E /XO >nul
+  if not exist "%OPENCODE_FAST_CACHE%\*" if exist "%OPENCODE_LEGACY_CACHE%" robocopy "%OPENCODE_LEGACY_CACHE%" "%OPENCODE_FAST_CACHE%" /E /XO >nul
+  >"%OPENCODE_FAST_BASE%\.migrated" echo migrated
+)
 
 set "OPENCODE_CONFIG_DIR=%OPENCODE_FAST_CONFIG%"
 set "XDG_CONFIG_HOME=%OPENCODE_FAST_CONFIG%"
@@ -1560,7 +1572,6 @@ set "npm_config_https_proxy="
 "%OCODE_EXE%" %*
 
 exit /b %errorlevel%
-
 '''
     write_crlf(launcher, text)
     log(f"[OK] launcher replaced with canonical OpenCodeLIG launcher (backup: {backup_path})")
@@ -1573,6 +1584,22 @@ PENDING_BLOCK = r'''
 try:
     _LIG_ORIG_RUN_CMD = run_cmd
     _LIG_ORIG_COMMON_PROGRAM_PATHS = common_program_paths
+    try:
+        from agent_ops.release_contracts import (
+            AUTOSAVE_REQUIRED_MARKERS as _LIG_AUTOSAVE_REQUIRED_MARKERS,
+            HAMSTER_EVENT_BRIDGE_MARKERS as _LIG_HAMSTER_EVENT_BRIDGE_MARKERS,
+            LAUNCHER_FAST_RUNTIME_MARKERS as _LIG_LAUNCHER_FAST_RUNTIME_MARKERS,
+            MEMORY_INJECT_REQUIRED_MARKERS as _LIG_MEMORY_INJECT_REQUIRED_MARKERS,
+            PLUGIN_SYNC_GLOB as _LIG_PLUGIN_SYNC_GLOB,
+            REQUIRED_PLUGIN_FILES as _LIG_REQUIRED_PLUGIN_FILES,
+        )
+    except Exception:
+        _LIG_AUTOSAVE_REQUIRED_MARKERS = ()
+        _LIG_HAMSTER_EVENT_BRIDGE_MARKERS = ()
+        _LIG_LAUNCHER_FAST_RUNTIME_MARKERS = ()
+        _LIG_MEMORY_INJECT_REQUIRED_MARKERS = ()
+        _LIG_PLUGIN_SYNC_GLOB = ".opencode\\plugins\\*.ts"
+        _LIG_REQUIRED_PLUGIN_FILES = ()
 
     def run_cmd(args, timeout=30, cwd=None, env=None):  # type: ignore[override]
         try:
@@ -1703,12 +1730,12 @@ except Exception as exc:
         launcher_raw = launcher.read_bytes() if launcher.exists() else b""
         crlf_ok = bool(launcher_raw) and b"\n" not in launcher_raw.replace(b"\r\n", b"")
         pure_disabled = "OPENCODE_PURE=1" not in launcher_text and "--pure" not in launcher_text.lower()
-        sync_all_plugins = ".opencode\\plugins\\*.ts" in launcher_text and "copy /Y" in launcher_text
+        sync_all_plugins = _LIG_PLUGIN_SYNC_GLOB in launcher_text and "copy /Y" in launcher_text
         add(checks, "OpenCode 플러그인 런타임", "OpenCode plugin runtime enabled",
             "PASS" if launcher.exists() and crlf_ok and pure_disabled and sync_all_plugins else "FAIL",
             f"launcher={launcher}; crlf={crlf_ok}; OPENCODE_PURE_disabled={pure_disabled}; sync_all_plugins={sync_all_plugins}",
             "OPENCODE_PURE=1이면 햄스터/자동기억/명령가드 플러그인이 파일만 있고 실행되지 않습니다.")
-        fast_markers = [
+        fast_markers = list(_LIG_LAUNCHER_FAST_RUNTIME_MARKERS[:-1]) if _LIG_LAUNCHER_FAST_RUNTIME_MARKERS else [
             "OPENCODE_FAST_BASE=%OPENCODE_USERDATA%\\opencode_fast_runtime",
             "OPENCODE_CONFIG_DIR=%OPENCODE_FAST_CONFIG%",
             "XDG_CONFIG_HOME=%OPENCODE_FAST_CONFIG%",
@@ -1740,21 +1767,21 @@ except Exception as exc:
             f"ui_path={hamster_ui_path}; log={hamster_log}; start={hamster_start}; no_vbs={hamster_no_vbs}",
             "RUN/ocd 모두에서 햄스터가 뜨도록 VBS 의존 대신 설치 workspace의 ui\\hamster_overlay.py를 직접 실행해야 합니다.")
         plugins = ws / ".opencode" / "plugins"
-        required = ["session-autosave.ts", "memory-inject.ts", "command-guard.ts", "hamster-status.ts", "compaction-handoff.ts"]
+        required = list(_LIG_REQUIRED_PLUGIN_FILES) if _LIG_REQUIRED_PLUGIN_FILES else ["session-autosave.ts", "memory-inject.ts", "command-guard.ts", "hamster-status.ts", "compaction-handoff.ts"]
         missing = [name for name in required if not (plugins / name).exists()]
         add(checks, "OpenCode 플러그인 런타임", "required plugin files",
             "PASS" if not missing else "FAIL",
             f"plugins={plugins}; missing={missing}",
             "필수 플러그인은 프로젝트 폴더로도 자동 동기화되어야 합니다.")
         hamster = (plugins / "hamster-status.ts").read_text(encoding="utf-8", errors="replace") if (plugins / "hamster-status.ts").exists() else ""
-        hamster_markers = ["session.status", "session.next.text.delta", "session.next.step.ended", "session.next.step.failed", "session.next.tool.called"]
+        hamster_markers = list(_LIG_HAMSTER_EVENT_BRIDGE_MARKERS) if _LIG_HAMSTER_EVENT_BRIDGE_MARKERS else ["session.status", "session.next.text.delta", "session.next.step.ended", "session.next.step.failed", "session.next.tool.called"]
         hamster_ok = all(m in hamster for m in hamster_markers) and "writeAtomic" in hamster
         add(checks, "OpenCode 플러그인 런타임", "hamster OpenCode event bridge",
             "PASS" if hamster_ok else "FAIL",
             f"markers={{{', '.join(f'{m}:{m in hamster}' for m in hamster_markers)}}}; atomic={'writeAtomic' in hamster}",
             "햄스터가 최신 OpenCode 이벤트(session.status/session.next.*)를 읽어 current_status.json에 반영해야 합니다.")
         autosave = (plugins / "session-autosave.ts").read_text(encoding="utf-8", errors="replace") if (plugins / "session-autosave.ts").exists() else ""
-        autosave_markers = ['"properties"', '"delta"', '"input"', '"output"', "session.status", "session.next.step.ended", "session.next.step.failed"]
+        autosave_markers = list(_LIG_AUTOSAVE_REQUIRED_MARKERS) if _LIG_AUTOSAVE_REQUIRED_MARKERS else ['"properties"', '"delta"', '"input"', '"output"', "session.status", "session.next.step.ended", "session.next.step.failed"]
         autosave_ok = all(m in autosave for m in autosave_markers) and "Object.entries(value)" in autosave
         add(checks, "OpenCode 플러그인 런타임", "Obsidian autosave event extraction",
             "PASS" if autosave_ok else "FAIL",
@@ -1891,7 +1918,7 @@ LAUNCHER_HAMSTER_MARKERS = (
     "agent_ops\\ui\\hamster_overlay.py",
     "hamster_overlay_start.log",
     'start "OpenCodeLIG Hamster"',
-    "LIG_AGENTOPS_HOME=%LIG_WORKSPACE_HOME%",
+    "HAMSTER_HOME=%LIG_WORKSPACE_HOME%",
 )
 
 LAUNCHER_PROJECT_DIR_MARKERS = (
@@ -1903,7 +1930,7 @@ LAUNCHER_PROJECT_DIR_MARKERS = (
 )
 
 LAUNCHER_DRIVE_ROOT_FALLBACK = (
-    'for %%I in ("%LIG_PROJECT_DIR%") do if /I "%%~fI"=="%%~dI\\\\" '
+    'for %%I in ("%LIG_PROJECT_DIR%") do if /I "%%~fI"=="%%~dI\\" '
     'set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"'
 )
 
@@ -1979,6 +2006,7 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -2101,8 +2129,19 @@ def _dedupe_tag(row: Dict[str, Any]) -> str:
 
 
 def _task_marker(task: str) -> str:
-    value = " ".join(str(task or "").split())[:80]
-    return f"task:{value}" if value else ""
+    value = " ".join(str(task or "").split())
+    if not value:
+        return ""
+    return "task:" + hashlib.sha1(value.encode("utf-8")).hexdigest()[:12]
+
+
+def _run_marker(run_id: str) -> str:
+    value = " ".join(str(run_id or "").split())[:80]
+    return f"run:{value}" if value else ""
+
+
+def _tags(row: Dict[str, Any]) -> List[str]:
+    return [str(tag) for tag in (row.get("tags") or []) if str(tag).strip()]
 
 
 def record_error(area: str, detail: str, *, task: str = "", run_id: str = "",
@@ -2110,17 +2149,24 @@ def record_error(area: str, detail: str, *, task: str = "", run_id: str = "",
     if not enabled():
         return None
     from .memory_manager import record_self_error
-    return record_self_error(area, detail or "", task=task or "")
+    tags = [tag for tag in [_task_marker(task), _run_marker(run_id), f"area:{area}" if area else ""] if tag]
+    return record_self_error(area, detail or "", task=task or "", extra_tags=tags)
 
 
-def _matching_error(task: str, area: str) -> Optional[Dict[str, Any]]:
-    task_text = " ".join(str(task or "").split())[:80]
-    for row in _self_errors(area):
-        body = str(row.get("body", ""))
-        if task_text and task_text in body:
+def _matching_error(task: str, area: str, run_id: str = "") -> Optional[Dict[str, Any]]:
+    task_tag = _task_marker(task)
+    run_tag = _run_marker(run_id)
+    for row in _self_errors():
+        tags = _tags(row)
+        if run_tag and run_tag in tags:
             return row
-    errors = _self_errors(area)
-    return errors[0] if errors else None
+        if task_tag and task_tag in tags:
+            return row
+    for row in _self_errors(area):
+        tags = _tags(row)
+        if task_tag and task_tag in tags:
+            return row
+    return None
 
 
 def _existing_lesson(tag: str, action: str) -> Optional[Dict[str, Any]]:
@@ -2143,7 +2189,7 @@ def capture_task_result(task: str, *, ok: bool, area: str = "task",
     if not ok:
         return record_error(area, detail, task=task, run_id=run_id, route=route, source="auto")
 
-    error = _matching_error(task, area)
+    error = _matching_error(task, area, run_id)
     if not error:
         return None
 
@@ -2155,8 +2201,11 @@ def capture_task_result(task: str, *, ok: bool, area: str = "task",
     if existing and str(existing.get("created_at", ""))[:10] == _today():
         return existing
 
-    from .memory_manager import add_memory_event, extract_keywords
+    from .memory_manager import add_memory_event, extract_keywords, update_memory_status
     tags = [t for t in [dedupe, _task_marker(task), f"area:{area}"] if t]
+    run_tag = _run_marker(run_id)
+    if run_tag:
+        tags.append(run_tag)
     tags.extend(extract_keywords(f"{task} {area} {fix}")[:5])
     lesson = add_memory_event(
         "lesson",
@@ -2167,6 +2216,7 @@ def capture_task_result(task: str, *, ok: bool, area: str = "task",
         source="self_fix",
         tags=tags,
     )
+    update_memory_status(str(error.get("id", "")), "resolved", note=f"self_fix:{lesson.get('id', '')}")
     if get_settings().get("auto_wiki", True):
         render_report()
     return lesson

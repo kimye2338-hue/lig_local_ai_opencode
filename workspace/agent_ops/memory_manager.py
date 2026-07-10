@@ -348,7 +348,8 @@ def format_recall_for_prompt(items: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 def record_self_error(area: str, detail: str, task: str = "",
-                      dedupe_day: bool = True) -> Optional[Dict[str, Any]]:
+                      dedupe_day: bool = True,
+                      extra_tags: List[str] | None = None) -> Optional[Dict[str, Any]]:
     """시스템이 '스스로 관찰한' 실수를 기억에 남긴다 — 사람이 안 불러줘도.
 
     호출처: 품질검증이 LLM 출력을 거부했을 때, 어댑터 실행이 실패했을 때,
@@ -375,9 +376,40 @@ def record_self_error(area: str, detail: str, task: str = "",
             if existing_hash is None or existing_hash == dedupe_tag:
                 return None
     body = (detail or "")[:300] + (f" (작업: {task[:80]})" if task else "")
+    tags = extract_keywords(area + " " + task)[:5] + [dedupe_tag]
+    for tag in extra_tags or []:
+        tag = str(tag).strip()
+        if tag and tag not in tags:
+            tags.append(tag)
     return add_memory_event("error_pattern", title, body, status="active",
                             priority="normal", source="self_observed",
-                            tags=extract_keywords(area + " " + task)[:5] + [dedupe_tag])
+                            tags=tags)
+
+
+def update_memory_status(event_id: str, status: str, *, note: str = "") -> bool:
+    """Update one memory event status in-place.
+
+    Used sparingly for lifecycle transitions such as self-observed error ->
+    resolved after a successful recovery path.
+    """
+    ensure_memory()
+    changed = False
+    with file_lock("memory"):
+        rows = [r for r in read_jsonl(MEMORY_JSONL) if isinstance(r, dict)]
+        for row in rows:
+            if row.get("id") != event_id:
+                continue
+            row["status"] = status
+            row["updated_at"] = now()
+            if note:
+                row["resolution_note"] = note
+            changed = True
+            break
+        if changed:
+            write_jsonl(MEMORY_JSONL, rows)
+    if changed:
+        render_memory_views()
+    return changed
 
 
 def record_success_lesson(task: Dict[str, Any], result: Dict[str, Any]) -> None:

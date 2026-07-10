@@ -65,6 +65,8 @@ def test_launcher_uses_fast_runtime_and_blocks_external_startup_waits() -> None:
     assert "set \"OPENCODE_PURE=1\"" not in text
     assert "%OPENCODE_USERDATA%\\data" in text
     assert "robocopy" in text
+    assert 'if not exist "%OPENCODE_FAST_DATA%\\*"' in text
+    assert "/XO" in text
 
 
 def test_launcher_preserves_project_dir_and_only_falls_back_for_unsafe_starts() -> None:
@@ -75,6 +77,7 @@ def test_launcher_preserves_project_dir_and_only_falls_back_for_unsafe_starts() 
     assert "if /I \"%LIG_PROJECT_DIR%\"==\"%WINDIR%\\System32\" set \"LIG_PROJECT_DIR=%AGENTOPS_HOME%\"" in text
     assert "if /I \"%LIG_PROJECT_DIR%\"==\"%WINDIR%\\SysWOW64\" set \"LIG_PROJECT_DIR=%AGENTOPS_HOME%\"" in text
     assert LAUNCHER_DRIVE_ROOT_FALLBACK in text
+    assert 'if /I "%%~fI"=="%%~dI\\\\"' not in text
     assert 'set "LIG_PROJECT_DIR=%AGENTOPS_HOME%"' not in text.splitlines()
 
 
@@ -84,9 +87,11 @@ def test_launcher_starts_hamster_directly_from_real_ui_path() -> None:
     assert "hamster_hidden.vbs" not in text
     for marker in LAUNCHER_HAMSTER_MARKERS:
         assert marker in text
-    assert "set \"PYTHONPATH=%LIG_WORKSPACE_HOME%;%PYTHONPATH%\"" in text
+    assert 'set "LIG_AGENTOPS_HOME=%HAMSTER_HOME%"' in text
+    assert 'set "PYTHONPATH=%HAMSTER_HOME%;%PYTHONPATH%"' in text
     assert "call \"%AGENTOPS_HOME%\\launch\\_pyw.bat\"" in text
-    assert "start \"OpenCodeLIG Hamster\" /B /MIN /D \"%LIG_WORKSPACE_HOME%\" %PYW% \"%HAMSTER_PY%\"" in text
+    assert 'start "OpenCodeLIG Hamster" /B /MIN /D "%HAMSTER_HOME%" %PYW% "%HAMSTER_PY%"' in text
+    assert 'if defined HAMSTER_PY (' not in text
 
 
 def test_ocd_wrapper_passes_current_folder_when_no_argument() -> None:
@@ -167,6 +172,7 @@ def test_existing_install_hotfix_contains_same_bridge_repairs() -> None:
         PLUGIN_SYNC_GLOB,
         "session.next.text.delta",
         "session.status",
+        "from agent_ops.release_contracts import",
     ]:
         assert marker in text
 

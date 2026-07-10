@@ -93,6 +93,8 @@ function pinnedRecallBlockFromText(recalled) {
 
 function cachedRecallBlock(base) {
   try {
+    // SESSION_RECALL.md is a plugin-owned durable cache. Agent instructions
+    // rely on injected "pinned memory" text, not on this path directly.
     const cached = readFileSync(join(stateDir(base), "SESSION_RECALL.md"), "utf-8").trim()
     if (cached) return cached
   } catch {
